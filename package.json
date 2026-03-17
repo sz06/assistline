@@ -1,6 +1,6 @@
 {
   "name": "turbostack",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "private": true,
   "scripts": {
     "build": "turbo build",
@@ -14,7 +14,7 @@
   "devDependencies": {
     "@biomejs/biome": "catalog:",
     "turbo": "latest",
-    "turbo-ignore": "^2.7.5",
+    "turbo-ignore": "^2.8.17",
     "typescript": "catalog:"
   },
   "pnpm": {

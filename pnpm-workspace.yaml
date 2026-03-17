@@ -1,18 +1,18 @@
 packages:
-  - "apps/*"
-  - "packages/*"
+  - apps/*
+  - packages/*
 
 catalogs:
   default:
-    react: "^19.2.3"
-    react-dom: "^19.2.3"
-    typescript: "^5.9.3"
-    "@types/react": "^19"
-    "@types/react-dom": "^19"
-    "@types/node": "^22.10.7"
-    tailwindcss: "^4.2.1"
-    "@tailwindcss/postcss": "^4.2.1"
-    postcss: "^8.5.6"
-    storybook: "^10.2.13"
-    "@biomejs/biome": "latest"
-    convex: "^1.32.0"
+    '@biomejs/biome': ^2.4.7
+    '@tailwindcss/postcss': ^4.2.1
+    '@types/node': ^25.5.0
+    '@types/react': ^19.2.14
+    '@types/react-dom': ^19.2.3
+    convex: ^1.33.1
+    postcss: ^8.5.8
+    react: ^19.2.4
+    react-dom: ^19.2.4
+    storybook: ^10.2.19
+    tailwindcss: ^4.2.1
+    typescript: ^5.9.3

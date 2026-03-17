@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  SignedIn,
-  SignedOut,
-  SignInButton,
-  SignUpButton,
-  UserButton,
-} from "@clerk/nextjs";
+import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import {
   Code2,
   Database,
@@ -55,7 +49,7 @@ export default function Home(): React.ReactNode {
           <div className="flex items-center gap-4">
             <ThemeToggle />
             <div className="h-6 w-px bg-border/50 hidden sm:block" />
-            <SignedOut>
+            <Show when="signed-out">
               <div className="flex items-center gap-3">
                 <SignInButton mode="modal">
                   <Button variant="ghost" size="sm" className="font-medium">
@@ -68,8 +62,8 @@ export default function Home(): React.ReactNode {
                   </Button>
                 </SignUpButton>
               </div>
-            </SignedOut>
-            <SignedIn>
+            </Show>
+            <Show when="signed-in">
               <div className="flex items-center gap-4">
                 <Typography
                   variant="small"
@@ -86,7 +80,7 @@ export default function Home(): React.ReactNode {
                   }}
                 />
               </div>
-            </SignedIn>
+            </Show>
           </div>
         </div>
       </nav>
