@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- Removed `@apps/app` project.
+
 ### Fixed
 - Fixed theme toggle in `apps/dashboard` by adding the `@custom-variant dark` directive for Tailwind v4 class-based dark mode in `index.css`.
 
