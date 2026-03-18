@@ -1,0 +1,16 @@
+import react from "@vitejs/plugin-react-swc";
+import { defineConfig } from "vite";
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  envDir: "../../",
+  server: {
+    port: 5174,
+    strictPort: true,
+  },
+  preview: {
+    port: 5174,
+    strictPort: true,
+  },
+});

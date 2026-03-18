@@ -45,13 +45,11 @@ A premium, production-ready monorepo template for building high-performance, typ
 
 ### Prerequisites
 
-- [Clerk](https://clerk.com/) account
-- [Convex](https://convex.dev/) account
-- [Vercel](https://vercel.com/) account
 - Node.js (LTS)
 - [pnpm](https://pnpm.io/installation) (`npm install -g pnpm`)
+- [Docker & Docker Compose](https://docs.docker.com/get-docker/)
 
-### Quick Start
+### Quick Start (Local Development)
 
 1. **Clone the repo:**
    ```bash
@@ -68,22 +66,22 @@ A premium, production-ready monorepo template for building high-performance, typ
    ```bash
    pnpm setup:envs
    ```
-   *This copies all `.env.example` files to `.env.local` across the monorepo.*
+   *This copies all `.env.example` files to `.env.local` across the monorepo. You can optionally add a `TS_AUTHKEY` in the root `.env.local`.*
 
-4. **Sync Local Auth Keys:**
-   Go to your **Clerk Dashboard** > **API Keys**, copy the environment variables, and paste them into your local `.env.local` files in `apps/web` and `packages/api`.
-
-5. **Initialize Convex:**
+4. **Start the local backend services (Docker):**
    ```bash
-   cd packages/api && npx convex dev
+   cd docker
+   docker compose up -d
+   cd ..
    ```
-   *This will link your project to Convex and generate the necessary `.env.local` files.*
+   *This spins up a local self-hosted Convex instance, Dendrite (Matrix), Mautrix-WhatsApp, and a Tailscale proxy.*
 
-6. **Run the development environment:**
+5. **Run the development environment:**
    ```bash
    # From the root
    pnpm dev
    ```
+   *This starts the frontend applications along with local Convex dev mode, seamlessly connecting them to the Docker backend.*
 
 ## 🔐 Authentication Setup
 

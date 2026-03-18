@@ -1,0 +1,79 @@
+version: "3.8"
+
+services:
+  # 1. Matrix Homeserver (Dendrite)
+  dendrite:
+    image: matrixdotorg/dendrite-monolith:latest
+    container_name: dendrite
+    restart: unless-stopped
+    ports:
+      - "8008:8008"
+    volumes:
+      - ./dendrite-data:/var/dendrite
+      - ./dendrite.yaml:/etc/dendrite/dendrite.yaml
+      - ./mautrix-data/registration.yaml:/etc/dendrite/whatsapp-registration.yaml
+    environment:
+      - SERVER_NAME=matrix.local
+    networks:
+      - assistline-net
+
+  # 2. Mautrix WhatsApp Bridge
+  mautrix-whatsapp:
+    image: dock.mau.dev/mautrix/whatsapp:latest
+    container_name: mautrix-whatsapp
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c", "cd /data && /usr/bin/mautrix-whatsapp --ignore-unsupported-server"]
+    volumes:
+      - ./mautrix-data:/data
+    networks:
+      - assistline-net
+    depends_on:
+      - dendrite
+
+  # 3. Convex Self-Hosted Backend
+  convex:
+    image: ghcr.io/get-convex/convex-backend:latest
+    container_name: convex-backend
+    restart: unless-stopped
+    ports:
+      - "3210:3210"
+      - "3211:3211"
+    volumes:
+      - ./convex-data:/convex/data
+    networks:
+      - assistline-net
+
+  # 4. Tailscale Sidecar Proxy for the Vite Dashboard
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale-sidecar
+    hostname: dashboard
+    restart: unless-stopped
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
+      - TS_EXTRA_ARGS=--advertise-tags=tag:container
+      - TS_STATE_DIR=/var/lib/tailscale
+    volumes:
+      - ./tailscale-data:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
+    networks:
+      - assistline-net
+
+  # 5. Dashboard App (Vite React)
+  dashboard:
+    build:
+      context: ..
+      dockerfile: apps/dashboard/Dockerfile
+    container_name: dashboard-app
+    restart: unless-stopped
+    # Use Tailscale's network namespace so it is exposed securely via the sidecar
+    network_mode: "service:tailscale"
+    depends_on:
+      - tailscale
+
+networks:
+  assistline-net:
+    driver: bridge

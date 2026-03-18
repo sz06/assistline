@@ -2,8 +2,13 @@
   "name": "@repo/api",
   "version": "2.1.0",
   "private": true,
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
   "scripts": {
-    "dev": "convex dev",
+    "dev": "convex dev --url http://127.0.0.1:3210",
     "build": "tsc",
     "lint": "biome check .",
     "test": "echo \"No tests for API yet\""

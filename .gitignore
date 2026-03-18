@@ -45,3 +45,9 @@ storybook-static
 
 test-results/
 playwright-report/
+
+/docs/reference/*
+# Docker local data
+docker/*-data
+docker/dendrite.yaml
+
