@@ -68,6 +68,11 @@ export default defineSchema({
     lastMessageId: v.optional(v.id("messages")), // Useful for sorting listing
     updatedAt: v.number(),
 
+    // Read & typing state
+    unreadCount: v.optional(v.number()), // Unread message count
+    lastReadEventId: v.optional(v.string()), // Last read Matrix event ID
+    typingUsers: v.optional(v.array(v.string())), // Matrix IDs currently typing
+
     // AI & Dashboard State (Inspired by Aileen)
     status: v.optional(
       v.union(
@@ -91,6 +96,46 @@ export default defineSchema({
     text: v.string(),
     direction: v.union(v.literal("in"), v.literal("out")),
     timestamp: v.number(),
+
+    // Message type (text, image, video, audio, file, sticker, location, reaction, notice)
+    type: v.optional(
+      v.union(
+        v.literal("text"),
+        v.literal("image"),
+        v.literal("video"),
+        v.literal("audio"),
+        v.literal("file"),
+        v.literal("sticker"),
+        v.literal("location"),
+        v.literal("reaction"),
+        v.literal("notice"),
+      ),
+    ),
+
+    // Soft-delete (redaction)
+    isRedacted: v.optional(v.boolean()),
+
+    // Reply threading
+    replyToEventId: v.optional(v.string()),
+
+    // Media attachment metadata
+    attachmentUrl: v.optional(v.string()), // mxc:// URL
+    attachmentMimeType: v.optional(v.string()),
+    attachmentFileName: v.optional(v.string()),
+    attachmentSize: v.optional(v.number()), // bytes
+
+    // Reactions
+    reactions: v.optional(
+      v.array(
+        v.object({
+          key: v.string(), // Emoji or shortcode
+          senders: v.array(v.string()), // Matrix IDs who reacted
+        }),
+      ),
+    ),
+
+    // Edit tracking
+    editedAt: v.optional(v.number()),
   })
     .index("by_conversationId_timestamp", ["conversationId", "timestamp"])
     .index("by_eventId", ["eventId"]),

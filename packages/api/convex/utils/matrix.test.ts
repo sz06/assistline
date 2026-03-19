@@ -8,6 +8,12 @@ describe("extractWhatsAppPhoneNumber", () => {
     ).toBe("14155552671");
   });
 
+  it("should extract phone number from an ID with + prefix (self-puppet)", () => {
+    expect(
+      extractWhatsAppPhoneNumber("@whatsapp_+16477127932:matrix.local"),
+    ).toBe("16477127932");
+  });
+
   it("should extract phone number from ID without @ prefix", () => {
     expect(extractWhatsAppPhoneNumber("whatsapp_1234567890:server.local")).toBe(
       "1234567890",

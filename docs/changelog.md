@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1] - 2026-03-19
+
+### Fixed
+- **WhatsApp Contact Phone-as-Name** (`packages/api`): When a WhatsApp user has no contact name, the bridge sends their phone number as the display name. This was being saved in the `name` field; now it is detected as a phone number and stored in `phoneNumbers` (cleaned, digits only) with the `name` left empty.
+- **Missing Phone Numbers on Named Contacts** (`packages/api`): Contacts already created via the listener were never updated with new information. Now, on each incoming message, existing contacts are patched with any missing name, phone number, or avatar.
+- **Phone Contact Names Not Used** (`packages/api`): Same root cause as above — when a WhatsApp user is saved in the phone's address book, their real name is now correctly back-filled into existing contacts on subsequent messages.
+- **DM Header Shows Self Instead of Contact** (`packages/api`): In DM conversations, the header was showing the user's own contact info instead of the other person's. Fixed by using the channel's `phoneNumber` to identify the user's own WhatsApp puppet and exclude it, resolving the other participant's contact for the header.
+- **Own WhatsApp Messages Classified as Incoming** (`apps/listener`): Messages sent from the user's WhatsApp phone were incorrectly classified as "in" because the bridge puppet (`@whatsapp_<phone>:matrix.local`) was not recognized as "self". The listener now builds a `selfPuppetIds` set from each channel's connected phone number and treats those senders as "out". Self-puppets are also excluded from room member counts.
+
+### Added
+- **Contact Utilities** (`packages/api`): New `isPhoneNumberLike` and `cleanPhoneNumber` helper functions in `convex/utils/contacts.ts` with full unit test coverage.
+- **Message Sender Names** (`packages/api`, `apps/dashboard`): The `getWithMessages` query now resolves sender display names via `contactIdentities` → `contacts` for every message. The chat UI shows sender names above each message bubble (teal label for incoming, white for outgoing). Group conversations also show a small initial avatar next to incoming messages.
+- **Reactions** (`apps/listener`, `packages/api`, `apps/dashboard`): Emoji reactions on WhatsApp messages now sync into the app via `m.reaction` Matrix events. Reactions appear below message bubbles with sender counts. Backend mutations: `addReaction`, `removeReaction`.
+- **Message Deletions** (`apps/listener`, `packages/api`, `apps/dashboard`): When a WhatsApp message is deleted, `m.room.redaction` events are processed and the message is soft-deleted. Deleted messages display a "🚫 This message was deleted" placeholder.
+- **Message Edits** (`apps/listener`, `packages/api`, `apps/dashboard`): Edited WhatsApp messages (`m.replace` relation type) are detected and updated in the database. Edited messages show an "(edited)" label next to the timestamp.
+- **Read Receipts & Unread Counts** (`apps/listener`, `packages/api`, `apps/dashboard`): Bidirectional read receipts — `m.receipt` ephemeral events from Matrix sync reset unread counts, and opening a conversation in the dashboard sends a read receipt back to Matrix/WhatsApp (blue checkmarks). Incoming messages increment `unreadCount`; unread badges appear on conversation list items.
+- **Typing Indicators** (`apps/listener`, `packages/api`, `apps/dashboard`): `m.typing` ephemeral events are processed. An animated typing dots bubble appears when the other person is typing in WhatsApp.
+- **Media Message Support** (`apps/listener`, `packages/api`, `apps/dashboard`): The listener now handles `m.image`, `m.video`, `m.audio`, `m.file` msgtypes in addition to `m.text`. Messages are typed and display attachment type indicators (📷 Image, 🎬 Video, etc.).
+
 ## [2.9.0] - 2026-03-19
 
 ### Changed

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
+import { cleanPhoneNumber, isPhoneNumberLike } from "./utils/contacts";
 import { extractWhatsAppPhoneNumber } from "./utils/matrix";
 
 export const listMessages = query({
@@ -35,6 +36,14 @@ export const insertMessage = mutation({
     text: v.string(),
     direction: v.union(v.literal("in"), v.literal("out")),
     timestamp: v.number(),
+    // Message type & metadata
+    type: v.optional(v.string()),
+    replyToEventId: v.optional(v.string()),
+    // Attachment metadata
+    attachmentUrl: v.optional(v.string()),
+    attachmentMimeType: v.optional(v.string()),
+    attachmentFileName: v.optional(v.string()),
+    attachmentSize: v.optional(v.number()),
     // Group & channel metadata — the listener populates these after checking room state
     channelId: v.id("channels"),
     memberCount: v.number(),
@@ -92,23 +101,42 @@ export const insertMessage = mutation({
       await ctx.db.patch(conversationId, patch);
     }
 
-    // Ensure sender contact exists via identities
+    // Ensure sender contact exists via identities, and keep it up to date
     const existingIdentity = await ctx.db
       .query("contactIdentities")
       .withIndex("by_matrixId", (q) => q.eq("matrixId", args.sender))
       .first();
 
-    if (!existingIdentity) {
-      let phoneNumbers: { label?: string; value: string }[] | undefined;
-      const localpart = args.sender.split(":")[0];
-      const phoneNumber = extractWhatsAppPhoneNumber(args.sender);
+    // Derive phone number from Matrix ID (e.g. @whatsapp_14155552671:server)
+    const localpart = args.sender.split(":")[0];
+    const phoneFromMatrixId = extractWhatsAppPhoneNumber(args.sender);
 
-      if (phoneNumber) {
-        phoneNumbers = [{ label: "Mobile", value: phoneNumber }];
-      }
+    // Determine if the senderName is actually a phone number (bridge uses
+    // the phone number as displayname when no contact name is saved)
+    const senderNameTrimmed = args.senderName?.trim() || undefined;
+    const nameIsPhone = senderNameTrimmed
+      ? isPhoneNumberLike(senderNameTrimmed)
+      : false;
+
+    // Build the best available phone number — prefer extraction from Matrix
+    // ID (pure digits), fall back to cleaning the phone-like displayname
+    const bestPhone =
+      phoneFromMatrixId ??
+      (nameIsPhone && senderNameTrimmed
+        ? cleanPhoneNumber(senderNameTrimmed)
+        : undefined);
+
+    // Build the real display name — only use senderName if it's not a phone number
+    const realName = nameIsPhone ? undefined : senderNameTrimmed;
+
+    if (!existingIdentity) {
+      // ───── Create a brand-new contact ─────
+      const phoneNumbers = bestPhone
+        ? [{ label: "Mobile", value: bestPhone }]
+        : undefined;
 
       const contactId = await ctx.db.insert("contacts", {
-        name: args.senderName?.trim() || undefined,
+        name: realName,
         avatarUrl: args.senderAvatarUrl,
         phoneNumbers,
       });
@@ -117,6 +145,46 @@ export const insertMessage = mutation({
         matrixId: args.sender,
         platform: localpart?.includes("whatsapp_") ? "whatsapp" : undefined,
       });
+    } else {
+      // ───── Update existing contact with any missing data ─────
+      const contact = await ctx.db.get(existingIdentity.contactId);
+      if (contact) {
+        const patch: Record<string, unknown> = {};
+
+        // Fill name if currently empty and we have a real (non-phone) name
+        if (!contact.name?.trim() && realName) {
+          patch.name = realName;
+        }
+
+        // Fill phone if currently empty and we have one
+        if (
+          (!contact.phoneNumbers || contact.phoneNumbers.length === 0) &&
+          bestPhone
+        ) {
+          patch.phoneNumbers = [{ label: "Mobile", value: bestPhone }];
+        }
+
+        // Fill avatar if currently empty
+        if (!contact.avatarUrl && args.senderAvatarUrl) {
+          patch.avatarUrl = args.senderAvatarUrl;
+        }
+
+        // Fix existing contacts where name was incorrectly set to a phone number
+        if (contact.name && isPhoneNumberLike(contact.name)) {
+          // Move the phone-like name to phoneNumbers if they're empty
+          if (!contact.phoneNumbers || contact.phoneNumbers.length === 0) {
+            patch.phoneNumbers = [
+              { label: "Mobile", value: cleanPhoneNumber(contact.name) },
+            ];
+          }
+          // Clear or replace the name
+          patch.name = realName ?? undefined;
+        }
+
+        if (Object.keys(patch).length > 0) {
+          await ctx.db.patch(existingIdentity.contactId, patch);
+        }
+      }
     }
 
     // Insert the actual message
@@ -127,10 +195,35 @@ export const insertMessage = mutation({
       text: args.text,
       direction: args.direction,
       timestamp: args.timestamp,
+      type:
+        (args.type as
+          | "text"
+          | "image"
+          | "video"
+          | "audio"
+          | "file"
+          | "sticker"
+          | "location"
+          | "reaction"
+          | "notice"
+          | undefined) ?? "text",
+      replyToEventId: args.replyToEventId,
+      attachmentUrl: args.attachmentUrl,
+      attachmentMimeType: args.attachmentMimeType,
+      attachmentFileName: args.attachmentFileName,
+      attachmentSize: args.attachmentSize,
     });
 
-    // Update conversation with last message reference
-    await ctx.db.patch(conversationId, { lastMessageId: messageId });
+    // Update conversation with last message reference and bump unread for incoming
+    const convPatch: Record<string, unknown> = {
+      lastMessageId: messageId,
+      updatedAt: args.timestamp,
+    };
+    if (args.direction === "in") {
+      const current = conversation?.unreadCount ?? 0;
+      convPatch.unreadCount = current + 1;
+    }
+    await ctx.db.patch(conversationId, convPatch);
 
     return messageId;
   },
@@ -201,5 +294,112 @@ export const sendMessage = mutation({
     });
 
     return messageId;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Reactions
+// ---------------------------------------------------------------------------
+
+export const addReaction = mutation({
+  args: {
+    eventId: v.string(),
+    reactionKey: v.string(),
+    sender: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const message = await ctx.db
+      .query("messages")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .first();
+    if (!message) return;
+
+    const reactions = message.reactions ?? [];
+    const existing = reactions.find((r) => r.key === args.reactionKey);
+
+    if (existing) {
+      // Add sender to existing reaction if not already present
+      if (!existing.senders.includes(args.sender)) {
+        existing.senders.push(args.sender);
+      }
+    } else {
+      reactions.push({ key: args.reactionKey, senders: [args.sender] });
+    }
+
+    await ctx.db.patch(message._id, { reactions });
+  },
+});
+
+export const removeReaction = mutation({
+  args: {
+    eventId: v.string(),
+    reactionKey: v.string(),
+    sender: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const message = await ctx.db
+      .query("messages")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .first();
+    if (!message || !message.reactions) return;
+
+    const reactions = message.reactions
+      .map((r) => {
+        if (r.key !== args.reactionKey) return r;
+        return {
+          ...r,
+          senders: r.senders.filter((s) => s !== args.sender),
+        };
+      })
+      .filter((r) => r.senders.length > 0);
+
+    await ctx.db.patch(message._id, {
+      reactions: reactions.length > 0 ? reactions : undefined,
+    });
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Redactions (soft-delete)
+// ---------------------------------------------------------------------------
+
+export const redactMessage = mutation({
+  args: {
+    eventId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const message = await ctx.db
+      .query("messages")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .first();
+    if (!message) return;
+
+    await ctx.db.patch(message._id, {
+      isRedacted: true,
+    });
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Edits
+// ---------------------------------------------------------------------------
+
+export const editMessage = mutation({
+  args: {
+    eventId: v.string(),
+    newText: v.string(),
+    editTimestamp: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const message = await ctx.db
+      .query("messages")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .first();
+    if (!message) return;
+
+    await ctx.db.patch(message._id, {
+      text: args.newText,
+      editedAt: args.editTimestamp,
+    });
   },
 });

@@ -30,7 +30,7 @@ const navLinks = [
     href: "/channels",
     icon: <Radio className="h-5 w-5" />,
   },
-  { label: "Memory", href: "/memory", icon: <Database className="h-5 w-5" /> },
+  { label: "Artifacts", href: "/artifacts", icon: <Database className="h-5 w-5" /> },
   {
     label: "AI Providers",
     href: "/providers",

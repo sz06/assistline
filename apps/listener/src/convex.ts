@@ -17,5 +17,16 @@ export const api = anyApi as {
   messages: {
     insertMessage: typeof anyApi.messages.insertMessage;
     syncConversationMeta: typeof anyApi.messages.syncConversationMeta;
+    addReaction: typeof anyApi.messages.addReaction;
+    removeReaction: typeof anyApi.messages.removeReaction;
+    redactMessage: typeof anyApi.messages.redactMessage;
+    editMessage: typeof anyApi.messages.editMessage;
+  };
+  conversations: {
+    markRead: typeof anyApi.conversations.markRead;
+    setTyping: typeof anyApi.conversations.setTyping;
+  };
+  settings: {
+    set: typeof anyApi.settings.set;
   };
 };

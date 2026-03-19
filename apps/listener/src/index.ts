@@ -77,6 +77,13 @@ const BRIDGE_BOT_PREFIXES: Record<string, "whatsapp" | "telegram"> = {
 /** In-memory cache: platform type → Convex channel ID */
 let channelIdByType: Map<string, string> = new Map();
 
+/**
+ * Set of Matrix user IDs that represent the authenticated user's own
+ * bridge puppets (e.g. @whatsapp_16477127932:matrix.local).
+ * Messages from these senders are "out" — the user sent them from their phone.
+ */
+const selfPuppetIds = new Set<string>();
+
 /** Refresh the channel ID cache from Convex. */
 async function refreshChannelCache(): Promise<void> {
   const platformTypes = ["whatsapp", "telegram"] as const;
@@ -89,6 +96,13 @@ async function refreshChannelCache(): Promise<void> {
       console.log(
         `[listener] ✓ Cached channel: ${platformType} → ${channel._id}`,
       );
+
+      // Build the self-puppet Matrix ID from the channel's connected phone
+      if (channel.phoneNumber && platformType === "whatsapp") {
+        const puppetId = `@whatsapp_${channel.phoneNumber}:${serverName}`;
+        selfPuppetIds.add(puppetId);
+        console.log(`[listener] ✓ Self-puppet: ${puppetId}`);
+      }
     }
   }
 }
@@ -148,10 +162,27 @@ interface MatrixEvent {
   event_id: string;
   sender: string;
   origin_server_ts: number;
+  redacts?: string; // For m.room.redaction events
   content: {
     msgtype?: string;
     body?: string;
     membership?: string;
+    url?: string; // mxc:// URL for media
+    info?: {
+      mimetype?: string;
+      size?: number;
+      [key: string]: unknown;
+    };
+    "m.relates_to"?: {
+      rel_type?: string; // "m.annotation" for reactions, "m.replace" for edits
+      event_id?: string; // Target event
+      key?: string; // Reaction emoji
+      "m.in_reply_to"?: { event_id?: string }; // Reply target
+    };
+    "m.new_content"?: {
+      body?: string;
+      [key: string]: unknown;
+    };
     [key: string]: unknown;
   };
 }
@@ -163,6 +194,9 @@ interface SyncResponse {
       string,
       {
         timeline?: {
+          events?: MatrixEvent[];
+        };
+        ephemeral?: {
           events?: MatrixEvent[];
         };
       }
@@ -354,12 +388,13 @@ async function syncRoomMetadata(roomId: string): Promise<{
     // Resolve channelId from bridge bot presence
     const channelId = resolveChannelId(joinedMembers) ?? defaultMeta.channelId;
 
-    // Filter out bridge bots (e.g. @whatsappbot:matrix.local)
+    // Filter out bridge bots, the listener bot, and the user's own puppet
     const realMembers = joinedMembers.filter(
       (m) =>
         !m.state_key.startsWith("@whatsappbot:") &&
         !m.state_key.startsWith("@telegrambot:") &&
-        m.state_key !== MATRIX_BOT_USER_ID,
+        m.state_key !== MATRIX_BOT_USER_ID &&
+        !selfPuppetIds.has(m.state_key),
     );
 
     const memberCount = realMembers.length;
@@ -470,8 +505,12 @@ async function sync(since?: string): Promise<SyncResponse> {
       account_data: { types: [] },
       room: {
         state: { types: ["m.room.member"] },
-        timeline: { types: ["m.room.message"] },
-        ephemeral: { types: [] },
+        timeline: {
+          types: ["m.room.message", "m.reaction", "m.room.redaction"],
+        },
+        ephemeral: {
+          types: ["m.receipt", "m.typing"],
+        },
         account_data: { types: [] },
       },
     }),
@@ -509,18 +548,96 @@ async function handleTimelineEvent(
     >;
   },
 ): Promise<void> {
-  // Only handle text messages
-  if (event.type !== "m.room.message") return;
-  if (event.content.msgtype !== "m.text") return;
-
-  const body = event.content.body;
-  if (!body) return;
-
   const direction: "in" | "out" =
-    event.sender === MATRIX_BOT_USER_ID ? "out" : "in";
+    event.sender === MATRIX_BOT_USER_ID || selfPuppetIds.has(event.sender)
+      ? "out"
+      : "in";
 
   try {
+    // ── Reactions ──
+    if (event.type === "m.reaction") {
+      const relatesTo = event.content["m.relates_to"];
+      const targetEventId = relatesTo?.event_id;
+      const reactionKey = relatesTo?.key;
+      if (targetEventId && reactionKey) {
+        await convex.mutation(api.messages.addReaction, {
+          eventId: targetEventId,
+          reactionKey,
+          sender: event.sender,
+        });
+        console.log(
+          `[listener] 😀 Reaction ${reactionKey} on ${targetEventId} by ${event.sender}`,
+        );
+      }
+      return;
+    }
+
+    // ── Redactions (message deletions) ──
+    if (event.type === "m.room.redaction") {
+      const redactedEventId = event.redacts;
+      if (redactedEventId) {
+        await convex.mutation(api.messages.redactMessage, {
+          eventId: redactedEventId,
+        });
+        console.log(
+          `[listener] 🗑 Redacted ${redactedEventId} by ${event.sender}`,
+        );
+      }
+      return;
+    }
+
+    // ── From here: m.room.message ──
+    if (event.type !== "m.room.message") return;
+
+    // ── Message edits ──
+    const relatesTo = event.content["m.relates_to"];
+    if (relatesTo?.rel_type === "m.replace" && relatesTo.event_id) {
+      const newBody =
+        (event.content["m.new_content"] as { body?: string } | undefined)
+          ?.body ?? event.content.body;
+      if (newBody) {
+        await convex.mutation(api.messages.editMessage, {
+          eventId: relatesTo.event_id,
+          newText: newBody,
+          editTimestamp: event.origin_server_ts,
+        });
+        console.log(
+          `[listener] ✏️ Edit on ${relatesTo.event_id} by ${event.sender}`,
+        );
+      }
+      return;
+    }
+
+    // ── Determine message type and extract data ──
+    const msgtype = event.content.msgtype;
+    if (!msgtype) return;
+
+    // Map Matrix msgtypes to our schema types
+    const typeMap: Record<string, string> = {
+      "m.text": "text",
+      "m.image": "image",
+      "m.video": "video",
+      "m.audio": "audio",
+      "m.file": "file",
+      "m.notice": "notice",
+    };
+    const messageType = typeMap[msgtype];
+    if (!messageType) return; // Skip unsupported msgtypes
+
+    const body = event.content.body ?? "";
     const senderProfile = roomMeta?.membersProfile?.[event.sender];
+
+    // Extract reply target
+    const replyToEventId = relatesTo?.["m.in_reply_to"]?.event_id ?? undefined;
+
+    // Extract attachment metadata for media messages
+    const attachmentUrl = event.content.url as string | undefined;
+    const attachmentMimeType = event.content.info?.mimetype;
+    const attachmentFileName =
+      messageType !== "text" && messageType !== "notice"
+        ? (event.content.body ?? undefined)
+        : undefined;
+    const attachmentSize = event.content.info?.size;
 
     const messageId = await convex.mutation(api.messages.insertMessage, {
       matrixRoomId: roomId,
@@ -529,6 +646,12 @@ async function handleTimelineEvent(
       text: body,
       direction,
       timestamp: event.origin_server_ts,
+      type: messageType,
+      replyToEventId,
+      attachmentUrl,
+      attachmentMimeType,
+      attachmentFileName,
+      attachmentSize,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- anyApi is untyped
       channelId: (roomMeta?.channelId ?? "") as any,
       memberCount: roomMeta?.memberCount ?? 1,
@@ -540,8 +663,10 @@ async function handleTimelineEvent(
     });
 
     const isGroup = (roomMeta?.memberCount ?? 0) > 1;
+    const typeLabel =
+      messageType !== "text" ? ` [${messageType.toUpperCase()}]` : "";
     console.log(
-      `[listener] ${direction === "in" ? "⬇" : "⬆"} ${event.sender} → ${roomId}${isGroup ? " [GROUP]" : ""} | eventId=${event.event_id} | convexId=${messageId}`,
+      `[listener] ${direction === "in" ? "⬇" : "⬆"} ${event.sender} → ${roomId}${isGroup ? " [GROUP]" : ""}${typeLabel} | eventId=${event.event_id} | convexId=${messageId}`,
     );
   } catch (err) {
     console.error(
@@ -564,6 +689,25 @@ async function main(): Promise<void> {
 
   // Build the channel cache so we can resolve platform → channelId
   await refreshChannelCache();
+
+  // Persist Matrix credentials in Convex settings so the Convex action
+  // (sendReadReceipt) can call the Matrix API without the listener
+  try {
+    await convex.mutation(api.settings.set, {
+      key: "matrix_homeserver_url",
+      value: MATRIX_HOMESERVER_URL,
+    });
+    await convex.mutation(api.settings.set, {
+      key: "matrix_bot_access_token",
+      value: currentAccessToken,
+    });
+    console.log("[listener] ✓ Matrix credentials persisted to Convex settings");
+  } catch (err) {
+    console.warn(
+      "[listener] ⚠ Failed to persist Matrix credentials:",
+      err instanceof Error ? err.message : err,
+    );
+  }
 
   if (channelIdByType.size === 0) {
     console.warn(
@@ -614,6 +758,58 @@ async function main(): Promise<void> {
 
             for (const event of events) {
               await handleTimelineEvent(roomId, event, roomMeta);
+            }
+          }
+
+          // ── Process ephemeral events (receipts, typing) ──
+          const ephemeralEvents = room.ephemeral?.events ?? [];
+          for (const event of ephemeralEvents) {
+            try {
+              if (event.type === "m.receipt" && event.content) {
+                // Find the latest read event ID from any user
+                for (const [eventId, readers] of Object.entries(
+                  event.content as Record<string, Record<string, unknown>>,
+                )) {
+                  const readReceipts = (readers as Record<string, unknown>)[
+                    "m.read"
+                  ] as Record<string, unknown> | undefined;
+                  if (readReceipts) {
+                    // Check if any of the readers is the self-puppet or bot
+                    for (const userId of Object.keys(readReceipts)) {
+                      if (
+                        userId === MATRIX_BOT_USER_ID ||
+                        selfPuppetIds.has(userId)
+                      ) {
+                        await convex.mutation(api.conversations.markRead, {
+                          matrixRoomId: roomId,
+                          lastReadEventId: eventId,
+                        });
+                        console.log(
+                          `[listener] ✓ Read receipt: ${roomId} → ${eventId}`,
+                        );
+                      }
+                    }
+                  }
+                }
+              }
+
+              if (event.type === "m.typing" && event.content) {
+                const typingUserIds = (event.content.user_ids ??
+                  []) as string[];
+                // Filter out self and bot from typing list
+                const others = typingUserIds.filter(
+                  (id) => id !== MATRIX_BOT_USER_ID && !selfPuppetIds.has(id),
+                );
+                await convex.mutation(api.conversations.setTyping, {
+                  matrixRoomId: roomId,
+                  typingUsers: others,
+                });
+              }
+            } catch (err) {
+              console.error(
+                `[listener] Ephemeral event error in ${roomId}:`,
+                err instanceof Error ? err.message : err,
+              );
             }
           }
         }

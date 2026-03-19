@@ -16,7 +16,10 @@ import type * as channels from "../channels.js";
 import type * as contacts from "../contacts.js";
 import type * as conversations from "../conversations.js";
 import type * as init from "../init.js";
+import type * as matrixActions from "../matrixActions.js";
 import type * as messages from "../messages.js";
+import type * as settings from "../settings.js";
+import type * as utils_contacts from "../utils/contacts.js";
 import type * as utils_matrix from "../utils/matrix.js";
 
 import type {
@@ -34,7 +37,10 @@ declare const fullApi: ApiFromModules<{
   contacts: typeof contacts;
   conversations: typeof conversations;
   init: typeof init;
+  matrixActions: typeof matrixActions;
   messages: typeof messages;
+  settings: typeof settings;
+  "utils/contacts": typeof utils_contacts;
   "utils/matrix": typeof utils_matrix;
 }>;
 

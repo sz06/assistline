@@ -248,6 +248,11 @@ export function ConversationsPage() {
                         {conv.contactDetails.name}
                       </span>
                       <div className="flex items-center gap-1.5">
+                        {(conv.unreadCount ?? 0) > 0 && (
+                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[10px] font-bold text-white shadow-sm">
+                            {conv.unreadCount}
+                          </span>
+                        )}
                         {conv.memberCount > 2 && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-medium leading-tight bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400">
                             {conv.memberCount} members
@@ -307,6 +312,7 @@ function ChatPanel({
   const sendMessage = useMutation(api.messages.sendMessage);
   const toggleAI = useMutation(api.conversations.toggleAI);
   const deleteConversation = useMutation(api.conversations.deleteConversation);
+  const markAsRead = useMutation(api.conversations.markAsRead);
   const dismissSuggestedReplyMut = useMutation(
     api.conversations.dismissSuggestedReply,
   );
@@ -318,6 +324,11 @@ function ChatPanel({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Mark conversation as read when opened
+  useEffect(() => {
+    markAsRead({ conversationId: id });
+  }, [id, markAsRead]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -417,24 +428,129 @@ function ChatPanel({
         <div className="space-y-3">
           {data.messages.map((msg) => {
             const isUser = msg.direction === "in";
+            const isGroup = (data.memberCount ?? 0) > 2;
+            const senderLabel = isUser ? (msg.senderName ?? msg.sender) : "You";
+            const isRedacted = msg.isRedacted === true;
+            const isEdited = msg.editedAt != null;
+            const messageType = msg.type ?? "text";
+            const hasAttachment =
+              messageType !== "text" &&
+              messageType !== "notice" &&
+              msg.attachmentUrl;
+
             return (
-              <div
-                key={msg._id}
-                className={`flex ${isUser ? "justify-start" : "justify-end"}`}
-              >
+              <div key={msg._id}>
                 <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${isUser ? "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-tl-sm text-gray-900 dark:text-gray-100" : "bg-blue-600 text-white rounded-tr-sm"}`}
+                  className={`flex ${isUser ? "justify-start" : "justify-end"}`}
                 >
-                  <p className="whitespace-pre-wrap">{msg.text}</p>
-                  <p
-                    className={`text-[10px] mt-1.5 ${isUser ? "text-gray-400" : "text-white/70"}`}
+                  {/* Sender initial avatar — groups only, incoming only */}
+                  {isUser && isGroup && (
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-cyan-600 text-white text-[10px] font-bold mr-2 mt-0.5 shadow-sm">
+                      {(msg.senderName ?? "?").charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div
+                    className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${isUser ? "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-tl-sm text-gray-900 dark:text-gray-100" : "bg-blue-600 text-white rounded-tr-sm"}`}
                   >
-                    {new Date(msg.timestamp).toLocaleString()}
-                  </p>
+                    {/* Sender name label */}
+                    <p
+                      className={`text-[11px] font-semibold mb-1 ${isUser ? "text-teal-600 dark:text-teal-400" : "text-white/80"}`}
+                    >
+                      {senderLabel}
+                    </p>
+
+                    {/* Deleted marker */}
+                    {isRedacted && (
+                      <div
+                        className={`mb-1.5 flex items-center gap-1 text-[11px] font-medium opacity-80 ${isUser ? "text-red-500" : "text-red-200"}`}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        <span>Deleted message</span>
+                      </div>
+                    )}
+
+                    {/* Message Body Context */}
+                    <div className={`${isRedacted ? "opacity-60" : ""}`}>
+                      {/* Attachment type indicator for media */}
+                      {hasAttachment && (
+                        <div
+                          className={`text-xs font-medium mb-1 flex items-center gap-1 ${isUser ? "text-gray-500" : "text-white/70"}`}
+                        >
+                          {messageType === "image" && "📷 Image"}
+                          {messageType === "video" && "🎬 Video"}
+                          {messageType === "audio" && "🎵 Audio"}
+                          {messageType === "file" &&
+                            `📎 ${msg.attachmentFileName ?? "File"}`}
+                          {messageType === "sticker" && "🏷️ Sticker"}
+                        </div>
+                      )}
+                      {msg.text && (
+                        <p
+                          className={`whitespace-pre-wrap ${isRedacted ? "line-through" : ""}`}
+                        >
+                          {msg.text}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Timestamp + edited label */}
+                    <p
+                      className={`text-[10px] mt-1.5 ${isUser ? "text-gray-400" : "text-white/70"}`}
+                    >
+                      {new Date(msg.timestamp).toLocaleString()}
+                      {isEdited && (
+                        <span className="ml-1.5 italic">(edited)</span>
+                      )}
+                    </p>
+                  </div>
                 </div>
+
+                {/* Reactions row */}
+                {msg.reactions && msg.reactions.length > 0 && (
+                  <div
+                    className={`flex gap-1 mt-1 ${isUser ? "justify-start" : "justify-end"} ${isUser && isGroup ? "ml-9" : ""}`}
+                  >
+                    {msg.reactions.map((r) => (
+                      <span
+                        key={r.key}
+                        className="inline-flex items-center gap-0.5 rounded-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-xs shadow-sm"
+                      >
+                        <span>{r.key}</span>
+                        {r.senders.length > 1 && (
+                          <span className="text-gray-500 font-medium">
+                            {r.senders.length}
+                          </span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
+
+          {/* Typing indicator */}
+          {data.typingUsers && data.typingUsers.length > 0 && (
+            <div className="flex justify-start">
+              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-1">
+                  <span
+                    className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"
+                    style={{ animationDelay: "0ms" }}
+                  />
+                  <span
+                    className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"
+                    style={{ animationDelay: "150ms" }}
+                  />
+                  <span
+                    className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"
+                    style={{ animationDelay: "300ms" }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
       </div>

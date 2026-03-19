@@ -48,7 +48,16 @@ This document defines the core standards and automated workflows that any AI age
 * **Admin Key:** The admin key is generated on-the-fly via `docker exec convex-backend ./generate_admin_key.sh`. You do not need to store or manage it manually.
 * **Dashboard:** The Convex dashboard is available at `http://localhost:6791/`.
 
-## 8. Forms & Validation
+## 8. Matrix Listener (Dockerized)
+* **Runtime:** The Matrix listener (`apps/listener`) runs inside a Docker container named `matrix-listener`. It syncs events from the Dendrite homeserver into Convex.
+* **Deploying Changes:** After modifying **any** file in `apps/listener/`, you **must** rebuild and restart the container:
+  ```bash
+  docker compose -f docker/docker-compose.yml build matrix-listener --no-cache && docker compose -f docker/docker-compose.yml up -d matrix-listener
+  ```
+* **Logs:** To inspect listener output, run `docker logs -f matrix-listener`.
+* **When to Deploy:** Any change to the listener code (new features, bug fixes, dependency updates) requires a rebuild. Convex function changes do **not** require a listener rebuild — only `pnpm convex:push`.
+
+## 9. Forms & Validation
 * **Zod:** Use `zod` for all form validation schemas. Define schemas alongside the form component and derive the TypeScript type via `z.infer<typeof schema>`.
 * **React Hook Form:** Use `react-hook-form` with `@hookform/resolvers/zod` (`zodResolver`) for form state management in any non-trivial form. Use `useFieldArray` for dynamic/repeatable field groups (e.g. phone numbers, addresses).
 * **No manual form state:** Do not use multiple `useState` calls to manage form fields. All form data should flow through `useForm`.
