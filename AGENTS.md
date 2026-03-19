@@ -47,3 +47,8 @@ This document defines the core standards and automated workflows that any AI age
   This script automatically generates the admin key from the Docker container and pushes the functions. **Do not** attempt to run `convex dev` or `npx convex deploy` directly — always use the root-level `convex:push` script.
 * **Admin Key:** The admin key is generated on-the-fly via `docker exec convex-backend ./generate_admin_key.sh`. You do not need to store or manage it manually.
 * **Dashboard:** The Convex dashboard is available at `http://localhost:6791/`.
+
+## 8. Forms & Validation
+* **Zod:** Use `zod` for all form validation schemas. Define schemas alongside the form component and derive the TypeScript type via `z.infer<typeof schema>`.
+* **React Hook Form:** Use `react-hook-form` with `@hookform/resolvers/zod` (`zodResolver`) for form state management in any non-trivial form. Use `useFieldArray` for dynamic/repeatable field groups (e.g. phone numbers, addresses).
+* **No manual form state:** Do not use multiple `useState` calls to manage form fields. All form data should flow through `useForm`.

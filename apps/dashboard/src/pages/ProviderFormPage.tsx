@@ -1,3 +1,4 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { api, type Id } from "@repo/api";
 import { Button, Input, Label, PageHeader } from "@repo/ui";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -14,7 +15,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
+import { z } from "zod";
 
 // ---------------------------------------------------------------------------
 // Provider metadata — display information for known providers
@@ -93,6 +96,27 @@ function getMeta(provider: string): ProviderMeta {
 }
 
 const ALL_PROVIDER_KEYS = Object.keys(PROVIDER_META);
+
+// ---------------------------------------------------------------------------
+// Zod Schema
+// ---------------------------------------------------------------------------
+
+const providerFormSchema = z
+  .object({
+    provider: z.string().min(1, "Please select a provider"),
+    name: z.string(),
+    model: z.string().min(1, "Please select a model"),
+    apiKey: z.string(),
+  })
+  .refine(
+    (data) => {
+      const meta = getMeta(data.provider);
+      return !meta.requiresApiKey || data.apiKey.trim().length > 0;
+    },
+    { message: "API key is required for this provider", path: ["apiKey"] },
+  );
+
+type ProviderFormData = z.infer<typeof providerFormSchema>;
 
 // ---------------------------------------------------------------------------
 // Hook — fetch models from provider API via Convex action
@@ -265,7 +289,7 @@ export function ProviderFormPage() {
   // For Edit mode, fetch the provider data
   const provider = useQuery(
     api.aiProviders.get,
-    isEditing ? { id: providerId! } : "skip",
+    isEditing && providerId ? { id: providerId } : "skip",
   );
 
   // For Add mode — get count to determine default status
@@ -274,57 +298,76 @@ export function ProviderFormPage() {
   const createProvider = useMutation(api.aiProviders.create);
   const updateProvider = useMutation(api.aiProviders.update);
 
-  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
-  const [providerName, setProviderName] = useState("");
-  const [selectedModel, setSelectedModel] = useState("");
-  const [apiKey, setApiKey] = useState("");
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<ProviderFormData>({
+    resolver: zodResolver(providerFormSchema),
+    defaultValues: {
+      provider: "",
+      name: "",
+      model: "",
+      apiKey: "",
+    },
+  });
+
   const [showKey, setShowKey] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const selectedProvider = watch("provider");
+  const apiKeyValue = watch("apiKey");
+  const selectedModel = watch("model");
+
+  const meta = selectedProvider ? getMeta(selectedProvider) : null;
 
   // When editing and data loads, populate the form once
   useEffect(() => {
     if (isEditing && provider) {
-      setSelectedProvider(provider.provider);
-      setProviderName(provider.name ?? "");
-      setSelectedModel(provider.model ?? "");
-      setApiKey(provider.apiKey ?? "");
+      reset({
+        provider: provider.provider,
+        name: provider.name ?? "",
+        model: provider.model ?? "",
+        apiKey: provider.apiKey ?? "",
+      });
     }
-  }, [isEditing, provider]);
-
-  const meta = selectedProvider ? getMeta(selectedProvider) : null;
+  }, [isEditing, provider, reset]);
 
   const handleCopyKey = () => {
-    if (!apiKey) return;
-    navigator.clipboard.writeText(apiKey);
+    if (!apiKeyValue) return;
+    navigator.clipboard.writeText(apiKeyValue);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const handleSubmit = async () => {
-    if (!selectedProvider || !selectedModel) return;
-    setSaving(true);
-    try {
-      if (isEditing && providerId) {
-        await updateProvider({
-          id: providerId,
-          name: providerName || undefined,
-          model: selectedModel,
-          apiKey: apiKey || undefined,
-        });
-      } else {
-        await createProvider({
-          provider: selectedProvider,
-          name: providerName || undefined,
-          model: selectedModel,
-          apiKey: apiKey || undefined,
-          isDefault: allProviders?.length === 0,
-        });
-      }
-      navigate("/providers");
-    } finally {
-      setSaving(false);
+  const selectProvider = (key: string) => {
+    setValue("provider", key);
+    setValue("model", "");
+    setValue("apiKey", "");
+    setValue("name", "");
+  };
+
+  const onValid = async (data: ProviderFormData) => {
+    if (isEditing && providerId) {
+      await updateProvider({
+        id: providerId,
+        name: data.name || undefined,
+        model: data.model,
+        apiKey: data.apiKey || undefined,
+      });
+    } else {
+      await createProvider({
+        provider: data.provider,
+        name: data.name || undefined,
+        model: data.model,
+        apiKey: data.apiKey || undefined,
+        isDefault: allProviders?.length === 0,
+      });
     }
+    navigate("/providers");
   };
 
   // If editing but still loading data, show spinner
@@ -372,7 +415,10 @@ export function ProviderFormPage() {
         />
       </div>
 
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6 space-y-6">
+      <form
+        onSubmit={handleSubmit(onValid)}
+        className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6 space-y-6"
+      >
         {/* ── Provider Selection (Add mode only) ── */}
         {!isEditing && (
           <div>
@@ -385,12 +431,7 @@ export function ProviderFormPage() {
                   <button
                     key={key}
                     type="button"
-                    onClick={() => {
-                      setSelectedProvider(key);
-                      setSelectedModel("");
-                      setApiKey("");
-                      setProviderName("");
-                    }}
+                    onClick={() => selectProvider(key)}
                     className={`w-full flex items-center gap-4 p-4 rounded-xl border transition-all group ${
                       isSelected
                         ? "border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-900/10 ring-1 ring-blue-200 dark:ring-blue-800"
@@ -418,6 +459,11 @@ export function ProviderFormPage() {
                 );
               })}
             </div>
+            {errors.provider && (
+              <p className="text-xs text-red-500 mt-2">
+                {errors.provider.message}
+              </p>
+            )}
           </div>
         )}
 
@@ -444,8 +490,7 @@ export function ProviderFormPage() {
             <Label htmlFor="pf-name">Name</Label>
             <Input
               id="pf-name"
-              value={providerName}
-              onChange={(e) => setProviderName(e.target.value)}
+              {...register("name")}
               placeholder={`e.g. Work ${meta?.label ?? ""}, Personal key`}
               className="mt-1.5 max-w-sm"
               data-testid="provider-name-input"
@@ -464,8 +509,7 @@ export function ProviderFormPage() {
               <Input
                 id="pf-api-key"
                 type={showKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
+                {...register("apiKey")}
                 placeholder={meta.placeholder}
                 className="pr-20"
                 data-testid="provider-api-key-input"
@@ -502,6 +546,11 @@ export function ProviderFormPage() {
               Your key is stored in Convex and never exposed to the browser
               after saving.
             </p>
+            {errors.apiKey && (
+              <p className="text-xs text-red-500 mt-1">
+                {errors.apiKey.message}
+              </p>
+            )}
           </div>
         )}
 
@@ -516,32 +565,34 @@ export function ProviderFormPage() {
         {selectedProvider && (
           <ModelSelector
             provider={selectedProvider}
-            apiKey={apiKey}
+            apiKey={apiKeyValue}
             selectedModel={selectedModel}
-            onModelChange={setSelectedModel}
+            onModelChange={(modelId) => setValue("model", modelId)}
           />
+        )}
+        {errors.model && (
+          <p className="text-xs text-red-500">{errors.model.message}</p>
         )}
 
         {/* ── Footer ── */}
         <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 dark:border-gray-800">
-          <Button variant="outline" onClick={() => navigate("/providers")}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => navigate("/providers")}
+          >
             Cancel
           </Button>
           <Button
-            onClick={handleSubmit}
-            disabled={
-              !selectedProvider ||
-              !selectedModel ||
-              saving ||
-              (meta?.requiresApiKey && !apiKey.trim())
-            }
+            type="submit"
+            disabled={isSubmitting}
             data-testid="save-provider-btn"
           >
-            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {isEditing ? "Save Changes" : "Add Provider"}
           </Button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

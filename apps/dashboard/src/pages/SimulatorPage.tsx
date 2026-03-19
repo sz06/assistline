@@ -1,8 +1,27 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { api } from "@repo/api";
 import { Button, Input, Label, PageHeader, Textarea } from "@repo/ui";
 import { useMutation, useQuery } from "convex/react";
 import { AlertCircle, CheckCircle2, Send } from "lucide-react";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+
+// ---------------------------------------------------------------------------
+// Zod Schema
+// ---------------------------------------------------------------------------
+
+const simulatorFormSchema = z.object({
+  sender: z.string().min(1, "Sender is required"),
+  roomId: z.string().min(1, "Room ID is required"),
+  message: z.string().min(1, "Message is required"),
+});
+
+type SimulatorFormData = z.infer<typeof simulatorFormSchema>;
+
+// ---------------------------------------------------------------------------
+// Simulator Page
+// ---------------------------------------------------------------------------
 
 export function SimulatorPage() {
   const conversations = useQuery(api.conversations.list);
@@ -13,33 +32,38 @@ export function SimulatorPage() {
   >("idle");
   const [responseMsg, setResponseMsg] = useState("");
 
-  const [sender, setSender] = useState("");
-  const [roomId, setRoomId] = useState("");
-  const [message, setMessage] = useState("");
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<SimulatorFormData>({
+    resolver: zodResolver(simulatorFormSchema),
+    defaultValues: {
+      sender: "",
+      roomId: "",
+      message: "",
+    },
+  });
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const roomIdValue = watch("roomId");
 
-    if (!sender || !roomId || !message) {
-      setStatus("error");
-      setResponseMsg("Please fill in all fields.");
-      return;
-    }
-
+  const onValid = async (data: SimulatorFormData) => {
     setStatus("loading");
 
     try {
       await insertMessage({
-        matrixRoomId: roomId,
-        sender: sender,
-        text: message,
+        matrixRoomId: data.roomId,
+        sender: data.sender,
+        text: data.message,
         direction: "in",
         timestamp: Date.now(),
       });
 
       setStatus("success");
       setResponseMsg("Message simulated successfully!");
-      setMessage(""); // Clear message but keep sender and room for quick re-testing
+      setValue("message", ""); // Clear message but keep sender and room for quick re-testing
     } catch (error: unknown) {
       console.error("Simulation error:", error);
       setStatus("error");
@@ -57,28 +81,30 @@ export function SimulatorPage() {
       />
 
       <div className="mt-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6 shadow-sm">
-        <form onSubmit={handleSend} className="space-y-6">
+        <form onSubmit={handleSubmit(onValid)} className="space-y-6">
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="sender">Sender (Matrix ID)</Label>
               <Input
                 id="sender"
-                value={sender}
-                onChange={(e) => setSender(e.target.value)}
+                {...register("sender")}
                 placeholder="@user:example.com"
-                required
               />
-              <p className="text-xs text-gray-500">
-                The Matrix ID of the user sending the message.
-              </p>
+              {errors.sender ? (
+                <p className="text-xs text-red-500">{errors.sender.message}</p>
+              ) : (
+                <p className="text-xs text-gray-500">
+                  The Matrix ID of the user sending the message.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="roomId">To (Matrix Room ID)</Label>
               <div className="relative">
                 <select
                   id="roomIdSelect"
-                  value={roomId}
-                  onChange={(e) => setRoomId(e.target.value)}
+                  value={roomIdValue}
+                  onChange={(e) => setValue("roomId", e.target.value)}
                   className="flex w-full mb-2 rounded-md border border-gray-200 bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:focus-visible:ring-gray-300 transition-colors"
                 >
                   <option value="">
@@ -93,16 +119,18 @@ export function SimulatorPage() {
                 </select>
                 <Input
                   id="roomId"
-                  value={roomId}
-                  onChange={(e) => setRoomId(e.target.value)}
+                  {...register("roomId")}
                   placeholder="!room:example.com"
-                  required
                 />
               </div>
-              <p className="text-xs text-gray-500">
-                Select an existing room from the list, or type a new one
-                manually.
-              </p>
+              {errors.roomId ? (
+                <p className="text-xs text-red-500">{errors.roomId.message}</p>
+              ) : (
+                <p className="text-xs text-gray-500">
+                  Select an existing room from the list, or type a new one
+                  manually.
+                </p>
+              )}
             </div>
           </div>
 
@@ -110,13 +138,14 @@ export function SimulatorPage() {
             <Label htmlFor="message">Message Body</Label>
             <Textarea
               id="message"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              {...register("message")}
               placeholder="Type the message you want to simulate..."
-              required
               rows={4}
               className="bg-transparent"
             />
+            {errors.message && (
+              <p className="text-xs text-red-500">{errors.message.message}</p>
+            )}
           </div>
 
           <div className="flex items-center gap-4">

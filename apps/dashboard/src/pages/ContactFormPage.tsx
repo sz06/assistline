@@ -1,56 +1,54 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { api, type Id } from "@repo/api";
 import { Button, Input, Label, PageHeader } from "@repo/ui";
 import { useMutation, useQuery } from "convex/react";
 import { ArrowLeft, Loader2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useFieldArray, useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
+import { z } from "zod";
 
 // ---------------------------------------------------------------------------
-// Types
+// Zod Schema
 // ---------------------------------------------------------------------------
 
-interface PhoneEntry {
-  label?: string;
-  value: string;
-}
+const phoneEntrySchema = z.object({
+  label: z.string().optional(),
+  value: z.string().min(1, "Phone number is required"),
+});
 
-interface EmailEntry {
-  label?: string;
-  value: string;
-}
+const emailEntrySchema = z.object({
+  label: z.string().optional(),
+  value: z.string().email("Invalid email address"),
+});
 
-interface AddressEntry {
-  label?: string;
-  street?: string;
-  city?: string;
-  state?: string;
-  postalCode?: string;
-  country?: string;
-}
+const addressEntrySchema = z.object({
+  label: z.string().optional(),
+  street: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  postalCode: z.string().optional(),
+  country: z.string().optional(),
+});
 
-interface ContactFormData {
-  name: string;
-  nickname: string;
-  phoneNumbers: PhoneEntry[];
-  emails: EmailEntry[];
-  company: string;
-  jobTitle: string;
-  birthday: string;
-  notes: string;
-  addresses: AddressEntry[];
-}
+const contactFormSchema = z
+  .object({
+    name: z.string(),
+    nickname: z.string(),
+    phoneNumbers: z.array(phoneEntrySchema),
+    emails: z.array(emailEntrySchema),
+    company: z.string(),
+    jobTitle: z.string(),
+    birthday: z.string(),
+    notes: z.string(),
+    addresses: z.array(addressEntrySchema),
+  })
+  .refine((data) => data.name.trim() || data.nickname.trim(), {
+    message: "Either name or nickname is required",
+    path: ["name"],
+  });
 
-const EMPTY_FORM: ContactFormData = {
-  name: "",
-  nickname: "",
-  phoneNumbers: [],
-  emails: [],
-  company: "",
-  jobTitle: "",
-  birthday: "",
-  notes: "",
-  addresses: [],
-};
+type ContactFormData = z.infer<typeof contactFormSchema>;
 
 // ---------------------------------------------------------------------------
 // Contact Form Page
@@ -65,24 +63,60 @@ export function ContactFormPage() {
   // For Edit mode, fetch the contact data and identities
   const contact = useQuery(
     api.contacts.get,
-    isEditing ? { id: contactId! } : "skip",
+    isEditing && contactId ? { id: contactId } : "skip",
   );
 
   const identities = useQuery(
     api.contacts.getIdentities,
-    isEditing ? { contactId: contactId! } : "skip",
+    isEditing && contactId ? { contactId } : "skip",
   );
 
   const createContact = useMutation(api.contacts.create);
   const updateContact = useMutation(api.contacts.update);
 
-  const [form, setForm] = useState<ContactFormData>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    control,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<ContactFormData>({
+    resolver: zodResolver(contactFormSchema),
+    defaultValues: {
+      name: "",
+      nickname: "",
+      phoneNumbers: [],
+      emails: [],
+      company: "",
+      jobTitle: "",
+      birthday: "",
+      notes: "",
+      addresses: [],
+    },
+  });
+
+  const {
+    fields: phoneFields,
+    append: appendPhone,
+    remove: removePhone,
+  } = useFieldArray({ control, name: "phoneNumbers" });
+
+  const {
+    fields: emailFields,
+    append: appendEmail,
+    remove: removeEmail,
+  } = useFieldArray({ control, name: "emails" });
+
+  const {
+    fields: addressFields,
+    append: appendAddress,
+    remove: removeAddress,
+  } = useFieldArray({ control, name: "addresses" });
 
   // When editing and data loads, populate the form once
   useEffect(() => {
     if (isEditing && contact) {
-      setForm({
+      reset({
         name: contact.name ?? "",
         nickname: contact.nickname ?? "",
         phoneNumbers: contact.phoneNumbers ?? [],
@@ -94,77 +128,28 @@ export function ContactFormPage() {
         addresses: contact.addresses ?? [],
       });
     }
-  }, [isEditing, contact]);
+  }, [isEditing, contact, reset]);
 
-  const update = <K extends keyof ContactFormData>(
-    key: K,
-    value: ContactFormData[K],
-  ) => setForm((prev) => ({ ...prev, [key]: value }));
+  const onValid = async (data: ContactFormData) => {
+    const payload = {
+      name: data.name || undefined,
+      nickname: data.nickname || undefined,
+      phoneNumbers:
+        data.phoneNumbers.length > 0 ? data.phoneNumbers : undefined,
+      emails: data.emails.length > 0 ? data.emails : undefined,
+      company: data.company || undefined,
+      jobTitle: data.jobTitle || undefined,
+      birthday: data.birthday || undefined,
+      notes: data.notes || undefined,
+      addresses: data.addresses.length > 0 ? data.addresses : undefined,
+    };
 
-  // Multi-value helpers
-  const addPhone = () =>
-    update("phoneNumbers", [...form.phoneNumbers, { label: "", value: "" }]);
-  const removePhone = (idx: number) =>
-    update(
-      "phoneNumbers",
-      form.phoneNumbers.filter((_, i) => i !== idx),
-    );
-  const setPhone = (idx: number, field: keyof PhoneEntry, val: string) =>
-    update(
-      "phoneNumbers",
-      form.phoneNumbers.map((p, i) => (i === idx ? { ...p, [field]: val } : p)),
-    );
-
-  const addEmail = () =>
-    update("emails", [...form.emails, { label: "", value: "" }]);
-  const removeEmail = (idx: number) =>
-    update(
-      "emails",
-      form.emails.filter((_, i) => i !== idx),
-    );
-  const setEmail = (idx: number, field: keyof EmailEntry, val: string) =>
-    update(
-      "emails",
-      form.emails.map((e, i) => (i === idx ? { ...e, [field]: val } : e)),
-    );
-
-  const addAddress = () => update("addresses", [...form.addresses, {}]);
-  const removeAddress = (idx: number) =>
-    update(
-      "addresses",
-      form.addresses.filter((_, i) => i !== idx),
-    );
-  const setAddress = (idx: number, field: keyof AddressEntry, val: string) =>
-    update(
-      "addresses",
-      form.addresses.map((a, i) => (i === idx ? { ...a, [field]: val } : a)),
-    );
-
-  const handleSubmit = async () => {
-    setSaving(true);
-    try {
-      const payload = {
-        name: form.name || undefined,
-        nickname: form.nickname || undefined,
-        phoneNumbers:
-          form.phoneNumbers.length > 0 ? form.phoneNumbers : undefined,
-        emails: form.emails.length > 0 ? form.emails : undefined,
-        company: form.company || undefined,
-        jobTitle: form.jobTitle || undefined,
-        birthday: form.birthday || undefined,
-        notes: form.notes || undefined,
-        addresses: form.addresses.length > 0 ? form.addresses : undefined,
-      };
-
-      if (isEditing && contactId) {
-        await updateContact({ id: contactId, ...payload });
-      } else {
-        await createContact(payload);
-      }
-      navigate("/contacts");
-    } finally {
-      setSaving(false);
+    if (isEditing && contactId) {
+      await updateContact({ id: contactId, ...payload });
+    } else {
+      await createContact(payload);
     }
+    navigate("/contacts");
   };
 
   // If editing but still loading data, show spinner
@@ -235,18 +220,23 @@ export function ContactFormPage() {
         </div>
       )}
 
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6 space-y-6">
+      <form
+        onSubmit={handleSubmit(onValid)}
+        className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6 space-y-6"
+      >
         {/* ── Name Fields ── */}
         <div className="grid grid-cols-1 gap-4">
           <div>
             <Label htmlFor="cf-name">Full Name</Label>
             <Input
               id="cf-name"
-              value={form.name}
-              onChange={(e) => update("name", e.target.value)}
+              {...register("name")}
               placeholder="John Doe"
               className="mt-1.5"
             />
+            {errors.name && (
+              <p className="text-xs text-red-500 mt-1">{errors.name.message}</p>
+            )}
           </div>
         </div>
 
@@ -254,8 +244,7 @@ export function ContactFormPage() {
           <Label htmlFor="cf-nick">Nickname</Label>
           <Input
             id="cf-nick"
-            value={form.nickname}
-            onChange={(e) => update("nickname", e.target.value)}
+            {...register("nickname")}
             placeholder="Optional"
             className="mt-1.5 max-w-sm"
           />
@@ -267,23 +256,21 @@ export function ContactFormPage() {
             <Label>Phone Numbers</Label>
             <button
               type="button"
-              onClick={addPhone}
+              onClick={() => appendPhone({ label: "", value: "" })}
               className="text-xs text-blue-500 hover:text-blue-600 font-medium transition-colors"
             >
               + Add Phone
             </button>
           </div>
-          {form.phoneNumbers.map((p, i) => (
-            <div key={`ph-${i}`} className="flex items-center gap-2 mt-2">
+          {phoneFields.map((field, i) => (
+            <div key={field.id} className="flex items-center gap-2 mt-2">
               <Input
-                value={p.label ?? ""}
-                onChange={(e) => setPhone(i, "label", e.target.value)}
+                {...register(`phoneNumbers.${i}.label`)}
                 placeholder="Label"
                 className="w-24 sm:w-32"
               />
               <Input
-                value={p.value}
-                onChange={(e) => setPhone(i, "value", e.target.value)}
+                {...register(`phoneNumbers.${i}.value`)}
                 placeholder="+1 234 567 8900"
                 className="flex-1"
               />
@@ -297,9 +284,16 @@ export function ContactFormPage() {
               </button>
             </div>
           ))}
-          {form.phoneNumbers.length === 0 && (
+          {phoneFields.length === 0 && (
             <p className="text-sm text-gray-500 italic">
               No phone numbers added
+            </p>
+          )}
+          {errors.phoneNumbers && (
+            <p className="text-xs text-red-500 mt-1">
+              {typeof errors.phoneNumbers.message === "string"
+                ? errors.phoneNumbers.message
+                : "Please fix phone number errors"}
             </p>
           )}
         </div>
@@ -310,23 +304,21 @@ export function ContactFormPage() {
             <Label>Email Addresses</Label>
             <button
               type="button"
-              onClick={addEmail}
+              onClick={() => appendEmail({ label: "", value: "" })}
               className="text-xs text-blue-500 hover:text-blue-600 font-medium transition-colors"
             >
               + Add Email
             </button>
           </div>
-          {form.emails.map((e, i) => (
-            <div key={`em-${i}`} className="flex items-center gap-2 mt-2">
+          {emailFields.map((field, i) => (
+            <div key={field.id} className="flex items-center gap-2 mt-2">
               <Input
-                value={e.label ?? ""}
-                onChange={(ev) => setEmail(i, "label", ev.target.value)}
+                {...register(`emails.${i}.label`)}
                 placeholder="Label"
                 className="w-24 sm:w-32"
               />
               <Input
-                value={e.value}
-                onChange={(ev) => setEmail(i, "value", ev.target.value)}
+                {...register(`emails.${i}.value`)}
                 placeholder="john@example.com"
                 className="flex-1"
               />
@@ -340,9 +332,16 @@ export function ContactFormPage() {
               </button>
             </div>
           ))}
-          {form.emails.length === 0 && (
+          {emailFields.length === 0 && (
             <p className="text-sm text-gray-500 italic">
               No email addresses added
+            </p>
+          )}
+          {errors.emails && (
+            <p className="text-xs text-red-500 mt-1">
+              {typeof errors.emails.message === "string"
+                ? errors.emails.message
+                : "Please fix email errors"}
             </p>
           )}
         </div>
@@ -353,8 +352,7 @@ export function ContactFormPage() {
             <Label htmlFor="cf-company">Company</Label>
             <Input
               id="cf-company"
-              value={form.company}
-              onChange={(e) => update("company", e.target.value)}
+              {...register("company")}
               placeholder="Acme Corp"
               className="mt-1.5"
             />
@@ -363,8 +361,7 @@ export function ContactFormPage() {
             <Label htmlFor="cf-job">Job Title</Label>
             <Input
               id="cf-job"
-              value={form.jobTitle}
-              onChange={(e) => update("jobTitle", e.target.value)}
+              {...register("jobTitle")}
               placeholder="Engineer"
               className="mt-1.5"
             />
@@ -377,8 +374,7 @@ export function ContactFormPage() {
           <Input
             id="cf-bday"
             type="date"
-            value={form.birthday}
-            onChange={(e) => update("birthday", e.target.value)}
+            {...register("birthday")}
             className="mt-1.5 max-w-[200px]"
           />
         </div>
@@ -389,22 +385,21 @@ export function ContactFormPage() {
             <Label>Addresses</Label>
             <button
               type="button"
-              onClick={addAddress}
+              onClick={() => appendAddress({})}
               className="text-xs text-blue-500 hover:text-blue-600 font-medium transition-colors"
             >
               + Add Address
             </button>
           </div>
           <div className="space-y-4">
-            {form.addresses.map((addr, i) => (
+            {addressFields.map((field, i) => (
               <div
-                key={`addr-${i}`}
+                key={field.id}
                 className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20 space-y-3"
               >
                 <div className="flex items-center justify-between">
                   <Input
-                    value={addr.label ?? ""}
-                    onChange={(e) => setAddress(i, "label", e.target.value)}
+                    {...register(`addresses.${i}.label`)}
                     placeholder="Label (Home, Work…)"
                     className="w-48 bg-white dark:bg-gray-900 mt-1"
                   />
@@ -418,44 +413,37 @@ export function ContactFormPage() {
                   </button>
                 </div>
                 <Input
-                  value={addr.street ?? ""}
-                  onChange={(e) => setAddress(i, "street", e.target.value)}
+                  {...register(`addresses.${i}.street`)}
                   placeholder="Street"
                   className="bg-white dark:bg-gray-900"
                 />
                 <div className="grid grid-cols-2 gap-3">
                   <Input
-                    value={addr.city ?? ""}
-                    onChange={(e) => setAddress(i, "city", e.target.value)}
+                    {...register(`addresses.${i}.city`)}
                     placeholder="City"
                     className="bg-white dark:bg-gray-900"
                   />
                   <Input
-                    value={addr.state ?? ""}
-                    onChange={(e) => setAddress(i, "state", e.target.value)}
+                    {...register(`addresses.${i}.state`)}
                     placeholder="State"
                     className="bg-white dark:bg-gray-900"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <Input
-                    value={addr.postalCode ?? ""}
-                    onChange={(e) =>
-                      setAddress(i, "postalCode", e.target.value)
-                    }
+                    {...register(`addresses.${i}.postalCode`)}
                     placeholder="Postal Code"
                     className="bg-white dark:bg-gray-900"
                   />
                   <Input
-                    value={addr.country ?? ""}
-                    onChange={(e) => setAddress(i, "country", e.target.value)}
+                    {...register(`addresses.${i}.country`)}
                     placeholder="Country"
                     className="bg-white dark:bg-gray-900"
                   />
                 </div>
               </div>
             ))}
-            {form.addresses.length === 0 && (
+            {addressFields.length === 0 && (
               <p className="text-sm text-gray-500 italic">No addresses added</p>
             )}
           </div>
@@ -466,8 +454,7 @@ export function ContactFormPage() {
           <Label htmlFor="cf-notes">Notes</Label>
           <textarea
             id="cf-notes"
-            value={form.notes}
-            onChange={(e) => update("notes", e.target.value)}
+            {...register("notes")}
             placeholder="Any additional notes…"
             rows={4}
             className="mt-1.5 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
@@ -476,19 +463,23 @@ export function ContactFormPage() {
 
         {/* ── Footer ── */}
         <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 dark:border-gray-800">
-          <Button variant="outline" onClick={() => navigate("/contacts")}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => navigate("/contacts")}
+          >
             Cancel
           </Button>
           <Button
-            onClick={handleSubmit}
-            disabled={saving || (!form.name && !form.nickname)}
+            type="submit"
+            disabled={isSubmitting}
             data-testid="save-contact-btn"
           >
-            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {isEditing ? "Save Changes" : "Create Contact"}
           </Button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

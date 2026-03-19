@@ -69,6 +69,12 @@ test.describe("Contacts Page", () => {
       contactsPage.clickCard("Bob Jones"),
     ]);
 
+    // Wait for form data to load
+    await expect(
+      page.getByRole("heading", { name: "Edit Contact" }),
+    ).toBeVisible();
+    await expect(contactsPage.nameInput).not.toHaveValue("");
+
     // Update company
     await contactsPage.companyInput.fill("NewCorp");
     await Promise.all([
@@ -81,7 +87,7 @@ test.describe("Contacts Page", () => {
       contactsPage.page.waitForURL("**/contacts/*/update"),
       contactsPage.clickCard("Bob Jones"),
     ]);
-    await expect(page.getByText("NewCorp").first()).toBeVisible();
+    await expect(contactsPage.companyInput).toHaveValue("NewCorp");
   });
 
   test("search filters contacts", async ({ page }) => {

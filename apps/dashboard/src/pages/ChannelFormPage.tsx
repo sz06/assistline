@@ -1,28 +1,29 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { api, type Id } from "@repo/api";
 import { Button, Input, Label, PageHeader } from "@repo/ui";
 import { useMutation, useQuery } from "convex/react";
 import { ArrowLeft, Loader2, QrCode, Unplug, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
+import { z } from "zod";
 
 // ---------------------------------------------------------------------------
-// Types
+// Zod Schema
 // ---------------------------------------------------------------------------
 
-type ChannelType = "whatsapp" | "telegram";
+const CHANNEL_TYPES = ["whatsapp", "telegram"] as const;
+type ChannelType = (typeof CHANNEL_TYPES)[number];
 type ChannelStatus = "disconnected" | "pairing" | "connected" | "error";
 
-interface ChannelFormData {
-  type: ChannelType;
-  label: string;
-}
+const channelFormSchema = z.object({
+  type: z.enum(CHANNEL_TYPES),
+  label: z.string().min(1, "Label is required"),
+});
 
-const EMPTY_FORM: ChannelFormData = {
-  type: "whatsapp",
-  label: "",
-};
+type ChannelFormData = z.infer<typeof channelFormSchema>;
 
-const CHANNEL_TYPES: { value: ChannelType; label: string }[] = [
+const CHANNEL_TYPE_OPTIONS: { value: ChannelType; label: string }[] = [
   { value: "whatsapp", label: "WhatsApp" },
   { value: "telegram", label: "Telegram" },
 ];
@@ -40,7 +41,7 @@ export function ChannelFormPage() {
   // For Edit mode, fetch the channel data
   const channel = useQuery(
     api.channels.get,
-    isEditing ? { id: channelId! } : "skip",
+    isEditing && channelId ? { id: channelId } : "skip",
   );
 
   const createChannel = useMutation(api.channels.create);
@@ -48,43 +49,43 @@ export function ChannelFormPage() {
   const requestPairing = useMutation(api.channels.requestPairing);
   const disconnectChannel = useMutation(api.channels.disconnect);
 
-  const [form, setForm] = useState<ChannelFormData>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<ChannelFormData>({
+    resolver: zodResolver(channelFormSchema),
+    defaultValues: {
+      type: "whatsapp",
+      label: "",
+    },
+  });
 
   // When editing and data loads, populate the form once
   useEffect(() => {
     if (isEditing && channel) {
-      setForm({
-        type: channel.type,
+      reset({
+        type: channel.type as ChannelType,
         label: channel.label,
       });
     }
-  }, [isEditing, channel]);
+  }, [isEditing, channel, reset]);
 
-  const update = <K extends keyof ChannelFormData>(
-    key: K,
-    value: ChannelFormData[K],
-  ) => setForm((prev) => ({ ...prev, [key]: value }));
-
-  const handleSubmit = async () => {
-    setSaving(true);
-    try {
-      if (isEditing && channelId) {
-        await updateChannel({
-          id: channelId,
-          type: form.type,
-          label: form.label,
-        });
-      } else {
-        await createChannel({
-          type: form.type,
-          label: form.label,
-        });
-      }
-      navigate("/channels");
-    } finally {
-      setSaving(false);
+  const onValid = async (data: ChannelFormData) => {
+    if (isEditing && channelId) {
+      await updateChannel({
+        id: channelId,
+        type: data.type,
+        label: data.label,
+      });
+    } else {
+      await createChannel({
+        type: data.type,
+        label: data.label,
+      });
     }
+    navigate("/channels");
   };
 
   // If editing but still loading data, show spinner
@@ -133,36 +134,41 @@ export function ChannelFormPage() {
       </div>
 
       {/* ── Connection Status & Actions (Edit mode only) ── */}
-      {isEditing && channel && (
+      {isEditing && channel && channelId && (
         <ConnectionSection
-          status={channelStatus!}
+          status={channelStatus ?? "disconnected"}
           qrCode={channel.qrCode}
           phoneNumber={channel.phoneNumber}
           error={channel.error}
           connectedAt={channel.connectedAt}
-          onPair={() => requestPairing({ id: channelId! })}
-          onCancel={() => disconnectChannel({ id: channelId! })}
-          onDisconnect={() => disconnectChannel({ id: channelId! })}
+          onPair={() => requestPairing({ id: channelId })}
+          onCancel={() => disconnectChannel({ id: channelId })}
+          onDisconnect={() => disconnectChannel({ id: channelId })}
         />
       )}
 
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6 space-y-6">
+      <form
+        onSubmit={handleSubmit(onValid)}
+        className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6 space-y-6"
+      >
         {/* ── Channel Type ── */}
         <div>
           <Label htmlFor="ch-type">Channel Type</Label>
           <select
             id="ch-type"
-            value={form.type}
-            onChange={(e) => update("type", e.target.value as ChannelType)}
+            {...register("type")}
             className="mt-1.5 w-full max-w-sm h-10 px-3 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             data-testid="channel-type-select"
           >
-            {CHANNEL_TYPES.map((ct) => (
+            {CHANNEL_TYPE_OPTIONS.map((ct) => (
               <option key={ct.value} value={ct.value}>
                 {ct.label}
               </option>
             ))}
           </select>
+          {errors.type && (
+            <p className="text-xs text-red-500 mt-1">{errors.type.message}</p>
+          )}
         </div>
 
         {/* ── Label ── */}
@@ -170,8 +176,7 @@ export function ChannelFormPage() {
           <Label htmlFor="ch-label">Label</Label>
           <Input
             id="ch-label"
-            value={form.label}
-            onChange={(e) => update("label", e.target.value)}
+            {...register("label")}
             placeholder="My WhatsApp"
             className="mt-1.5 max-w-sm"
             data-testid="channel-label-input"
@@ -179,23 +184,30 @@ export function ChannelFormPage() {
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
             A friendly name to identify this channel.
           </p>
+          {errors.label && (
+            <p className="text-xs text-red-500 mt-1">{errors.label.message}</p>
+          )}
         </div>
 
         {/* ── Footer ── */}
         <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 dark:border-gray-800">
-          <Button variant="outline" onClick={() => navigate("/channels")}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => navigate("/channels")}
+          >
             Cancel
           </Button>
           <Button
-            onClick={handleSubmit}
-            disabled={saving || !form.label.trim()}
+            type="submit"
+            disabled={isSubmitting}
             data-testid="save-channel-btn"
           >
-            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {isEditing ? "Save Changes" : "Create Channel"}
           </Button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
