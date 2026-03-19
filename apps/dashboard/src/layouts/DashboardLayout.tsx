@@ -5,6 +5,7 @@ import {
   Menu,
   MessageSquare,
   Moon,
+  Radio,
   Settings,
   Sun,
   Terminal,
@@ -17,6 +18,11 @@ const navLinks = [
     label: "Conversations",
     href: "/conversations",
     icon: <MessageSquare className="h-5 w-5" />,
+  },
+  {
+    label: "Channels",
+    href: "/channels",
+    icon: <Radio className="h-5 w-5" />,
   },
   { label: "Memory", href: "/memory", icon: <Database className="h-5 w-5" /> },
   {

@@ -5,13 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.2.0] - 2026-03-18
+
+### Changed
+- **Vite Plugin** (`apps/dashboard`): Switched from `@vitejs/plugin-react-swc` to `@vitejs/plugin-react` v6 to eliminate the "no swc plugins are used" warning on Vite 8 / Rolldown.
+- **Dashboard Version** (`apps/dashboard`): Bumped package version from `1.0.0` → `1.1.0`.
+
+### Fixed
+- **WhatsApp Pairing** (`packages/api`): Fixed "Timed out waiting for QR code" error by sending the bridge command with the required `!wa` prefix (`!wa login qr` instead of `login qr`). The mautrix-whatsapp bridge only accepts unprefixed commands in the management room; since each pairing attempt creates a new DM room, the prefix is mandatory.
+- **Matrix Listener** (`apps/listener`): Fixed `M_UNKNOWN_TOKEN` crash loop by adding automatic re-login logic. When the access token is rejected (e.g. after a Dendrite restart), the listener now re-authenticates using the bot's username/password, persists the new token, and clears the stale sync token before restarting the sync loop.
+- Removed all `as any` Convex ID casts in `ConversationsPage.tsx` — now uses proper `Id<"conversations">` type throughout.
+- Fixed Biome lint violations across dashboard pages: added explicit `type="button"` to all `<button>` elements, replaced non-null assertion with safe `??` fallback, and replaced `catch (error: any)` with `unknown` in `SimulatorPage.tsx`.
+
+### Added
+- **Vercel AI SDK Integration** (`packages/api`): Added `ai`, `@ai-sdk/openai`, `@ai-sdk/anthropic`, `@ai-sdk/google`, `@ai-sdk/groq`, and `zod` as dependencies. Created `convex/ai/engine.ts` (provider-agnostic model resolution) and `convex/ai/models.ts` (Convex action to fetch available models from each provider's API at runtime).
+- **Dynamic Model Discovery** (`apps/dashboard`): The AI Providers page now fetches available models from the provider's API at runtime using the user's API key, instead of relying on hardcoded model lists. The model selector shows a loading state while fetching and supports manual refresh.
+- **AI Providers Page** (`apps/dashboard`): Full CRUD page at `/providers` for managing LLM providers (OpenAI, Anthropic, Google AI, Ollama, Groq). Features provider cards with default badge and API key status, add-provider dialog with selectable tiles and **model selector** (e.g. GPT-4o, Claude Sonnet 4, Gemini 2.0 Flash), edit dialog for model/API keys, set-as-default, and inline delete confirmation. Empty state shows clickable provider preview tiles.
+- **Convex `aiProviders` module** (`packages/api`): Backend CRUD functions (`list`, `get`, `getDefault`, `create`, `update`, `remove`, `setDefault`) for the `aiProviders` table, with automatic un-defaulting logic when setting a new default.
+- **`pnpm convex:push`** script: One-command deploy of Convex functions from `packages/api` to the Docker-hosted Convex backend. Automatically fetches the admin key from the running container and sets the correct self-hosted env vars.
+- **Conversations Page** (`apps/dashboard`): Wired the full `ConversationsPage` component into the router, replacing the inline placeholder stub. The page features a searchable conversation list, real-time chat panel, AI auto-reply toggle, suggested replies/actions, and conversation deletion.
+- **Matrix Listener** (`apps/listener`): Rewritten to use direct Matrix Client-Server API via `fetch`, removing the `matrix-bot-sdk` dependency and its native addon issues. Supports sync-token persistence, auto-join on invite, and forwarding messages to Convex.
+- **Convex Auto-Deployer** (`docker/convex-deployer`): Init container that auto-deploys Convex functions and schema to the self-hosted backend on every `docker compose up`. Generates an admin key from the shared credentials volume.
+- **Matrix User Setup** (`docker/matrix-setup`): Init container that auto-creates the admin and bot users on Dendrite, then saves the bot's access token to a shared volume for the listener.
+- **Convex Dashboard** service: Added `ghcr.io/get-convex/convex-dashboard` at `http://localhost:6791` for inspecting data, functions, and logs.
+- **Synapse Admin** service: Added `awesometechnologies/synapse-admin` at `http://localhost:8010` for managing Dendrite users and rooms.
+- **Centralized environment config**: Single `.env.example` at the project root with all credentials. `pnpm setup:envs` generates crypto-random passwords and secrets, creates `.env.local`, updates `dendrite.yaml`, and copies env to `docker/.env`.
+- **Bot setup script** (`docker/setup-bot.sh`): Helper script to create the Matrix bot user on Dendrite and retrieve an access token.
 
 ### Removed
 - Removed `@apps/app` project.
 
 ### Fixed
 - Fixed theme toggle in `apps/dashboard` by adding the `@custom-variant dark` directive for Tailwind v4 class-based dark mode in `index.css`.
+- Fixed Simulator page crash caused by Docker Convex backend stealing host port 3210 from the local `convex dev` process. Changed Docker Convex service from `ports` to `expose` so it only listens within the Docker network.
 
 ## [2.1.0] - 2026-03-17
 

@@ -11,6 +11,7 @@ coverage
 .next/
 out/
 build
+dist/
 
 # misc
 .DS_Store
@@ -50,4 +51,5 @@ playwright-report/
 # Docker local data
 docker/*-data
 docker/dendrite.yaml
+docker/.env
 

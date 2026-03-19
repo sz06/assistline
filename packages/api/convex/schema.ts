@@ -4,6 +4,7 @@ import { v } from "convex/values";
 export default defineSchema({
   aiProviders: defineTable({
     provider: v.string(), // "openai", "anthropic", "ollama", etc.
+    model: v.optional(v.string()), // "gpt-4o", "claude-3.5-sonnet", etc.
     apiKey: v.optional(v.string()), // Optional for local models
     isDefault: v.boolean(),
   }).index("by_isDefault", ["isDefault"]),
@@ -92,4 +93,19 @@ export default defineSchema({
     vectorField: "embedding",
     dimensions: 1536, // default OpenAI text-embedding-3-small dims
   }),
+  channels: defineTable({
+    type: v.union(v.literal("whatsapp"), v.literal("telegram")),
+    label: v.string(), // User-friendly name, e.g. "My WhatsApp"
+    status: v.union(
+      v.literal("disconnected"),
+      v.literal("pairing"),
+      v.literal("connected"),
+      v.literal("error"),
+    ),
+    qrCode: v.optional(v.string()), // QR code data string during pairing
+    phoneNumber: v.optional(v.string()), // Connected phone number
+    error: v.optional(v.string()), // Error message if status is "error"
+    connectedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_type", ["type"]),
 });

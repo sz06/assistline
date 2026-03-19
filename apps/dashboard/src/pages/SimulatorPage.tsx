@@ -40,10 +40,12 @@ export function SimulatorPage() {
       setStatus("success");
       setResponseMsg("Message simulated successfully!");
       setMessage(""); // Clear message but keep sender and room for quick re-testing
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Simulation error:", error);
       setStatus("error");
-      setResponseMsg(error.message || "Failed to simulate message.");
+      setResponseMsg(
+        error instanceof Error ? error.message : "Failed to simulate message.",
+      );
     }
   };
 
@@ -82,7 +84,7 @@ export function SimulatorPage() {
                   <option value="">
                     Select existing room or type below...
                   </option>
-                  {conversations?.map((conv: any) => (
+                  {conversations?.map((conv) => (
                     <option key={conv._id} value={conv.matrixRoomId}>
                       {conv.contactDetails?.name || conv.name || "Unknown"} (
                       {conv.matrixRoomId})

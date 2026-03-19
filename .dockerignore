@@ -1,0 +1,14 @@
+# Docker ignore — allows convex/_generated through for listener builds
+node_modules
+.git
+.turbo
+.DS_Store
+docker/*-data
+*.pem
+npm-debug.log*
+pnpm-debug.log*
+.next
+out
+storybook-static
+test-results
+playwright-report

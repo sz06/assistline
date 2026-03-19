@@ -8,6 +8,11 @@
  * @module
  */
 
+import type * as ai_engine from "../ai/engine.js";
+import type * as ai_models from "../ai/models.js";
+import type * as aiProviders from "../aiProviders.js";
+import type * as channelActions from "../channelActions.js";
+import type * as channels from "../channels.js";
 import type * as conversations from "../conversations.js";
 import type * as init from "../init.js";
 import type * as messages from "../messages.js";
@@ -19,6 +24,11 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "ai/engine": typeof ai_engine;
+  "ai/models": typeof ai_models;
+  aiProviders: typeof aiProviders;
+  channelActions: typeof channelActions;
+  channels: typeof channels;
   conversations: typeof conversations;
   init: typeof init;
   messages: typeof messages;

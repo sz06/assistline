@@ -8,7 +8,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "html",
   use: {
-    baseURL: "http://localhost:5173",
+    baseURL: "http://localhost:5174",
     trace: "on-first-retry",
   },
   projects: [
@@ -18,8 +18,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm --filter app dev",
-    url: "http://localhost:5173",
+    command: "pnpm --filter dashboard dev",
+    url: "http://localhost:5174",
     reuseExistingServer: !process.env.CI,
   },
 });

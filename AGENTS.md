@@ -37,3 +37,13 @@ This document defines the core standards and automated workflows that any AI age
 
 ## 6. Commit Standards
 * **Conventional Commits:** All commit messages must follow the [Conventional Commits](https://www.conventionalcommits.org/) specification (e.g., `feat: add user login`, `fix: resolve crash on startup`).
+
+## 7. Convex Backend (Self-Hosted in Docker)
+* **Runtime:** The Convex backend runs inside a Docker container named `convex-backend` on `http://127.0.0.1:3410`.
+* **Deploying Functions:** After modifying any Convex functions (mutations, queries, actions) in `packages/api/convex/`, you **must** deploy them by running from the **repo root**:
+  ```bash
+  pnpm convex:push
+  ```
+  This script automatically generates the admin key from the Docker container and pushes the functions. **Do not** attempt to run `convex dev` or `npx convex deploy` directly — always use the root-level `convex:push` script.
+* **Admin Key:** The admin key is generated on-the-fly via `docker exec convex-backend ./generate_admin_key.sh`. You do not need to store or manage it manually.
+* **Dashboard:** The Convex dashboard is available at `http://localhost:6791/`.

@@ -10,22 +10,19 @@ export const listMessages = query({
   handler: async (ctx, args) => {
     const { conversationId, limit } = args;
 
-    let messages: any[];
     if (conversationId) {
-      messages = await ctx.db
+      return ctx.db
         .query("messages")
         .withIndex("by_conversationId_timestamp", (q) =>
           q.eq("conversationId", conversationId),
         )
         .take(limit ?? 50);
-    } else {
-      messages = await ctx.db
-        .query("messages")
-        .order("desc") // globally latest
-        .take(limit ?? 50);
     }
 
-    return messages;
+    return ctx.db
+      .query("messages")
+      .order("desc") // globally latest
+      .take(limit ?? 50);
   },
 });
 
@@ -113,7 +110,7 @@ export const sendMessage = mutation({
     // Insert the outbound message
     const messageId = await ctx.db.insert("messages", {
       conversationId: args.conversationId,
-      eventId: "outbound_" + Date.now().toString(), // temporary generated ID
+      eventId: `outbound_${Date.now().toString()}`, // temporary generated ID
       sender: "dashboard_user",
       text: args.content,
       direction: "out",

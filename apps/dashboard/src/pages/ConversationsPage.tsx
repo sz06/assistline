@@ -1,4 +1,4 @@
-import { api } from "@repo/api";
+import { api, type Id } from "@repo/api";
 import {
   Button,
   ConfirmDialog,
@@ -31,7 +31,9 @@ const statusConfig: Record<string, { color: string; label: string }> = {
 
 export function ConversationsPage() {
   const conversations = useQuery(api.conversations.list);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<Id<"conversations"> | null>(
+    null,
+  );
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(() => {
@@ -91,6 +93,7 @@ export function ConversationsPage() {
               const statusObj = statusConfig[conv.status || "idle"];
               return (
                 <button
+                  type="button"
                   key={conv._id}
                   onClick={() => setSelectedId(conv._id)}
                   className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-800/50 ${
@@ -154,11 +157,11 @@ function ChatPanel({
   onDelete,
   onBack,
 }: {
-  id: string;
+  id: Id<"conversations">;
   onDelete: () => void;
   onBack: () => void;
 }) {
-  const data = useQuery(api.conversations.getWithMessages, { id: id as any });
+  const data = useQuery(api.conversations.getWithMessages, { id });
   const sendMessage = useMutation(api.messages.sendMessage);
   const toggleAI = useMutation(api.conversations.toggleAI);
   const deleteConversation = useMutation(api.conversations.deleteConversation);
@@ -187,7 +190,7 @@ function ChatPanel({
     if (!draft.trim() || sending) return;
     setSending(true);
     try {
-      await sendMessage({ conversationId: id as any, content: draft.trim() });
+      await sendMessage({ conversationId: id, content: draft.trim() });
       setDraft("");
     } finally {
       setSending(false);
@@ -199,6 +202,7 @@ function ChatPanel({
       {/* Header */}
       <div className="flex items-center gap-2 md:gap-3 px-3 md:px-6 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0">
         <button
+          type="button"
           onClick={onBack}
           className="md:hidden flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100"
         >
@@ -227,7 +231,7 @@ function ChatPanel({
             aria-checked={data.aiEnabled === true}
             onClick={() =>
               toggleAI({
-                conversationId: id as any,
+                conversationId: id,
                 aiEnabled: !data.aiEnabled,
               })
             }
@@ -295,9 +299,10 @@ function ChatPanel({
             Approve
           </Button>
           <button
+            type="button"
             onClick={() =>
               dismissSuggestedActionMut({
-                conversationId: id as any,
+                conversationId: id,
                 actionIndex: idx,
               })
             }
@@ -316,17 +321,16 @@ function ChatPanel({
           <Button
             size="sm"
             onClick={() => {
-              setDraft(data.suggestedReply!);
-              dismissSuggestedReplyMut({ conversationId: id as any });
+              setDraft(data.suggestedReply ?? "");
+              dismissSuggestedReplyMut({ conversationId: id });
             }}
             className="bg-amber-500 h-7 text-xs"
           >
             Use Reply
           </Button>
           <button
-            onClick={() =>
-              dismissSuggestedReplyMut({ conversationId: id as any })
-            }
+            type="button"
+            onClick={() => dismissSuggestedReplyMut({ conversationId: id })}
             className="text-gray-400 hover:text-gray-600 shrink-0"
           >
             <X className="h-4 w-4" />
@@ -360,7 +364,7 @@ function ChatPanel({
         description="This will permanently delete this conversation."
         confirmLabel="Delete"
         onConfirm={async () => {
-          await deleteConversation({ conversationId: id as any });
+          await deleteConversation({ conversationId: id });
           setShowDeleteConfirm(false);
           onDelete();
         }}

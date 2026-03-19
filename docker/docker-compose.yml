@@ -1,4 +1,4 @@
-version: "3.8"
+  
 
 services:
   # 1. Matrix Homeserver (Dendrite)
@@ -13,7 +13,7 @@ services:
       - ./dendrite.yaml:/etc/dendrite/dendrite.yaml
       - ./mautrix-data/registration.yaml:/etc/dendrite/whatsapp-registration.yaml
     environment:
-      - SERVER_NAME=matrix.local
+      - SERVER_NAME=${DENDRITE_SERVER_NAME:-matrix.local}
     networks:
       - assistline-net
 
@@ -36,14 +36,63 @@ services:
     container_name: convex-backend
     restart: unless-stopped
     ports:
-      - "3210:3210"
-      - "3211:3211"
+      - "3410:3210"   # Host 3410 → Container 3210 (avoids conflict with local convex dev)
+      - "3411:3211"
     volumes:
       - ./convex-data:/convex/data
     networks:
       - assistline-net
 
-  # 4. Tailscale Sidecar Proxy for the Vite Dashboard
+  # 4. Convex Auto-Deployer (runs once — deploys functions, then exits)
+  convex-deployer:
+    build:
+      context: ..
+      dockerfile: docker/convex-deployer/Dockerfile
+    container_name: convex-deployer
+    restart: "no"
+    volumes:
+      - ./convex-data/credentials:/convex-credentials:ro
+      - convex-shared:/shared
+    networks:
+      - assistline-net
+    depends_on:
+      - convex
+
+  # 5. Convex Dashboard (web UI to inspect data, functions, logs)
+  convex-dashboard:
+    image: ghcr.io/get-convex/convex-dashboard:latest
+    container_name: convex-dashboard
+    restart: unless-stopped
+    ports:
+      - "6791:6791"
+    environment:
+      - CONVEX_BACKEND_URL=http://convex:3210
+    networks:
+      - assistline-net
+    depends_on:
+      - convex
+
+  # 6. Matrix User Setup (runs once — creates bot user, then exits)
+  matrix-setup:
+    image: alpine:3.21
+    container_name: matrix-setup
+    restart: "no"
+    entrypoint: ["/bin/sh", "/setup.sh"]
+    volumes:
+      - ./matrix-setup/setup.sh:/setup.sh:ro
+      - matrix-shared:/shared
+    environment:
+      - MATRIX_HOMESERVER_URL=http://dendrite:8008
+      - DENDRITE_SERVER_NAME=${DENDRITE_SERVER_NAME:-matrix.local}
+      - DENDRITE_SHARED_SECRET=${DENDRITE_SHARED_SECRET}
+      - MATRIX_BOT_USERNAME=${MATRIX_BOT_USERNAME:-listener-bot}
+      - MATRIX_BOT_PASSWORD=${MATRIX_BOT_PASSWORD}
+    networks:
+      - assistline-net
+    depends_on:
+      - dendrite
+
+  # 8. Tailscale Sidecar Proxy for the Vite Dashboard
   tailscale:
     image: tailscale/tailscale:latest
     container_name: tailscale-sidecar
@@ -62,18 +111,44 @@ services:
     networks:
       - assistline-net
 
-  # 5. Dashboard App (Vite React)
+  # 9. Dashboard App (Vite React)
   dashboard:
     build:
       context: ..
       dockerfile: apps/dashboard/Dockerfile
     container_name: dashboard-app
     restart: unless-stopped
-    # Use Tailscale's network namespace so it is exposed securely via the sidecar
     network_mode: "service:tailscale"
     depends_on:
       - tailscale
 
+  # 10. Matrix Listener (syncs Dendrite events → Convex)
+  matrix-listener:
+    build:
+      context: ..
+      dockerfile: apps/listener/Dockerfile
+    container_name: matrix-listener
+    restart: unless-stopped
+    environment:
+      - MATRIX_HOMESERVER_URL=http://dendrite:8008
+      - MATRIX_BOT_USERNAME=${MATRIX_BOT_USERNAME:-listener-bot}
+      - MATRIX_BOT_PASSWORD=${MATRIX_BOT_PASSWORD}
+      - DENDRITE_SERVER_NAME=${DENDRITE_SERVER_NAME:-matrix.local}
+      - CONVEX_URL=http://convex:3210
+    volumes:
+      - ./listener-data:/app/data
+      - matrix-shared:/shared
+    networks:
+      - assistline-net
+    depends_on:
+      - dendrite
+      - convex-deployer
+      - matrix-setup
+
 networks:
   assistline-net:
     driver: bridge
+
+volumes:
+  matrix-shared:
+  convex-shared:

@@ -1,6 +1,6 @@
 {
   "name": "turbostack",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "scripts": {
     "build": "turbo build",
@@ -9,7 +9,9 @@
     "format": "biome format . --write",
     "check": "biome check .",
     "storybook": "pnpm --filter @repo/ui storybook",
-    "setup:envs": "node scripts/setup.mjs"
+    "setup:envs": "node scripts/setup.mjs",
+    "convex:key": "docker exec convex-backend ./generate_admin_key.sh",
+    "convex:push": "CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3410 CONVEX_SELF_HOSTED_ADMIN_KEY=$(pnpm --silent convex:key) pnpm --filter @repo/api push"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
