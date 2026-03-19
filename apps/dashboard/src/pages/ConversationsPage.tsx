@@ -18,6 +18,7 @@ import {
   Send,
   Sparkles,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -102,8 +103,18 @@ export function ConversationsPage() {
                       : ""
                   }`}
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-semibold text-sm shadow-sm relative">
-                    {conv.contactDetails.name.charAt(0).toUpperCase()}
+                  <div
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white font-semibold text-sm shadow-sm relative ${
+                      conv.isGroup
+                        ? "bg-gradient-to-br from-violet-500 to-purple-600"
+                        : "bg-gradient-to-br from-blue-500 to-indigo-600"
+                    }`}
+                  >
+                    {conv.isGroup ? (
+                      <Users className="h-4.5 w-4.5" />
+                    ) : (
+                      conv.contactDetails.name.charAt(0).toUpperCase()
+                    )}
                     <span
                       title={statusObj?.label}
                       className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white dark:border-gray-900 ${statusObj?.color}`}
@@ -114,14 +125,23 @@ export function ConversationsPage() {
                       <span className="font-medium text-sm truncate text-gray-900 dark:text-gray-100">
                         {conv.contactDetails.name}
                       </span>
-                      {conv.currentIntent && (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium leading-tight bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-                          {conv.currentIntent}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {conv.isGroup && conv.groupDetails && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium leading-tight bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400">
+                            {conv.groupDetails.memberCount} members
+                          </span>
+                        )}
+                        {conv.currentIntent && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium leading-tight bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                            {conv.currentIntent}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                      {conv.contactDetails.phone || conv.matrixRoomId}
+                      {conv.isGroup
+                        ? (conv.groupDetails?.topic ?? "Group conversation")
+                        : conv.contactDetails.phone || conv.matrixRoomId}
                     </p>
                   </div>
                 </button>
@@ -208,15 +228,27 @@ function ChatPanel({
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-semibold">
-          {data.contactDetails.name.charAt(0).toUpperCase()}
+        <div
+          className={`flex h-9 w-9 items-center justify-center rounded-full text-white font-semibold ${
+            data.isGroup
+              ? "bg-gradient-to-br from-violet-500 to-purple-600"
+              : "bg-gradient-to-br from-blue-500 to-indigo-600"
+          }`}
+        >
+          {data.isGroup ? (
+            <Users className="h-4 w-4" />
+          ) : (
+            data.contactDetails.name.charAt(0).toUpperCase()
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <h2 className="font-semibold text-sm text-gray-900 dark:text-gray-100">
             {data.contactDetails.name}
           </h2>
           <div className="text-[11px] text-gray-500">
-            {data.contactDetails.phone || "No phone linked"}
+            {data.isGroup
+              ? `${data.groupDetails?.memberCount ?? ""} members${data.groupDetails?.topic ? ` · ${data.groupDetails.topic}` : ""}`
+              : data.contactDetails.phone || "No phone linked"}
           </div>
         </div>
 

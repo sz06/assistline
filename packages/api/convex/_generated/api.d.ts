@@ -14,6 +14,7 @@ import type * as aiProviders from "../aiProviders.js";
 import type * as channelActions from "../channelActions.js";
 import type * as channels from "../channels.js";
 import type * as conversations from "../conversations.js";
+import type * as groups from "../groups.js";
 import type * as init from "../init.js";
 import type * as messages from "../messages.js";
 
@@ -30,6 +31,7 @@ declare const fullApi: ApiFromModules<{
   channelActions: typeof channelActions;
   channels: typeof channels;
   conversations: typeof conversations;
+  groups: typeof groups;
   init: typeof init;
   messages: typeof messages;
 }>;

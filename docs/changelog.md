@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-03-18
+
+### Added
+- **Groups Table** (`packages/api`): New `groups` Convex table to store WhatsApp/Telegram group metadata — name, topic, avatar, member count, and full member list with display names and roles. Indexed by `matrixRoomId` for fast lookups.
+- **Group Detection** (`apps/listener`): The Matrix listener now fetches room membership and state for each active room to determine if it's a group (3+ joined members, excluding bridge bots). Groups are automatically synced to Convex via the new `groups.syncGroup` mutation, and conversation records are patched with `isGroup: true` and a `groupId` reference.
+- **Groups CRUD** (`packages/api`): New `groups.ts` module with `list`, `get`, `getByRoomId`, `syncGroup` (upsert), and `remove` functions.
+- **`syncConversationMeta` mutation** (`packages/api`): New mutation in `messages.ts` that the listener calls to update an existing conversation's `isGroup`, `name`, `groupId`, and `avatarUrl` fields after fetching room state.
+
+### Changed
+- **Conversations Schema** (`packages/api`): Added optional `groupId` field (reference to `groups` table) and `by_groupId` index to the `conversations` table.
+- **`insertMessage` mutation** (`packages/api`): Now accepts optional `isGroup`, `roomName`, and `groupId` parameters so new conversations are correctly tagged at creation time. Existing conversations are patched with group info if previously uncategorized.
+- **Conversations Queries** (`packages/api`): Both `list` and `getWithMessages` now fetch and return `groupDetails` (name, topic, memberCount, avatarUrl) for group conversations.
+- **Conversations UI** (`apps/dashboard`): Group conversations now display a purple gradient avatar with a `Users` icon, a member count badge, and the group topic as the subtitle. The chat panel header is similarly updated for groups.
+
 ## [2.2.0] - 2026-03-18
 
 ### Changed

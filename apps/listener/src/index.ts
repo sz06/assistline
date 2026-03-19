@@ -1,13 +1,13 @@
-import { ConvexHttpClient } from "convex/browser";
-import { api } from "./convex.js";
 import {
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
   existsSync,
+  mkdirSync,
+  readFileSync,
   unlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "./convex.js";
 
 // ---------------------------------------------------------------------------
 // Environment
@@ -53,8 +53,7 @@ const MATRIX_BOT_USER_ID =
   process.env.MATRIX_BOT_USER_ID ?? `@${botUsername}:${serverName}`;
 
 // Where to persist the sync token so we never miss messages on restart
-const SYNC_TOKEN_PATH =
-  process.env.SYNC_TOKEN_PATH ?? "./data/sync-token.json";
+const SYNC_TOKEN_PATH = process.env.SYNC_TOKEN_PATH ?? "./data/sync-token.json";
 
 // How long to long-poll Dendrite (ms). 30s is the Matrix default.
 const SYNC_TIMEOUT_MS = 30_000;
@@ -160,9 +159,7 @@ async function matrixFetch(
  */
 async function reLogin(): Promise<boolean> {
   if (!botPassword) {
-    console.error(
-      "[listener] Cannot re-login: MATRIX_BOT_PASSWORD is not set",
-    );
+    console.error("[listener] Cannot re-login: MATRIX_BOT_PASSWORD is not set");
     return false;
   }
 
@@ -203,7 +200,7 @@ async function reLogin(): Promise<boolean> {
       mkdirSync(dirname(TOKEN_FILE), { recursive: true });
       writeFileSync(TOKEN_FILE, currentAccessToken);
       console.log(`[listener] ✓ New access token saved to ${TOKEN_FILE}`);
-    } catch (writeErr) {
+    } catch (_writeErr) {
       console.warn(
         "[listener] ⚠ Could not save token file (read-only volume?), continuing with in-memory token",
       );
@@ -237,6 +234,155 @@ async function joinRoom(roomId: string): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Room state helpers — detect groups vs DMs
+// ---------------------------------------------------------------------------
+
+interface RoomMemberEvent {
+  type: string;
+  state_key: string;
+  content: {
+    membership?: string;
+    displayname?: string;
+  };
+}
+
+interface RoomStateEvent {
+  type: string;
+  content: {
+    name?: string;
+    topic?: string;
+    url?: string; // for m.room.avatar
+    [key: string]: unknown;
+  };
+}
+
+/** Cache of rooms we've already synced metadata for (avoids repeated API calls). */
+const syncedRoomMeta = new Set<string>();
+
+/**
+ * Fetch room members and state, determine if it's a group, and sync to Convex.
+ * Skips rooms already processed (per listener lifetime).
+ */
+async function syncRoomMetadata(roomId: string): Promise<{
+  isGroup: boolean;
+  roomName?: string;
+  groupId?: string;
+}> {
+  // Skip if already processed this session
+  if (syncedRoomMeta.has(roomId)) {
+    return roomMetaCache.get(roomId) ?? { isGroup: false };
+  }
+
+  try {
+    // Fetch joined members
+    const membersRes = await matrixFetch(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/members?membership=join`,
+    );
+
+    if (!membersRes.ok) {
+      console.warn(
+        `[listener] Could not fetch members for ${roomId}: ${membersRes.status}`,
+      );
+      return { isGroup: false };
+    }
+
+    const membersData = (await membersRes.json()) as {
+      chunk: RoomMemberEvent[];
+    };
+
+    const joinedMembers = (membersData.chunk ?? []).filter(
+      (e) => e.content.membership === "join",
+    );
+
+    // Filter out bridge bots (e.g. @whatsappbot:matrix.local)
+    const realMembers = joinedMembers.filter(
+      (m) =>
+        !m.state_key.startsWith("@whatsappbot:") &&
+        m.state_key !== MATRIX_BOT_USER_ID,
+    );
+
+    // A "group" has more than 1 real member (i.e. > 2 total with the bot,
+    // or simply > 1 non-bot participants)
+    const isGroup = realMembers.length > 1;
+
+    // Fetch room state for name, topic, avatar
+    const stateRes = await matrixFetch(
+      `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/state`,
+    );
+
+    let roomName: string | undefined;
+    let roomTopic: string | undefined;
+    let roomAvatar: string | undefined;
+
+    if (stateRes.ok) {
+      const stateEvents = (await stateRes.json()) as RoomStateEvent[];
+      for (const ev of stateEvents) {
+        if (ev.type === "m.room.name" && ev.content.name) {
+          roomName = ev.content.name;
+        }
+        if (ev.type === "m.room.topic" && ev.content.topic) {
+          roomTopic = ev.content.topic;
+        }
+        if (ev.type === "m.room.avatar" && ev.content.url) {
+          roomAvatar = ev.content.url;
+        }
+      }
+    }
+
+    let groupId: string | undefined;
+
+    if (isGroup) {
+      const members = joinedMembers.map((m) => ({
+        matrixId: m.state_key,
+        displayName: m.content.displayname ?? undefined,
+        role: "member" as const,
+      }));
+
+      // Upsert the group record in Convex
+      groupId = await convex.mutation(api.groups.syncGroup, {
+        matrixRoomId: roomId,
+        name: roomName ?? `Group (${joinedMembers.length} members)`,
+        topic: roomTopic,
+        avatarUrl: roomAvatar,
+        memberCount: joinedMembers.length,
+        members,
+      });
+
+      console.log(
+        `[listener] ✓ Synced group "${roomName ?? roomId}" (${joinedMembers.length} members, groupId=${groupId})`,
+      );
+    }
+
+    // Sync conversation metadata
+    await convex.mutation(api.messages.syncConversationMeta, {
+      matrixRoomId: roomId,
+      isGroup,
+      name: roomName,
+      groupId,
+      avatarUrl: roomAvatar,
+    });
+
+    const meta = { isGroup, roomName, groupId };
+    roomMetaCache.set(roomId, meta);
+    syncedRoomMeta.add(roomId);
+
+    return meta;
+  } catch (err) {
+    console.error(
+      `[listener] Failed to sync room metadata for ${roomId}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return { isGroup: false };
+  }
+}
+
+/** In-memory cache of room metadata for the current session. */
+const roomMetaCache = new Map<
+  string,
+  { isGroup: boolean; roomName?: string; groupId?: string }
+>();
+
 /** Call the Matrix /sync endpoint (long-polling). */
 async function sync(since?: string): Promise<SyncResponse> {
   const params = new URLSearchParams({
@@ -260,9 +406,7 @@ async function sync(since?: string): Promise<SyncResponse> {
     const body = await res.text();
     // Surface 401 errors as a specific type so the caller can re-auth
     if (res.status === 401) {
-      throw new MatrixUnauthorizedError(
-        `Sync failed: ${res.status} ${body}`,
-      );
+      throw new MatrixUnauthorizedError(`Sync failed: ${res.status} ${body}`);
     }
     throw new Error(`Sync failed: ${res.status} ${body}`);
   }
@@ -276,6 +420,7 @@ async function sync(since?: string): Promise<SyncResponse> {
 async function handleTimelineEvent(
   roomId: string,
   event: MatrixEvent,
+  roomMeta?: { isGroup: boolean; roomName?: string; groupId?: string },
 ): Promise<void> {
   // Only handle text messages
   if (event.type !== "m.room.message") return;
@@ -295,10 +440,13 @@ async function handleTimelineEvent(
       text: body,
       direction,
       timestamp: event.origin_server_ts,
+      isGroup: roomMeta?.isGroup,
+      roomName: roomMeta?.roomName,
+      groupId: roomMeta?.groupId,
     });
 
     console.log(
-      `[listener] ${direction === "in" ? "⬇" : "⬆"} ${event.sender} → ${roomId} | eventId=${event.event_id} | convexId=${messageId}`,
+      `[listener] ${direction === "in" ? "⬇" : "⬆"} ${event.sender} → ${roomId}${roomMeta?.isGroup ? " [GROUP]" : ""} | eventId=${event.event_id} | convexId=${messageId}`,
     );
   } catch (err) {
     console.error(
@@ -343,8 +491,13 @@ async function main(): Promise<void> {
       if (response.rooms?.join) {
         for (const [roomId, room] of Object.entries(response.rooms.join)) {
           const events = room.timeline?.events ?? [];
+          if (events.length === 0) continue;
+
+          // Fetch/sync room metadata (group detection) — cached per session
+          const roomMeta = await syncRoomMetadata(roomId);
+
           for (const event of events) {
-            await handleTimelineEvent(roomId, event);
+            await handleTimelineEvent(roomId, event, roomMeta);
           }
         }
       }
@@ -372,9 +525,7 @@ async function main(): Promise<void> {
         }
 
         // Re-login failed — wait longer before retrying
-        console.error(
-          "[listener] ✗ Re-login failed. Retrying in 30 seconds…",
-        );
+        console.error("[listener] ✗ Re-login failed. Retrying in 30 seconds…");
         await new Promise((resolve) => setTimeout(resolve, 30_000));
         continue;
       }

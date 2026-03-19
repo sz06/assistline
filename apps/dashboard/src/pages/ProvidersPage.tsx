@@ -522,9 +522,7 @@ function ModelSelector({
           className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 disabled:text-gray-400 transition-colors"
           title="Refresh models"
         >
-          <RefreshCcw
-            className={`h-3 w-3 ${loading ? "animate-spin" : ""}`}
-          />
+          <RefreshCcw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
           Refresh
         </button>
       </div>

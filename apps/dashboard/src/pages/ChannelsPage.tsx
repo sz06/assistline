@@ -102,12 +102,8 @@ export function ChannelsPage() {
                 key={channel._id}
                 channel={channel}
                 onPair={() => requestPairing({ id: channel._id })}
-                onCancel={() =>
-                  disconnectChannel({ id: channel._id })
-                }
-                onDisconnect={() =>
-                  disconnectChannel({ id: channel._id })
-                }
+                onCancel={() => disconnectChannel({ id: channel._id })}
+                onDisconnect={() => disconnectChannel({ id: channel._id })}
                 onRemove={() => removeChannel({ id: channel._id })}
               />
             ))
@@ -168,7 +164,9 @@ function ChannelCard({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-base">{channel.label}</h3>
-              <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${status.color}`}>
+              <span
+                className={`inline-flex items-center gap-1.5 text-xs font-medium ${status.color}`}
+              >
                 <span className={`h-2 w-2 rounded-full ${status.dotColor}`} />
                 {status.label}
               </span>
@@ -184,7 +182,7 @@ function ChannelCard({
               ) : channel.status === "pairing" ? (
                 "Scan the QR code below with WhatsApp"
               ) : channel.status === "error" ? (
-                channel.error ?? "An error occurred"
+                (channel.error ?? "An error occurred")
               ) : (
                 "Not connected"
               )}
@@ -197,7 +195,9 @@ function ChannelCard({
           {confirmDelete ? (
             // Delete confirmation — hides all other actions
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500 mr-1">Remove channel?</span>
+              <span className="text-sm text-gray-500 mr-1">
+                Remove channel?
+              </span>
               <button
                 type="button"
                 onClick={() => {

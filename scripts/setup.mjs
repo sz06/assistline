@@ -18,8 +18,7 @@ function randomSecret(length = 32) {
 
 /** Generate a random password (readable, 16 chars). */
 function randomPassword(length = 16) {
-  const chars =
-    "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const bytes = randomBytes(length);
   return Array.from(bytes)
     .map((b) => chars[b % chars.length])
@@ -154,7 +153,9 @@ try {
   console.log("");
   console.log("→ Generated credentials:");
   console.log(`  Matrix Bot     : ${replacements.MATRIX_BOT_PASSWORD}`);
-  console.log(`  Shared Secret  : ${replacements.DENDRITE_SHARED_SECRET.slice(0, 12)}…`);
+  console.log(
+    `  Shared Secret  : ${replacements.DENDRITE_SHARED_SECRET.slice(0, 12)}…`,
+  );
 
   console.log("");
   console.log("✨ Setup complete! Next steps:");

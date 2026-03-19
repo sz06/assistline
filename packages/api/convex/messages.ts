@@ -34,6 +34,10 @@ export const insertMessage = mutation({
     text: v.string(),
     direction: v.union(v.literal("in"), v.literal("out")),
     timestamp: v.number(),
+    // Optional group metadata — the listener populates these after checking room state
+    isGroup: v.optional(v.boolean()),
+    roomName: v.optional(v.string()),
+    groupId: v.optional(v.id("groups")),
   },
   handler: async (ctx, args) => {
     // Basic deduplication
@@ -60,12 +64,25 @@ export const insertMessage = mutation({
     if (!conversation) {
       conversationId = await ctx.db.insert("conversations", {
         matrixRoomId: args.matrixRoomId,
-        isGroup: false, // Defaulting to false, bridge can update later
+        isGroup: args.isGroup ?? false,
+        name: args.roomName,
+        groupId: args.groupId,
         updatedAt: args.timestamp,
       });
     } else {
       conversationId = conversation._id;
-      await ctx.db.patch(conversationId, { updatedAt: args.timestamp });
+      // Update group info if provided and conversation was previously uncategorized
+      const patch: Record<string, unknown> = { updatedAt: args.timestamp };
+      if (args.isGroup !== undefined && !conversation.isGroup && args.isGroup) {
+        patch.isGroup = true;
+      }
+      if (args.roomName && !conversation.name) {
+        patch.name = args.roomName;
+      }
+      if (args.groupId && !conversation.groupId) {
+        patch.groupId = args.groupId;
+      }
+      await ctx.db.patch(conversationId, patch);
     }
 
     // Ensure sender contact exists
@@ -94,6 +111,39 @@ export const insertMessage = mutation({
     await ctx.db.patch(conversationId, { lastMessageId: messageId });
 
     return messageId;
+  },
+});
+
+/**
+ * Sync room metadata — called by the listener after fetching room state
+ * to update an existing conversation's group status, name, and group link.
+ */
+export const syncConversationMeta = mutation({
+  args: {
+    matrixRoomId: v.string(),
+    isGroup: v.boolean(),
+    name: v.optional(v.string()),
+    groupId: v.optional(v.id("groups")),
+    avatarUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const conversation = await ctx.db
+      .query("conversations")
+      .withIndex("by_matrixRoomId", (q) =>
+        q.eq("matrixRoomId", args.matrixRoomId),
+      )
+      .first();
+
+    if (!conversation) return null;
+
+    await ctx.db.patch(conversation._id, {
+      isGroup: args.isGroup,
+      name: args.name ?? conversation.name,
+      groupId: args.groupId ?? conversation.groupId,
+      avatarUrl: args.avatarUrl ?? conversation.avatarUrl,
+    });
+
+    return conversation._id;
   },
 });
 

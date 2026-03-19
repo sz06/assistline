@@ -14,10 +14,6 @@ export const list = query({
     // Map contacts to conversations if possible
     const withDetails = await Promise.all(
       conversations.map(async (conv) => {
-        // We'll search for contacts referencing this conversation if needed,
-        // or just rely on the conversation's matrixRoomId to find messages/contacts.
-        // For Assistline, the contact is the sender of the messages.
-
         const contactDetails = {
           name: conv.name ?? "Unknown",
           phone: "",
@@ -48,9 +44,26 @@ export const list = query({
           }
         }
 
+        // Fetch group details if this is a group conversation
+        let groupDetails = null;
+        if (conv.isGroup && conv.groupId) {
+          const group = await ctx.db.get(conv.groupId);
+          if (group) {
+            groupDetails = {
+              name: group.name,
+              topic: group.topic,
+              memberCount: group.memberCount,
+              avatarUrl: group.avatarUrl,
+            };
+            // Override contact name with group name
+            contactDetails.name = group.name;
+          }
+        }
+
         return {
           ...conv,
           contactDetails,
+          groupDetails,
         };
       }),
     );
@@ -103,9 +116,26 @@ export const getWithMessages = query({
       }
     }
 
+    // Fetch group details if this is a group conversation
+    let groupDetails = null;
+    if (conv.isGroup && conv.groupId) {
+      const group = await ctx.db.get(conv.groupId);
+      if (group) {
+        groupDetails = {
+          name: group.name,
+          topic: group.topic,
+          memberCount: group.memberCount,
+          avatarUrl: group.avatarUrl,
+        };
+        // Override contact name with group name
+        contactDetails.name = group.name;
+      }
+    }
+
     return {
       ...conv,
       contactDetails,
+      groupDetails,
       messages,
     };
   },

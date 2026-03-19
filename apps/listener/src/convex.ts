@@ -13,5 +13,9 @@ import { anyApi } from "convex/server";
 export const api = anyApi as {
   messages: {
     insertMessage: typeof anyApi.messages.insertMessage;
+    syncConversationMeta: typeof anyApi.messages.syncConversationMeta;
+  };
+  groups: {
+    syncGroup: typeof anyApi.groups.syncGroup;
   };
 };
