@@ -1,23 +1,21 @@
 import { api, type Id } from "@repo/api";
-import { Button, Input, Label, PageHeader } from "@repo/ui";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { Button, PageHeader } from "@repo/ui";
+import { useMutation, useQuery } from "convex/react";
 import {
-  AlertTriangle,
   Bot,
-  Check,
-  Copy,
+  Calendar,
+  Cloud,
   Cpu,
-  Edit3,
-  Eye,
-  EyeOff,
+  HardDrive,
   Loader2,
   Plus,
-  RefreshCcw,
+  Shield,
   Sparkles,
   Star,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 // ---------------------------------------------------------------------------
 // Provider metadata — display information for known providers
@@ -30,7 +28,6 @@ interface ProviderMeta {
   color: string; // tailwind bg
   textColor: string; // tailwind text
   requiresApiKey: boolean;
-  placeholder: string;
 }
 
 const PROVIDER_META: Record<string, ProviderMeta> = {
@@ -41,7 +38,6 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     color: "bg-emerald-100 dark:bg-emerald-900/30",
     textColor: "text-emerald-600 dark:text-emerald-400",
     requiresApiKey: true,
-    placeholder: "sk-…",
   },
   anthropic: {
     label: "Anthropic",
@@ -50,7 +46,6 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     color: "bg-orange-100 dark:bg-orange-900/30",
     textColor: "text-orange-600 dark:text-orange-400",
     requiresApiKey: true,
-    placeholder: "sk-ant-…",
   },
   google: {
     label: "Google AI",
@@ -59,7 +54,6 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     color: "bg-blue-100 dark:bg-blue-900/30",
     textColor: "text-blue-600 dark:text-blue-400",
     requiresApiKey: true,
-    placeholder: "AIza…",
   },
   ollama: {
     label: "Ollama",
@@ -68,7 +62,6 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     color: "bg-violet-100 dark:bg-violet-900/30",
     textColor: "text-violet-600 dark:text-violet-400",
     requiresApiKey: false,
-    placeholder: "",
   },
   groq: {
     label: "Groq",
@@ -77,7 +70,6 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     color: "bg-rose-100 dark:bg-rose-900/30",
     textColor: "text-rose-600 dark:text-rose-400",
     requiresApiKey: true,
-    placeholder: "gsk_…",
   },
 };
 
@@ -91,7 +83,6 @@ function getMeta(provider: string): ProviderMeta {
       color: "bg-gray-100 dark:bg-gray-800",
       textColor: "text-gray-600 dark:text-gray-400",
       requiresApiKey: true,
-      placeholder: "API key…",
     }
   );
 }
@@ -99,98 +90,33 @@ function getMeta(provider: string): ProviderMeta {
 const ALL_PROVIDER_KEYS = Object.keys(PROVIDER_META);
 
 // ---------------------------------------------------------------------------
-// Hook — fetch models from provider API via Convex action
-// ---------------------------------------------------------------------------
-
-interface ModelInfo {
-  id: string;
-  name: string;
-  description?: string;
-}
-
-function useProviderModels(provider: string | null, apiKey: string) {
-  const listModels = useAction(api.ai.models.listModels);
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchModels = useCallback(async () => {
-    if (!provider) return;
-
-    const meta = getMeta(provider);
-    if (meta.requiresApiKey && !apiKey.trim()) {
-      setModels([]);
-      setError(null);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const result = await listModels({
-        provider,
-        apiKey: apiKey.trim() || undefined,
-      });
-      setModels(result);
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to fetch models";
-      setError(message);
-      setModels([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [provider, apiKey, listModels]);
-
-  // Auto-fetch when provider/key changes (debounced for key typing)
-  useEffect(() => {
-    if (!provider) return;
-
-    const meta = getMeta(provider);
-
-    // For providers that need a key, wait until one is entered
-    if (meta.requiresApiKey && !apiKey.trim()) return;
-
-    // Small debounce for API key typing
-    const timer = setTimeout(() => {
-      fetchModels();
-    }, 600);
-
-    return () => clearTimeout(timer);
-  }, [provider, apiKey, fetchModels]);
-
-  return { models, loading, error, refetch: fetchModels };
-}
-
-// ---------------------------------------------------------------------------
 // Main Page
 // ---------------------------------------------------------------------------
 
 export function ProvidersPage() {
   const providers = useQuery(api.aiProviders.list);
-  const createProvider = useMutation(api.aiProviders.create);
-  const updateProvider = useMutation(api.aiProviders.update);
   const removeProvider = useMutation(api.aiProviders.remove);
   const setDefault = useMutation(api.aiProviders.setDefault);
+  const navigate = useNavigate();
 
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [editingProvider, setEditingProvider] =
-    useState<ProviderForEdit | null>(null);
+  const [deletingId, setDeletingId] = useState<Id<"aiProviders"> | null>(null);
 
-  // Providers already added (to filter the "add" list)
-  const existingKeys = new Set(providers?.map((p) => p.provider) ?? []);
+  const handleConfirmDelete = async () => {
+    if (!deletingId) return;
+    await removeProvider({ id: deletingId });
+    setDeletingId(null);
+  };
 
   return (
     <div className="p-4 md:p-6 overflow-auto h-full">
-      <div className="max-w-4xl">
-        <div className="flex items-start justify-between">
+      <div>
+        <div className="flex items-start justify-between gap-4">
           <PageHeader
             title="AI Providers"
             description="Manage Large-Language-Model providers powering your AI assistant."
           />
           <Button
-            onClick={() => setShowAddDialog(true)}
+            onClick={() => navigate("/providers/add")}
             className="shrink-0 mt-1"
             data-testid="add-provider-btn"
           >
@@ -206,58 +132,25 @@ export function ProvidersPage() {
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
             </div>
           ) : providers.length === 0 ? (
-            <EmptyState onAdd={() => setShowAddDialog(true)} />
+            <EmptyState onAdd={() => navigate("/providers/add")} />
           ) : (
             providers.map((p) => (
               <ProviderCard
                 key={p._id}
                 provider={p}
                 onSetDefault={() => setDefault({ id: p._id })}
-                onEdit={() =>
-                  setEditingProvider({
-                    id: p._id,
-                    provider: p.provider,
-                    model: p.model ?? "",
-                    apiKey: p.apiKey ?? "",
-                    isDefault: p.isDefault,
-                  })
-                }
-                onRemove={() => removeProvider({ id: p._id })}
+                onClick={() => navigate(`/providers/${p._id}/update`)}
+                onDelete={() => setDeletingId(p._id)}
               />
             ))
           )}
         </div>
 
-        {/* ── Add Provider Dialog ─────────────────────────────────── */}
-        {showAddDialog && (
-          <AddProviderDialog
-            existingKeys={existingKeys}
-            onAdd={async (provider, model, apiKey) => {
-              await createProvider({
-                provider,
-                model,
-                apiKey: apiKey || undefined,
-                isDefault: providers?.length === 0,
-              });
-              setShowAddDialog(false);
-            }}
-            onClose={() => setShowAddDialog(false)}
-          />
-        )}
-
-        {/* ── Edit Dialog ────────────────────────────────────────── */}
-        {editingProvider && (
-          <EditProviderDialog
-            data={editingProvider}
-            onSave={async (model, apiKey) => {
-              await updateProvider({
-                id: editingProvider.id,
-                model,
-                apiKey: apiKey || undefined,
-              });
-              setEditingProvider(null);
-            }}
-            onClose={() => setEditingProvider(null)}
+        {/* ── Delete Confirmation Dialog ────────────────────────── */}
+        {deletingId && (
+          <DeleteConfirmDialog
+            onConfirm={handleConfirmDelete}
+            onCancel={() => setDeletingId(null)}
           />
         )}
       </div>
@@ -266,41 +159,39 @@ export function ProvidersPage() {
 }
 
 // ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface ProviderForEdit {
-  id: Id<"aiProviders">;
-  provider: string;
-  model: string;
-  apiKey: string;
-  isDefault: boolean;
-}
-
-// ---------------------------------------------------------------------------
 // Provider Card
 // ---------------------------------------------------------------------------
+
+/** Mask an API key to show only the last 4 characters. */
+function maskApiKey(key: string): string {
+  if (key.length <= 4) return "••••";
+  return `${key.slice(0, 3)}…${key.slice(-4)}`;
+}
 
 function ProviderCard({
   provider,
   onSetDefault,
-  onEdit,
-  onRemove,
+  onClick,
+  onDelete,
 }: {
   provider: {
     _id: Id<"aiProviders">;
+    _creationTime: number;
     provider: string;
+    name?: string;
     model?: string;
     apiKey?: string;
     isDefault: boolean;
   };
   onSetDefault: () => void;
-  onEdit: () => void;
-  onRemove: () => void;
+  onClick: () => void;
+  onDelete: () => void;
 }) {
   const meta = getMeta(provider.provider);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const hasKey = !!provider.apiKey;
+  const isLocal = !meta.requiresApiKey;
+  const isReady = isLocal || hasKey;
+  const displayName = provider.name || meta.label;
 
   return (
     <div
@@ -311,58 +202,74 @@ function ProviderCard({
           : "border-gray-200 dark:border-gray-800"
       }`}
     >
+      {/* ── Header ──────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-5 py-4">
-        <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={onClick}
+          className="flex items-center gap-4 flex-1 min-w-0 text-left focus:outline-none group"
+        >
           {/* Provider icon */}
           <div
-            className={`flex h-11 w-11 items-center justify-center rounded-xl ${meta.color} ${meta.textColor}`}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${meta.color} ${meta.textColor} group-hover:scale-105 transition-transform`}
           >
             {meta.icon}
           </div>
 
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-base">{meta.label}</h3>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold text-base">{displayName}</h3>
               {provider.isDefault && (
                 <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full">
                   <Star className="h-3 w-3 fill-current" />
                   Default
                 </span>
               )}
+              {/* Cloud / Local pill */}
+              <span
+                className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
+                  isLocal
+                    ? "text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20"
+                    : "text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-900/20"
+                }`}
+              >
+                {isLocal ? (
+                  <HardDrive className="h-3 w-3" />
+                ) : (
+                  <Cloud className="h-3 w-3" />
+                )}
+                {isLocal ? "Local" : "Cloud"}
+              </span>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              {provider.model ?? meta.description}
-            </p>
+
+            {/* Model chip + description */}
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {provider.model ? (
+                <span className="inline-flex items-center gap-1 text-xs font-mono font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-md">
+                  <Cpu className="h-3 w-3 text-gray-400" />
+                  {provider.model}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-md">
+                  No model selected
+                </span>
+              )}
+              <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">
+                {meta.description}
+              </span>
+            </div>
           </div>
-        </div>
+        </button>
 
         {/* Actions */}
-        <div className="flex items-center gap-2">
-          {/* API Key status */}
-          {meta.requiresApiKey && (
-            <span
-              className={`hidden sm:inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${
-                hasKey
-                  ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20"
-                  : "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20"
-              }`}
-            >
-              {hasKey ? (
-                <>
-                  <Check className="h-3 w-3" /> Key set
-                </>
-              ) : (
-                <>
-                  <AlertTriangle className="h-3 w-3" /> No key
-                </>
-              )}
-            </span>
-          )}
-
+        <div className="flex items-center gap-2 shrink-0 ml-2">
           {/* Set as default */}
           {!provider.isDefault && (
             <Button
-              onClick={onSetDefault}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSetDefault();
+              }}
               variant="outline"
               size="sm"
               title="Set as default"
@@ -372,49 +279,118 @@ function ProviderCard({
             </Button>
           )}
 
-          {/* Edit */}
+          {/* Delete */}
           <button
             type="button"
-            onClick={onEdit}
-            className="p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-            title="Edit API key"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            title="Delete provider"
           >
-            <Edit3 className="h-4 w-4" />
+            <Trash2 className="h-4 w-4" />
           </button>
+        </div>
+      </div>
 
-          {/* Delete */}
-          {confirmDelete ? (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">Remove?</span>
-              <button
-                type="button"
-                onClick={() => {
-                  onRemove();
-                  setConfirmDelete(false);
-                }}
-                className="inline-flex items-center justify-center h-9 px-3 rounded-md text-sm font-medium text-white transition-colors"
-                style={{ backgroundColor: "#dc2626" }}
-              >
-                Yes
-              </button>
-              <Button
-                onClick={() => setConfirmDelete(false)}
-                variant="outline"
-                size="sm"
-              >
-                No
-              </Button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmDelete(true)}
-              className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-              title="Delete provider"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )}
+      {/* ── Details Footer ──────────────────────────────────────── */}
+      <div className="border-t border-gray-100 dark:border-gray-800/50 px-5 py-3 bg-gray-50/50 dark:bg-gray-900/50 flex items-center gap-4 flex-wrap text-xs text-gray-400 dark:text-gray-500">
+        {/* Health status */}
+        <span
+          className={`inline-flex items-center gap-1.5 font-medium ${
+            isReady
+              ? "text-emerald-600 dark:text-emerald-400"
+              : "text-amber-600 dark:text-amber-400"
+          }`}
+        >
+          <span
+            className={`h-2 w-2 rounded-full ${
+              isReady
+                ? "bg-emerald-400 dark:bg-emerald-500"
+                : "bg-amber-400 dark:bg-amber-500 animate-pulse"
+            }`}
+          />
+          {isReady ? "Ready" : "Missing key"}
+        </span>
+
+        <span className="text-gray-300 dark:text-gray-700">·</span>
+
+        {/* API key preview */}
+        {meta.requiresApiKey && (
+          <>
+            <span className="inline-flex items-center gap-1">
+              <Shield className="h-3 w-3" />
+              {hasKey ? (
+                <span className="font-mono">
+                  {maskApiKey(provider.apiKey ?? "")}
+                </span>
+              ) : (
+                "No key configured"
+              )}
+            </span>
+            <span className="text-gray-300 dark:text-gray-700">·</span>
+          </>
+        )}
+
+        {/* Date added */}
+        <span className="inline-flex items-center gap-1">
+          <Calendar className="h-3 w-3" />
+          Added{" "}
+          {new Date(provider._creationTime).toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Delete Confirmation Dialog
+// ---------------------------------------------------------------------------
+
+function DeleteConfirmDialog({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onCancel}
+        aria-label="Close dialog"
+      />
+
+      {/* Dialog */}
+      <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 w-full max-w-sm mx-4 p-6 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30 mx-auto mb-4">
+          <Trash2 className="h-6 w-6 text-red-500" />
+        </div>
+        <h2 className="text-lg font-semibold">Remove Provider</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+          Are you sure you want to remove this provider? This action cannot be
+          undone.
+        </p>
+        <div className="mt-6 flex justify-center gap-3">
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="inline-flex items-center justify-center h-10 px-4 rounded-md text-sm font-medium text-white transition-colors"
+            style={{ backgroundColor: "#dc2626" }}
+          >
+            Yes, remove
+          </button>
         </div>
       </div>
     </div>
@@ -466,419 +442,6 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
       <p className="text-xs text-gray-400 dark:text-gray-500 mt-5">
         Click any provider above to get started
       </p>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Model Selector — shared between Add & Edit dialogs
-// ---------------------------------------------------------------------------
-
-function ModelSelector({
-  provider,
-  apiKey,
-  selectedModel,
-  onModelChange,
-}: {
-  provider: string;
-  apiKey: string;
-  selectedModel: string;
-  onModelChange: (modelId: string) => void;
-}) {
-  const { models, loading, error, refetch } = useProviderModels(
-    provider,
-    apiKey,
-  );
-
-  const meta = getMeta(provider);
-
-  // Auto-select first model if none selected or current selection no longer
-  // exists in the fetched list
-  useEffect(() => {
-    if (models.length > 0 && !models.find((m) => m.id === selectedModel)) {
-      onModelChange(models[0].id);
-    }
-  }, [models, selectedModel, onModelChange]);
-
-  if (meta.requiresApiKey && !apiKey.trim()) {
-    return (
-      <div>
-        <Label htmlFor="model-select">Model</Label>
-        <p className="mt-1.5 text-sm text-gray-400 dark:text-gray-500 italic">
-          Enter your API key to load available models…
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div className="flex items-center justify-between">
-        <Label htmlFor="model-select">Model</Label>
-        <button
-          type="button"
-          onClick={refetch}
-          disabled={loading}
-          className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 disabled:text-gray-400 transition-colors"
-          title="Refresh models"
-        >
-          <RefreshCcw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
-      </div>
-
-      {loading && models.length === 0 ? (
-        <div className="mt-1.5 flex items-center gap-2 text-sm text-gray-400">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading models from {getMeta(provider).label}…
-        </div>
-      ) : error ? (
-        <div className="mt-1.5 space-y-2">
-          <p className="text-sm text-red-500 dark:text-red-400">{error}</p>
-          <Button variant="outline" size="sm" onClick={refetch}>
-            <RefreshCcw className="h-3 w-3 mr-1.5" />
-            Retry
-          </Button>
-        </div>
-      ) : models.length === 0 ? (
-        <p className="mt-1.5 text-sm text-gray-400 dark:text-gray-500 italic">
-          No models found for this provider.
-        </p>
-      ) : (
-        <select
-          id="model-select"
-          value={selectedModel}
-          onChange={(e) => onModelChange(e.target.value)}
-          className="mt-1.5 w-full h-10 px-3 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name} ({m.id})
-            </option>
-          ))}
-        </select>
-      )}
-
-      {loading && models.length > 0 && (
-        <p className="mt-1 text-xs text-gray-400 flex items-center gap-1">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          Refreshing…
-        </p>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Add Provider Dialog
-// ---------------------------------------------------------------------------
-
-function AddProviderDialog({
-  existingKeys,
-  onAdd,
-  onClose,
-}: {
-  existingKeys: Set<string>;
-  onAdd: (provider: string, model: string, apiKey: string) => Promise<void>;
-  onClose: () => void;
-}) {
-  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
-  const [selectedModel, setSelectedModel] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const availableProviders = ALL_PROVIDER_KEYS.filter(
-    (k) => !existingKeys.has(k),
-  );
-  const meta = selectedProvider ? getMeta(selectedProvider) : null;
-
-  const handleSubmit = async () => {
-    if (!selectedProvider || !selectedModel) return;
-    setSaving(true);
-    try {
-      await onAdd(selectedProvider, selectedModel, apiKey);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={onClose}
-        aria-label="Close dialog"
-      />
-
-      {/* Dialog */}
-      <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg font-semibold">Add Provider</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Choose an AI provider, enter your API key, and we'll fetch the
-          available models automatically.
-        </p>
-
-        <div className="mt-5 space-y-3">
-          {availableProviders.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">
-              All supported providers have already been added.
-            </p>
-          ) : (
-            availableProviders.map((key) => {
-              const m = PROVIDER_META[key];
-              const isSelected = selectedProvider === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => {
-                    setSelectedProvider(key);
-                    setSelectedModel("");
-                    setApiKey("");
-                  }}
-                  className={`w-full flex items-center gap-4 p-4 rounded-xl border transition-all group ${
-                    isSelected
-                      ? "border-blue-400 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-900/10 ring-1 ring-blue-200 dark:ring-blue-800"
-                      : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50/50 dark:hover:bg-gray-800/30"
-                  }`}
-                >
-                  <div
-                    className={`flex h-11 w-11 items-center justify-center rounded-xl ${m.color} ${m.textColor} group-hover:scale-110 transition-transform`}
-                  >
-                    {m.icon}
-                  </div>
-                  <div className="text-left flex-1">
-                    <p className="font-medium text-gray-900 dark:text-gray-100">
-                      {m.label}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {m.description}
-                    </p>
-                  </div>
-                  {isSelected && (
-                    <Check className="h-5 w-5 text-blue-500 shrink-0" />
-                  )}
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        {/* API Key input (shown after selection, if needed) — placed BEFORE model selector */}
-        {meta?.requiresApiKey && selectedProvider && (
-          <div className="mt-5">
-            <Label htmlFor="add-api-key-input">API Key</Label>
-            <div className="relative mt-1.5">
-              <Input
-                id="add-api-key-input"
-                type={showKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={meta.placeholder}
-                className="pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-              >
-                {showKey ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
-              Your key is stored in Convex and never exposed to the browser
-              after saving.
-            </p>
-          </div>
-        )}
-
-        {selectedProvider && !meta?.requiresApiKey && (
-          <p className="mt-5 text-sm text-gray-500 dark:text-gray-400">
-            No API key required — {meta?.label ?? selectedProvider} runs
-            locally.
-          </p>
-        )}
-
-        {/* Model selector (fetched dynamically after API key is entered) */}
-        {selectedProvider && (
-          <div className="mt-5">
-            <ModelSelector
-              provider={selectedProvider}
-              apiKey={apiKey}
-              selectedModel={selectedModel}
-              onModelChange={setSelectedModel}
-            />
-          </div>
-        )}
-
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={
-              !selectedProvider ||
-              !selectedModel ||
-              saving ||
-              (meta?.requiresApiKey && !apiKey.trim())
-            }
-          >
-            {saving ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving…
-              </>
-            ) : (
-              <>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Provider
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Edit Provider Dialog
-// ---------------------------------------------------------------------------
-
-function EditProviderDialog({
-  data,
-  onSave,
-  onClose,
-}: {
-  data: ProviderForEdit;
-  onSave: (model: string, apiKey: string) => Promise<void>;
-  onClose: () => void;
-}) {
-  const meta = getMeta(data.provider);
-  const [selectedModel, setSelectedModel] = useState(data.model);
-  const [apiKey, setApiKey] = useState(data.apiKey);
-  const [showKey, setShowKey] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const handleCopyKey = () => {
-    if (!apiKey) return;
-    navigator.clipboard.writeText(apiKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await onSave(selectedModel, apiKey);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={onClose}
-        aria-label="Close dialog"
-      />
-
-      {/* Dialog */}
-      <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 w-full max-w-md mx-4 p-6">
-        <div className="flex items-center gap-3 mb-5">
-          <div
-            className={`flex h-10 w-10 items-center justify-center rounded-xl ${meta.color} ${meta.textColor}`}
-          >
-            {meta.icon}
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold">Edit {meta.label}</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Update the model and API key for this provider.
-            </p>
-          </div>
-        </div>
-
-        {/* API Key */}
-        {meta.requiresApiKey && (
-          <div>
-            <Label htmlFor="edit-api-key-input">API Key</Label>
-            <div className="relative mt-1.5">
-              <Input
-                id="edit-api-key-input"
-                type={showKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={meta.placeholder}
-                className="pr-20"
-              />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={handleCopyKey}
-                  className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                  title="Copy key"
-                >
-                  {copied ? (
-                    <Check className="h-4 w-4 text-emerald-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowKey(!showKey)}
-                  className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                >
-                  {showKey ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Model selector (dynamically loaded) */}
-        <div className="mt-4">
-          <ModelSelector
-            provider={data.provider}
-            apiKey={apiKey}
-            selectedModel={selectedModel}
-            onModelChange={setSelectedModel}
-          />
-        </div>
-
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving…
-              </>
-            ) : (
-              "Save Changes"
-            )}
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

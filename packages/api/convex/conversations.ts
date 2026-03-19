@@ -34,9 +34,8 @@ export const list = query({
             if (identity) {
               const contact = await ctx.db.get(identity.contactId);
               if (contact) {
-                contactDetails.name = contact.firstName
-                  ? `${contact.firstName} ${contact.lastName ?? ""}`.trim()
-                  : (conv.name ?? lastMsg.sender);
+                contactDetails.name =
+                  contact.name?.trim() || (conv.name ?? lastMsg.sender);
 
                 if (contact.phoneNumbers?.length) {
                   contactDetails.phone = contact.phoneNumbers[0].value;
@@ -116,9 +115,8 @@ export const getWithMessages = query({
       if (identity) {
         const contact = await ctx.db.get(identity.contactId);
         if (contact) {
-          contactDetails.name = contact.firstName
-            ? `${contact.firstName} ${contact.lastName ?? ""}`.trim()
-            : (conv.name ?? firstIncoming.sender);
+          contactDetails.name =
+            contact.name?.trim() || (conv.name ?? firstIncoming.sender);
 
           if (contact.phoneNumbers?.length) {
             contactDetails.phone = contact.phoneNumbers[0].value;

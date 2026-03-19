@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
+import { extractWhatsAppPhoneNumber } from "./utils/matrix";
 
 export const listMessages = query({
   args: {
@@ -38,6 +39,8 @@ export const insertMessage = mutation({
     isGroup: v.optional(v.boolean()),
     roomName: v.optional(v.string()),
     groupId: v.optional(v.id("groups")),
+    senderName: v.optional(v.string()),
+    senderAvatarUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Basic deduplication
@@ -92,10 +95,23 @@ export const insertMessage = mutation({
       .first();
 
     if (!existingIdentity) {
-      const contactId = await ctx.db.insert("contacts", {});
+      let phoneNumbers: { label?: string; value: string }[] | undefined;
+      const localpart = args.sender.split(":")[0];
+      const phoneNumber = extractWhatsAppPhoneNumber(args.sender);
+
+      if (phoneNumber) {
+        phoneNumbers = [{ label: "Mobile", value: phoneNumber }];
+      }
+
+      const contactId = await ctx.db.insert("contacts", {
+        name: args.senderName?.trim() || undefined,
+        avatarUrl: args.senderAvatarUrl,
+        phoneNumbers,
+      });
       await ctx.db.insert("contactIdentities", {
         contactId,
         matrixId: args.sender,
+        platform: localpart?.includes("whatsapp_") ? "whatsapp" : undefined,
       });
     }
 

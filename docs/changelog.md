@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-03-19
+
+### Changed
+- **Contacts Schema** (`packages/api`): Merged `firstName` and `lastName` into a single `name` field across the Convex schema, mutations, and queries. This simplifies contact creation from the Matrix listener and aligns with how display names are received from WhatsApp.
+- **Contact Form** (`apps/dashboard`): Replaced the separate First/Last name inputs with a single "Full Name" field. The save-button guard now requires either `name` or `nickname`.
+- **Contact Cards** (`apps/dashboard`): Updated initials generation and display name helpers to use the new `name` property.
+- **E2E Tests** (`apps/e2e`): Updated page objects and test specs to use the consolidated `name` field.
+
+## [2.5.0] - 2026-03-19
+
+### Changed
+- **Channels & Providers** (`apps/dashboard`): Replaced dialog/modal-based add and edit flows with dedicated full-page routes (`/channels/add`, `/channels/:id/update`, `/providers/add`, `/providers/:id/update`) matching the contacts pattern.
+- **Channel Cards** (`apps/dashboard`): Simplified channel cards — clicking navigates to the update page. Delete uses a centered confirmation modal. Connection management (connect, disconnect, QR code) moved to the channel update page.
+
+### Added
+- **`channels.update` mutation** (`packages/api`): New public mutation to patch a channel's label and type.
+- **`ChannelFormPage`** (`apps/dashboard`): Full-page form for adding/editing channels with a connection status section (connect/disconnect, QR code display).
+- **`ProviderFormPage`** (`apps/dashboard`): Full-page form for adding/editing AI providers with provider selection tiles, API key input, and dynamic model selector.
+- **Provider `name` field** (`packages/api`): Optional name field on AI providers to distinguish between multiple keys for the same provider (e.g. "Work OpenAI", "Personal key").
+- **Multi-key providers**: Users can now add multiple instances of the same provider with different API keys and names.
+- **E2E Tests** (`apps/e2e`): Playwright page objects and test specs for both channels and providers pages.
+
+## [2.4.0] - 2026-03-19
+
+### Added
+- **Contacts Page** (`apps/dashboard`): Full CRUD page at `/contacts` for managing contacts. Features a responsive card grid with gradient initials avatars, expandable detail view (phone, email, address, company, birthday, notes), searchable by name/company/phone/email, add/edit modal dialogs with multi-value phone/email/address fields, and an empty state.
+- **Convex `contacts` module** (`packages/api`): Backend CRUD functions (`list`, `get`, `create`, `update`, `remove`) for the `contacts` table. The `remove` function cascade-deletes linked `contactIdentities` rows.
+- **Sidebar navigation**: Added "Contacts" link with `Users` icon to the dashboard sidebar, placed after "Conversations".
+- **E2E Tests** (`apps/e2e`): Playwright page object (`page-objects/contacts.ts`) and test spec (`specs/contacts.spec.ts`) covering page rendering, contact creation, editing, search filtering, empty state, and expanded card details.
+
+### Changed
+- **Contacts Page** (`apps/dashboard`): Removed delete capability from the contacts UI — contacts can only be created and edited.
+- **AI Providers Card** (`apps/dashboard`): Enhanced provider card with a two-section layout. The header now shows the selected model as a distinct monospace chip, a Cloud/Local type pill, and the provider description tagline. A new details footer displays a green/amber health status indicator, a masked API key preview (last 4 chars), and the "Added on" creation date.
+
 ## [2.3.0] - 2026-03-18
 
 ### Added

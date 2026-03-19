@@ -40,6 +40,7 @@ export const getDefault = query({
 export const create = mutation({
   args: {
     provider: v.string(),
+    name: v.optional(v.string()),
     model: v.optional(v.string()),
     apiKey: v.optional(v.string()),
     isDefault: v.boolean(),
@@ -57,6 +58,7 @@ export const create = mutation({
     }
     return ctx.db.insert("aiProviders", {
       provider: args.provider,
+      name: args.name,
       model: args.model,
       apiKey: args.apiKey,
       isDefault: args.isDefault,
@@ -69,6 +71,7 @@ export const update = mutation({
   args: {
     id: v.id("aiProviders"),
     provider: v.optional(v.string()),
+    name: v.optional(v.string()),
     model: v.optional(v.string()),
     apiKey: v.optional(v.string()),
     isDefault: v.optional(v.boolean()),
@@ -90,6 +93,7 @@ export const update = mutation({
 
     const patch: Record<string, unknown> = {};
     if (args.provider !== undefined) patch.provider = args.provider;
+    if (args.name !== undefined) patch.name = args.name;
     if (args.model !== undefined) patch.model = args.model;
     if (args.apiKey !== undefined) patch.apiKey = args.apiKey;
     if (args.isDefault !== undefined) patch.isDefault = args.isDefault;

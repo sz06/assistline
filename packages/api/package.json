@@ -12,13 +12,14 @@
     "push": "convex deploy --cmd 'echo ✓ Types generated'",
     "build": "tsc",
     "lint": "biome check .",
-    "test": "echo \"No tests for API yet\""
+    "test": "vitest run"
   },
   "devDependencies": {
     "@repo/config": "workspace:*",
     "@types/node": "catalog:",
     "convex": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^4.1.0"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.58",

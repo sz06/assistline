@@ -85,6 +85,26 @@ export const disconnect = mutation({
   },
 });
 
+/** Update an existing channel's label or type. */
+export const update = mutation({
+  args: {
+    id: v.id("channels"),
+    type: v.optional(v.union(v.literal("whatsapp"), v.literal("telegram"))),
+    label: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.id);
+    if (!existing) throw new Error("Channel not found");
+
+    const patch: Record<string, unknown> = {};
+    if (args.type !== undefined) patch.type = args.type;
+    if (args.label !== undefined) patch.label = args.label;
+    patch.updatedAt = Date.now();
+
+    await ctx.db.patch(args.id, patch);
+  },
+});
+
 /** Delete a channel entirely. */
 export const remove = mutation({
   args: { id: v.id("channels") },

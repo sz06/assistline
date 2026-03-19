@@ -3,19 +3,16 @@ import { Button, PageHeader } from "@repo/ui";
 import { useMutation, useQuery } from "convex/react";
 import {
   AlertCircle,
-  CheckCircle2,
   Loader2,
   MessageSquare,
   Phone,
   Plus,
-  QrCode,
   Trash2,
-  Unplug,
   Wifi,
   WifiOff,
-  X,
 } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 type ChannelStatus = "disconnected" | "pairing" | "connected" | "error";
 
@@ -55,33 +52,29 @@ const STATUS_CONFIG: Record<
 
 export function ChannelsPage() {
   const channels = useQuery(api.channels.list);
-  const createChannel = useMutation(api.channels.create);
-  const requestPairing = useMutation(api.channels.requestPairing);
-  const disconnectChannel = useMutation(api.channels.disconnect);
   const removeChannel = useMutation(api.channels.remove);
-  const [showAddDialog, setShowAddDialog] = useState(false);
+  const navigate = useNavigate();
 
-  const handleAddWhatsApp = async () => {
-    const id = await createChannel({
-      type: "whatsapp",
-      label: "WhatsApp",
-    });
-    // Immediately start pairing
-    await requestPairing({ id });
-    setShowAddDialog(false);
+  const [deletingId, setDeletingId] = useState<Id<"channels"> | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!deletingId) return;
+    await removeChannel({ id: deletingId });
+    setDeletingId(null);
   };
 
   return (
     <div className="p-4 md:p-6 overflow-auto h-full">
-      <div className="max-w-4xl">
-        <div className="flex items-start justify-between">
+      <div>
+        <div className="flex items-start justify-between gap-4">
           <PageHeader
             title="Channels"
             description="Connect messaging platforms to receive and send messages."
           />
           <Button
-            onClick={() => setShowAddDialog(true)}
+            onClick={() => navigate("/channels/add")}
             className="shrink-0 mt-1"
+            data-testid="add-channel-btn"
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Channel
@@ -95,26 +88,24 @@ export function ChannelsPage() {
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
             </div>
           ) : channels.length === 0 ? (
-            <EmptyState onAdd={() => setShowAddDialog(true)} />
+            <EmptyState onAdd={() => navigate("/channels/add")} />
           ) : (
             channels.map((channel) => (
               <ChannelCard
                 key={channel._id}
                 channel={channel}
-                onPair={() => requestPairing({ id: channel._id })}
-                onCancel={() => disconnectChannel({ id: channel._id })}
-                onDisconnect={() => disconnectChannel({ id: channel._id })}
-                onRemove={() => removeChannel({ id: channel._id })}
+                onClick={() => navigate(`/channels/${channel._id}/update`)}
+                onDelete={() => setDeletingId(channel._id)}
               />
             ))
           )}
         </div>
 
-        {/* ── Add Channel Dialog ────────────────────────────────── */}
-        {showAddDialog && (
-          <AddChannelDialog
-            onAddWhatsApp={handleAddWhatsApp}
-            onClose={() => setShowAddDialog(false)}
+        {/* ── Delete Confirmation Dialog ────────────────────────── */}
+        {deletingId && (
+          <DeleteConfirmDialog
+            onConfirm={handleConfirmDelete}
+            onCancel={() => setDeletingId(null)}
           />
         )}
       </div>
@@ -128,42 +119,44 @@ export function ChannelsPage() {
 
 function ChannelCard({
   channel,
-  onPair,
-  onCancel,
-  onDisconnect,
-  onRemove,
+  onClick,
+  onDelete,
 }: {
   channel: {
     _id: Id<"channels">;
     type: string;
     label: string;
     status: ChannelStatus;
-    qrCode?: string;
     phoneNumber?: string;
     error?: string;
     connectedAt?: number;
   };
-  onPair: () => void;
-  onCancel: () => void;
-  onDisconnect: () => void;
-  onRemove: () => void;
+  onClick: () => void;
+  onDelete: () => void;
 }) {
   const status = STATUS_CONFIG[channel.status];
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm overflow-hidden">
-      {/* Header */}
+    <div
+      data-testid={`channel-card-${channel._id}`}
+      className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm overflow-hidden"
+    >
       <div className="flex items-center justify-between px-5 py-4">
-        <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={onClick}
+          className="flex items-center gap-4 flex-1 min-w-0 text-left focus:outline-none group"
+        >
           {/* Channel icon */}
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 group-hover:scale-105 transition-transform">
             <WhatsAppIcon />
           </div>
 
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-base">{channel.label}</h3>
+              <h3 className="font-semibold text-base truncate">
+                {channel.label}
+              </h3>
               <span
                 className={`inline-flex items-center gap-1.5 text-xs font-medium ${status.color}`}
               >
@@ -171,7 +164,7 @@ function ChannelCard({
                 {status.label}
               </span>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 truncate">
               {channel.phoneNumber ? (
                 <span className="inline-flex items-center gap-1">
                   <Phone className="h-3.5 w-3.5" />
@@ -180,7 +173,7 @@ function ChannelCard({
               ) : channel.status === "connected" ? (
                 "Connected"
               ) : channel.status === "pairing" ? (
-                "Scan the QR code below with WhatsApp"
+                "Pairing in progress…"
               ) : channel.status === "error" ? (
                 (channel.error ?? "An error occurred")
               ) : (
@@ -188,80 +181,21 @@ function ChannelCard({
               )}
             </p>
           </div>
-        </div>
+        </button>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
-          {confirmDelete ? (
-            // Delete confirmation — hides all other actions
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500 mr-1">
-                Remove channel?
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  onRemove();
-                  setConfirmDelete(false);
-                }}
-                className="inline-flex items-center justify-center h-9 px-3 rounded-md text-sm font-medium text-white transition-colors"
-                style={{ backgroundColor: "#dc2626" }}
-              >
-                Yes, remove
-              </button>
-              <Button
-                onClick={() => setConfirmDelete(false)}
-                variant="outline"
-                size="sm"
-              >
-                No
-              </Button>
-            </div>
-          ) : (
-            <>
-              {channel.status === "disconnected" && (
-                <Button onClick={onPair} variant="outline" size="sm">
-                  <QrCode className="h-4 w-4 mr-1.5" />
-                  Connect
-                </Button>
-              )}
-              {channel.status === "pairing" && (
-                <Button onClick={onCancel} variant="outline" size="sm">
-                  <X className="h-4 w-4 mr-1.5" />
-                  Cancel
-                </Button>
-              )}
-              {channel.status === "error" && (
-                <Button onClick={onPair} variant="outline" size="sm">
-                  <QrCode className="h-4 w-4 mr-1.5" />
-                  Retry
-                </Button>
-              )}
-              {channel.status === "connected" && (
-                <Button onClick={onDisconnect} variant="outline" size="sm">
-                  <Unplug className="h-4 w-4 mr-1.5" />
-                  Disconnect
-                </Button>
-              )}
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                title="Remove channel"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </>
-          )}
-        </div>
+        {/* Delete button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors shrink-0 ml-2"
+          title="Remove channel"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
       </div>
-
-      {/* QR Code Section (shown during pairing) */}
-      {channel.status === "pairing" && (
-        <div className="border-t border-gray-200 dark:border-gray-800 px-5 py-6">
-          <QrCodeDisplay qrCode={channel.qrCode} />
-        </div>
-      )}
 
       {/* Connected Info */}
       {channel.status === "connected" && channel.connectedAt && (
@@ -277,41 +211,49 @@ function ChannelCard({
 }
 
 // ---------------------------------------------------------------------------
-// QR Code Display
+// Delete Confirmation Dialog
 // ---------------------------------------------------------------------------
 
-function QrCodeDisplay({ qrCode }: { qrCode?: string }) {
-  if (!qrCode) {
-    return (
-      <div className="flex flex-col items-center justify-center py-8 gap-3">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Generating QR code…
-        </p>
-        <p className="text-xs text-gray-400 dark:text-gray-500">
-          This may take a few seconds
-        </p>
-      </div>
-    );
-  }
-
+function DeleteConfirmDialog({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
   return (
-    <div className="flex flex-col items-center gap-4">
-      <div className="bg-white p-4 rounded-xl shadow-inner">
-        <img
-          src={qrCode}
-          alt="WhatsApp QR Code"
-          className="w-64 h-64 image-rendering-pixelated"
-        />
-      </div>
-      <div className="text-center space-y-1">
-        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-          Scan with WhatsApp
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onCancel}
+        aria-label="Close dialog"
+      />
+
+      {/* Dialog */}
+      <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 w-full max-w-sm mx-4 p-6 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30 mx-auto mb-4">
+          <Trash2 className="h-6 w-6 text-red-500" />
+        </div>
+        <h2 className="text-lg font-semibold">Remove Channel</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+          Are you sure you want to remove this channel? This action cannot be
+          undone.
         </p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 max-w-xs">
-          Open WhatsApp → Settings → Linked Devices → Link a Device → Scan this
-          code
-        </p>
+        <div className="mt-6 flex justify-center gap-3">
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="inline-flex items-center justify-center h-10 px-4 rounded-md text-sm font-medium text-white transition-colors"
+            style={{ backgroundColor: "#dc2626" }}
+          >
+            Yes, remove
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -334,88 +276,14 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
         Connect a messaging platform to start receiving and responding to
         messages.
       </p>
-      <Button onClick={onAdd} className="mt-5">
+      <Button
+        onClick={onAdd}
+        className="mt-5"
+        data-testid="empty-add-channel-btn"
+      >
         <Plus className="h-4 w-4 mr-2" />
         Add your first channel
       </Button>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Add Channel Dialog
-// ---------------------------------------------------------------------------
-
-function AddChannelDialog({
-  onAddWhatsApp,
-  onClose,
-}: {
-  onAddWhatsApp: () => void;
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={onClose}
-        aria-label="Close dialog"
-      />
-
-      {/* Dialog */}
-      <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 w-full max-w-md mx-4 p-6">
-        <h2 className="text-lg font-semibold mb-1">Add Channel</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-          Choose a messaging platform to connect.
-        </p>
-
-        <div className="space-y-3">
-          {/* WhatsApp */}
-          <button
-            type="button"
-            onClick={onAddWhatsApp}
-            className="w-full flex items-center gap-4 p-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-emerald-400 dark:hover:border-emerald-600 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 transition-all group"
-          >
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
-              <WhatsAppIcon />
-            </div>
-            <div className="text-left">
-              <p className="font-medium text-gray-900 dark:text-gray-100">
-                WhatsApp
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Connect via QR code scan
-              </p>
-            </div>
-            <CheckCircle2 className="h-5 w-5 ml-auto text-gray-300 dark:text-gray-600 group-hover:text-emerald-500 transition-colors" />
-          </button>
-
-          {/* Telegram (coming soon) */}
-          <div className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 dark:border-gray-800 opacity-50 cursor-not-allowed">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-              <MessageSquare className="h-6 w-6" />
-            </div>
-            <div className="text-left">
-              <p className="font-medium text-gray-900 dark:text-gray-100">
-                Telegram
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Coming soon
-              </p>
-            </div>
-            <span className="ml-auto text-xs font-medium text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
-              Soon
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-6 flex justify-end">
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

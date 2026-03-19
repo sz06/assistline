@@ -4,6 +4,7 @@ import { v } from "convex/values";
 export default defineSchema({
   aiProviders: defineTable({
     provider: v.string(), // "openai", "anthropic", "ollama", etc.
+    name: v.optional(v.string()), // User-friendly label, e.g. "Work OpenAI", "Personal GPT"
     model: v.optional(v.string()), // "gpt-4o", "claude-3.5-sonnet", etc.
     apiKey: v.optional(v.string()), // Optional for local models
     isDefault: v.boolean(),
@@ -13,9 +14,9 @@ export default defineSchema({
     value: v.any(), // JSON config values
   }).index("by_key", ["key"]),
   contacts: defineTable({
-    firstName: v.optional(v.string()),
-    lastName: v.optional(v.string()),
+    name: v.optional(v.string()),
     nickname: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
     phoneNumbers: v.optional(
       v.array(
         v.object({

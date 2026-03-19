@@ -9,6 +9,7 @@ import {
   Settings,
   Sun,
   Terminal,
+  Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -18,6 +19,11 @@ const navLinks = [
     label: "Conversations",
     href: "/conversations",
     icon: <MessageSquare className="h-5 w-5" />,
+  },
+  {
+    label: "Contacts",
+    href: "/contacts",
+    icon: <Users className="h-5 w-5" />,
   },
   {
     label: "Channels",

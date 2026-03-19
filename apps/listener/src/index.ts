@@ -244,6 +244,7 @@ interface RoomMemberEvent {
   content: {
     membership?: string;
     displayname?: string;
+    avatar_url?: string;
   };
 }
 
@@ -268,6 +269,7 @@ async function syncRoomMetadata(roomId: string): Promise<{
   isGroup: boolean;
   roomName?: string;
   groupId?: string;
+  membersProfile?: Record<string, { displayName?: string; avatarUrl?: string }>;
 }> {
   // Skip if already processed this session
   if (syncedRoomMeta.has(roomId)) {
@@ -363,7 +365,20 @@ async function syncRoomMetadata(roomId: string): Promise<{
       avatarUrl: roomAvatar,
     });
 
-    const meta = { isGroup, roomName, groupId };
+    const membersProfile: Record<
+      string,
+      { displayName?: string; avatarUrl?: string }
+    > = {};
+    for (const m of joinedMembers) {
+      if (m.content.displayname || m.content.avatar_url) {
+        membersProfile[m.state_key] = {
+          displayName: m.content.displayname,
+          avatarUrl: m.content.avatar_url,
+        };
+      }
+    }
+
+    const meta = { isGroup, roomName, groupId, membersProfile };
     roomMetaCache.set(roomId, meta);
     syncedRoomMeta.add(roomId);
 
@@ -380,7 +395,15 @@ async function syncRoomMetadata(roomId: string): Promise<{
 /** In-memory cache of room metadata for the current session. */
 const roomMetaCache = new Map<
   string,
-  { isGroup: boolean; roomName?: string; groupId?: string }
+  {
+    isGroup: boolean;
+    roomName?: string;
+    groupId?: string;
+    membersProfile?: Record<
+      string,
+      { displayName?: string; avatarUrl?: string }
+    >;
+  }
 >();
 
 /** Call the Matrix /sync endpoint (long-polling). */
@@ -420,7 +443,15 @@ async function sync(since?: string): Promise<SyncResponse> {
 async function handleTimelineEvent(
   roomId: string,
   event: MatrixEvent,
-  roomMeta?: { isGroup: boolean; roomName?: string; groupId?: string },
+  roomMeta?: {
+    isGroup: boolean;
+    roomName?: string;
+    groupId?: string;
+    membersProfile?: Record<
+      string,
+      { displayName?: string; avatarUrl?: string }
+    >;
+  },
 ): Promise<void> {
   // Only handle text messages
   if (event.type !== "m.room.message") return;
@@ -433,6 +464,8 @@ async function handleTimelineEvent(
     event.sender === MATRIX_BOT_USER_ID ? "out" : "in";
 
   try {
+    const senderProfile = roomMeta?.membersProfile?.[event.sender];
+
     const messageId = await convex.mutation(api.messages.insertMessage, {
       matrixRoomId: roomId,
       eventId: event.event_id,
@@ -443,6 +476,8 @@ async function handleTimelineEvent(
       isGroup: roomMeta?.isGroup,
       roomName: roomMeta?.roomName,
       groupId: roomMeta?.groupId,
+      senderName: senderProfile?.displayName,
+      senderAvatarUrl: senderProfile?.avatarUrl,
     });
 
     console.log(
