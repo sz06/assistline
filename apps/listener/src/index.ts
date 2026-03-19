@@ -468,6 +468,8 @@ async function main(): Promise<void> {
   console.log(`[listener]   Token Path : ${SYNC_TOKEN_PATH}`);
 
   let since = loadSyncToken();
+  let isInitialSync = !since;
+
   if (since) {
     console.log(`[listener] Resuming from sync token: ${since.slice(0, 20)}…`);
   } else {
@@ -489,16 +491,34 @@ async function main(): Promise<void> {
 
       // Handle joined room timeline events
       if (response.rooms?.join) {
-        for (const [roomId, room] of Object.entries(response.rooms.join)) {
+        const roomEntries = Object.entries(response.rooms.join);
+
+        if (isInitialSync) {
+          // On initial sync, classify ALL joined rooms (even those without events)
+          console.log(
+            `[listener] Initial sync: classifying ${roomEntries.length} joined rooms…`,
+          );
+        }
+
+        for (const [roomId, room] of roomEntries) {
           const events = room.timeline?.events ?? [];
-          if (events.length === 0) continue;
 
-          // Fetch/sync room metadata (group detection) — cached per session
-          const roomMeta = await syncRoomMetadata(roomId);
+          // On initial sync, sync metadata for ALL rooms.
+          // On incremental syncs, only sync rooms with new events.
+          if (events.length > 0 || isInitialSync) {
+            const roomMeta = await syncRoomMetadata(roomId);
 
-          for (const event of events) {
-            await handleTimelineEvent(roomId, event, roomMeta);
+            for (const event of events) {
+              await handleTimelineEvent(roomId, event, roomMeta);
+            }
           }
+        }
+
+        if (isInitialSync) {
+          console.log(
+            `[listener] ✓ Initial sync complete. Classified ${syncedRoomMeta.size} rooms.`,
+          );
+          isInitialSync = false;
         }
       }
 

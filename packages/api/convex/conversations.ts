@@ -2,14 +2,16 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
 export const list = query({
-  args: {},
-  handler: async (ctx) => {
-    // Fetch top 50 recently updated conversations
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    // Fetch recently updated conversations (default 20)
     const conversations = await ctx.db
       .query("conversations")
       .withIndex("by_updatedAt")
       .order("desc")
-      .take(50);
+      .take(args.limit ?? 20);
 
     // Map contacts to conversations if possible
     const withDetails = await Promise.all(
@@ -24,21 +26,24 @@ export const list = query({
         if (conv.lastMessageId) {
           const lastMsg = await ctx.db.get(conv.lastMessageId);
           if (lastMsg) {
-            const contact = await ctx.db
-              .query("contacts")
+            const identity = await ctx.db
+              .query("contactIdentities")
               .withIndex("by_matrixId", (q) => q.eq("matrixId", lastMsg.sender))
               .first();
 
-            if (contact) {
-              contactDetails.name = contact.firstName
-                ? `${contact.firstName} ${contact.lastName ?? ""}`.trim()
-                : (conv.name ?? contact.matrixId);
+            if (identity) {
+              const contact = await ctx.db.get(identity.contactId);
+              if (contact) {
+                contactDetails.name = contact.firstName
+                  ? `${contact.firstName} ${contact.lastName ?? ""}`.trim()
+                  : (conv.name ?? lastMsg.sender);
 
-              if (contact.phoneNumbers?.length) {
-                contactDetails.phone = contact.phoneNumbers[0].value;
-              }
-              if (contact.emails?.length) {
-                contactDetails.email = contact.emails[0].value;
+                if (contact.phoneNumbers?.length) {
+                  contactDetails.phone = contact.phoneNumbers[0].value;
+                }
+                if (contact.emails?.length) {
+                  contactDetails.email = contact.emails[0].value;
+                }
               }
             }
           }
@@ -75,18 +80,24 @@ export const list = query({
 export const getWithMessages = query({
   args: {
     id: v.id("conversations"),
+    messageLimit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const conv = await ctx.db.get(args.id);
     if (!conv) return null;
 
-    const messages = await ctx.db
+    const limit = args.messageLimit ?? 20;
+
+    // Fetch the latest N messages (desc), then reverse for chronological display
+    const messagesDesc = await ctx.db
       .query("messages")
       .withIndex("by_conversationId_timestamp", (q) =>
         q.eq("conversationId", args.id),
       )
-      .order("asc") // chronological
-      .collect();
+      .order("desc")
+      .take(limit);
+
+    const messages = messagesDesc.reverse();
 
     const contactDetails = {
       name: conv.name ?? "Unknown",
@@ -97,21 +108,24 @@ export const getWithMessages = query({
     // Find contact info from the first incoming message
     const firstIncoming = messages.find((m) => m.direction === "in");
     if (firstIncoming) {
-      const contact = await ctx.db
-        .query("contacts")
+      const identity = await ctx.db
+        .query("contactIdentities")
         .withIndex("by_matrixId", (q) => q.eq("matrixId", firstIncoming.sender))
         .first();
 
-      if (contact) {
-        contactDetails.name = contact.firstName
-          ? `${contact.firstName} ${contact.lastName ?? ""}`.trim()
-          : (conv.name ?? contact.matrixId);
+      if (identity) {
+        const contact = await ctx.db.get(identity.contactId);
+        if (contact) {
+          contactDetails.name = contact.firstName
+            ? `${contact.firstName} ${contact.lastName ?? ""}`.trim()
+            : (conv.name ?? firstIncoming.sender);
 
-        if (contact.phoneNumbers?.length) {
-          contactDetails.phone = contact.phoneNumbers[0].value;
-        }
-        if (contact.emails?.length) {
-          contactDetails.email = contact.emails[0].value;
+          if (contact.phoneNumbers?.length) {
+            contactDetails.phone = contact.phoneNumbers[0].value;
+          }
+          if (contact.emails?.length) {
+            contactDetails.email = contact.emails[0].value;
+          }
         }
       }
     }

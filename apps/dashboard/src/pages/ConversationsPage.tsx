@@ -31,7 +31,7 @@ const statusConfig: Record<string, { color: string; label: string }> = {
 };
 
 export function ConversationsPage() {
-  const conversations = useQuery(api.conversations.list);
+  const conversations = useQuery(api.conversations.list, { limit: 20 });
   const [selectedId, setSelectedId] = useState<Id<"conversations"> | null>(
     null,
   );

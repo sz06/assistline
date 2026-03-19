@@ -77,9 +77,11 @@ export function Sidebar({
       {isOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           {/* Backdrop */}
-          <div
+          <button
+            type="button"
             className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
             onClick={onClose}
+            aria-label="Close sidebar"
           />
           {/* Slide-in panel */}
           <div className="relative z-50 animate-in slide-in-from-left duration-200">

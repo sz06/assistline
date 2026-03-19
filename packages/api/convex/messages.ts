@@ -85,14 +85,16 @@ export const insertMessage = mutation({
       await ctx.db.patch(conversationId, patch);
     }
 
-    // Ensure sender contact exists
-    const existingContact = await ctx.db
-      .query("contacts")
+    // Ensure sender contact exists via identities
+    const existingIdentity = await ctx.db
+      .query("contactIdentities")
       .withIndex("by_matrixId", (q) => q.eq("matrixId", args.sender))
       .first();
 
-    if (!existingContact) {
-      await ctx.db.insert("contacts", {
+    if (!existingIdentity) {
+      const contactId = await ctx.db.insert("contacts", {});
+      await ctx.db.insert("contactIdentities", {
+        contactId,
         matrixId: args.sender,
       });
     }

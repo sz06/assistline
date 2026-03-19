@@ -13,7 +13,6 @@ export default defineSchema({
     value: v.any(), // JSON config values
   }).index("by_key", ["key"]),
   contacts: defineTable({
-    matrixId: v.string(),
     firstName: v.optional(v.string()),
     lastName: v.optional(v.string()),
     nickname: v.optional(v.string()),
@@ -49,8 +48,14 @@ export default defineSchema({
         }),
       ),
     ),
-    linkedMatrixIds: v.optional(v.array(v.string())),
-  }).index("by_matrixId", ["matrixId"]),
+  }),
+  contactIdentities: defineTable({
+    contactId: v.id("contacts"),
+    matrixId: v.string(),
+    platform: v.optional(v.string()),
+  })
+    .index("by_matrixId", ["matrixId"])
+    .index("by_contactId", ["contactId"]),
   groups: defineTable({
     matrixRoomId: v.string(), // Matrix room ID for this group
     name: v.string(), // Group name (e.g. "Family Chat")
