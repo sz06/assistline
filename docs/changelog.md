@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-03-19
+
+### Changed
+- **Schema Simplification** (`packages/api`): Removed the `groups` table entirely. Group metadata (`memberCount`, `participants`, `topic`) is now stored directly on the `conversations` table. The `isGroup` boolean and `groupId` reference have been replaced — group status is derived from `memberCount > 2`.
+- **Schema Tightening** (`packages/api`): Made `channelId`, `memberCount`, and `participants` required on `conversations`. Made `eventId` required on `messages`. These fields are always populated by the listener and outbound flows.
+- **Conversations Queries** (`packages/api`): Removed the join to the `groups` table in `list` and `getWithMessages`. Group name, topic, and member count are now read directly from the conversation document.
+- **Message Mutations** (`packages/api`): `insertMessage` and `syncConversationMeta` now accept `channelId`, `memberCount`, `participants`, and `topic` as required args.
+- **Matrix Listener** (`apps/listener`): Resolves `channelId` from bridge bot members on startup and passes it to all Convex mutations. No longer syncs a separate groups table.
+- **Conversations UI** (`apps/dashboard`): Updated `ConversationsPage.tsx` and `SimulatorPage.tsx` to use the new required fields without nullish fallbacks.
+
+### Added
+- **`channels.getByType` query** (`packages/api`): Allows looking up a channel by platform type (whatsapp, telegram).
+
+### Removed
+- **`groups` table** (`packages/api`): Deleted the `groups` Convex table and `groups.ts` module.
+- **`by_groupId` index** (`packages/api`): Removed from the `conversations` table.
+
+## [2.8.0] - 2026-03-19
+
+### Added
+- **Channel Sidebar** (`apps/dashboard`): Beeper-style narrow vertical channel sidebar on the Conversations page. Displays an "All" inbox icon and per-channel brand icons (WhatsApp, Telegram) with status dots and hover tooltips. Clicking a channel filters the conversation list; search applies on top of the filtered results. Mobile shows a horizontal channel strip.
+- **`channelId` on Conversations** (`packages/api`): Added optional `channelId` field and `by_channelId` index to the `conversations` table, and updated `conversations.list` to accept an optional `channelId` filter.
+- **Shared Channel Icons** (`apps/dashboard`): Extracted `WhatsAppIcon` and `TelegramIcon` into a reusable `ChannelIcons.tsx` component with a `channelIconMap` and brand color map.
+
+### Changed
+- **Channels Page** (`apps/dashboard`): Refactored `ChannelsPage.tsx` to use shared icon components from `ChannelIcons.tsx`, with dynamic icon and color selection per channel type.
+
 ## [2.7.0] - 2026-03-19
 
 ### Changed

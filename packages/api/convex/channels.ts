@@ -14,6 +14,17 @@ export const list = query({
   },
 });
 
+/** Get the first channel matching a given type (e.g. "whatsapp"). */
+export const getByType = query({
+  args: { type: v.union(v.literal("whatsapp"), v.literal("telegram")) },
+  handler: async (ctx, args) => {
+    return ctx.db
+      .query("channels")
+      .withIndex("by_type", (q) => q.eq("type", args.type))
+      .first();
+  },
+});
+
 /** Get a single channel by ID. */
 export const get = query({
   args: { id: v.id("channels") },

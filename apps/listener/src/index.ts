@@ -65,6 +65,52 @@ const SYNC_TIMEOUT_MS = 30_000;
 const convex = new ConvexHttpClient(CONVEX_URL);
 
 // ---------------------------------------------------------------------------
+// Channel resolution — map platform type to Convex channel ID
+// ---------------------------------------------------------------------------
+
+/** Known bridge bot prefixes → platform type */
+const BRIDGE_BOT_PREFIXES: Record<string, "whatsapp" | "telegram"> = {
+  "@whatsappbot:": "whatsapp",
+  "@telegrambot:": "telegram",
+};
+
+/** In-memory cache: platform type → Convex channel ID */
+let channelIdByType: Map<string, string> = new Map();
+
+/** Refresh the channel ID cache from Convex. */
+async function refreshChannelCache(): Promise<void> {
+  const platformTypes = ["whatsapp", "telegram"] as const;
+  for (const platformType of platformTypes) {
+    const channel = await convex.query(api.channels.getByType, {
+      type: platformType,
+    });
+    if (channel) {
+      channelIdByType.set(platformType, channel._id);
+      console.log(
+        `[listener] ✓ Cached channel: ${platformType} → ${channel._id}`,
+      );
+    }
+  }
+}
+
+/**
+ * Detect the platform type for a room by examining its members for known
+ * bridge bot prefixes. Returns the Convex channel ID if found.
+ */
+function resolveChannelId(
+  members: { state_key: string }[],
+): string | undefined {
+  for (const member of members) {
+    for (const [prefix, platformType] of Object.entries(BRIDGE_BOT_PREFIXES)) {
+      if (member.state_key.startsWith(prefix)) {
+        return channelIdByType.get(platformType);
+      }
+    }
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Sync-token persistence
 // ---------------------------------------------------------------------------
 
@@ -266,14 +312,22 @@ const syncedRoomMeta = new Set<string>();
  * Skips rooms already processed (per listener lifetime).
  */
 async function syncRoomMetadata(roomId: string): Promise<{
-  isGroup: boolean;
+  channelId: string;
+  memberCount: number;
   roomName?: string;
-  groupId?: string;
+  participants: string[];
+  topic?: string;
   membersProfile?: Record<string, { displayName?: string; avatarUrl?: string }>;
 }> {
+  const defaultMeta = {
+    channelId: channelIdByType.values().next().value ?? "",
+    memberCount: 1,
+    participants: [] as string[],
+  };
+
   // Skip if already processed this session
   if (syncedRoomMeta.has(roomId)) {
-    return roomMetaCache.get(roomId) ?? { isGroup: false };
+    return roomMetaCache.get(roomId) ?? defaultMeta;
   }
 
   try {
@@ -286,7 +340,7 @@ async function syncRoomMetadata(roomId: string): Promise<{
       console.warn(
         `[listener] Could not fetch members for ${roomId}: ${membersRes.status}`,
       );
-      return { isGroup: false };
+      return defaultMeta;
     }
 
     const membersData = (await membersRes.json()) as {
@@ -297,16 +351,22 @@ async function syncRoomMetadata(roomId: string): Promise<{
       (e) => e.content.membership === "join",
     );
 
+    // Resolve channelId from bridge bot presence
+    const channelId = resolveChannelId(joinedMembers) ?? defaultMeta.channelId;
+
     // Filter out bridge bots (e.g. @whatsappbot:matrix.local)
     const realMembers = joinedMembers.filter(
       (m) =>
         !m.state_key.startsWith("@whatsappbot:") &&
+        !m.state_key.startsWith("@telegrambot:") &&
         m.state_key !== MATRIX_BOT_USER_ID,
     );
 
-    // A "group" has more than 1 real member (i.e. > 2 total with the bot,
-    // or simply > 1 non-bot participants)
-    const isGroup = realMembers.length > 1;
+    const memberCount = realMembers.length;
+    const isGroup = memberCount > 1;
+
+    // Collect participant matrixIds
+    const participants = realMembers.map((m) => m.state_key);
 
     // Fetch room state for name, topic, avatar
     const stateRes = await matrixFetch(
@@ -332,36 +392,21 @@ async function syncRoomMetadata(roomId: string): Promise<{
       }
     }
 
-    let groupId: string | undefined;
-
     if (isGroup) {
-      const members = joinedMembers.map((m) => ({
-        matrixId: m.state_key,
-        displayName: m.content.displayname ?? undefined,
-        role: "member" as const,
-      }));
-
-      // Upsert the group record in Convex
-      groupId = await convex.mutation(api.groups.syncGroup, {
-        matrixRoomId: roomId,
-        name: roomName ?? `Group (${joinedMembers.length} members)`,
-        topic: roomTopic,
-        avatarUrl: roomAvatar,
-        memberCount: joinedMembers.length,
-        members,
-      });
-
       console.log(
-        `[listener] ✓ Synced group "${roomName ?? roomId}" (${joinedMembers.length} members, groupId=${groupId})`,
+        `[listener] ✓ Detected group "${roomName ?? roomId}" (${memberCount} members)`,
       );
     }
 
-    // Sync conversation metadata
+    // Sync conversation metadata directly (no separate groups table)
     await convex.mutation(api.messages.syncConversationMeta, {
       matrixRoomId: roomId,
-      isGroup,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- anyApi is untyped
+      channelId: channelId as any,
+      memberCount,
+      participants,
+      topic: roomTopic,
       name: roomName,
-      groupId,
       avatarUrl: roomAvatar,
     });
 
@@ -378,7 +423,14 @@ async function syncRoomMetadata(roomId: string): Promise<{
       }
     }
 
-    const meta = { isGroup, roomName, groupId, membersProfile };
+    const meta = {
+      channelId,
+      memberCount,
+      roomName,
+      participants,
+      topic: roomTopic,
+      membersProfile,
+    };
     roomMetaCache.set(roomId, meta);
     syncedRoomMeta.add(roomId);
 
@@ -388,7 +440,7 @@ async function syncRoomMetadata(roomId: string): Promise<{
       `[listener] Failed to sync room metadata for ${roomId}:`,
       err instanceof Error ? err.message : err,
     );
-    return { isGroup: false };
+    return defaultMeta;
   }
 }
 
@@ -396,9 +448,11 @@ async function syncRoomMetadata(roomId: string): Promise<{
 const roomMetaCache = new Map<
   string,
   {
-    isGroup: boolean;
+    channelId: string;
+    memberCount: number;
     roomName?: string;
-    groupId?: string;
+    participants: string[];
+    topic?: string;
     membersProfile?: Record<
       string,
       { displayName?: string; avatarUrl?: string }
@@ -444,9 +498,11 @@ async function handleTimelineEvent(
   roomId: string,
   event: MatrixEvent,
   roomMeta?: {
-    isGroup: boolean;
+    channelId: string;
+    memberCount: number;
     roomName?: string;
-    groupId?: string;
+    participants: string[];
+    topic?: string;
     membersProfile?: Record<
       string,
       { displayName?: string; avatarUrl?: string }
@@ -473,15 +529,19 @@ async function handleTimelineEvent(
       text: body,
       direction,
       timestamp: event.origin_server_ts,
-      isGroup: roomMeta?.isGroup,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- anyApi is untyped
+      channelId: (roomMeta?.channelId ?? "") as any,
+      memberCount: roomMeta?.memberCount ?? 1,
+      participants: roomMeta?.participants ?? [],
+      topic: roomMeta?.topic,
       roomName: roomMeta?.roomName,
-      groupId: roomMeta?.groupId,
       senderName: senderProfile?.displayName,
       senderAvatarUrl: senderProfile?.avatarUrl,
     });
 
+    const isGroup = (roomMeta?.memberCount ?? 0) > 1;
     console.log(
-      `[listener] ${direction === "in" ? "⬇" : "⬆"} ${event.sender} → ${roomId}${roomMeta?.isGroup ? " [GROUP]" : ""} | eventId=${event.event_id} | convexId=${messageId}`,
+      `[listener] ${direction === "in" ? "⬇" : "⬆"} ${event.sender} → ${roomId}${isGroup ? " [GROUP]" : ""} | eventId=${event.event_id} | convexId=${messageId}`,
     );
   } catch (err) {
     console.error(
@@ -501,6 +561,15 @@ async function main(): Promise<void> {
   console.log(`[listener]   Bot User   : ${MATRIX_BOT_USER_ID}`);
   console.log(`[listener]   Convex URL : ${CONVEX_URL}`);
   console.log(`[listener]   Token Path : ${SYNC_TOKEN_PATH}`);
+
+  // Build the channel cache so we can resolve platform → channelId
+  await refreshChannelCache();
+
+  if (channelIdByType.size === 0) {
+    console.warn(
+      "[listener] ⚠ No channels found in Convex. Conversations will not be created until channels are configured.",
+    );
+  }
 
   let since = loadSyncToken();
   let isInitialSync = !since;

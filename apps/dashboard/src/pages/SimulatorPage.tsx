@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { api } from "@repo/api";
+import { api, type Id } from "@repo/api";
 import { Button, Input, Label, PageHeader, Textarea } from "@repo/ui";
 import { useMutation, useQuery } from "convex/react";
 import { AlertCircle, CheckCircle2, Send } from "lucide-react";
@@ -14,6 +14,7 @@ import { z } from "zod";
 const simulatorFormSchema = z.object({
   sender: z.string().min(1, "Sender is required"),
   roomId: z.string().min(1, "Room ID is required"),
+  channelId: z.string().min(1, "Channel is required"),
   message: z.string().min(1, "Message is required"),
 });
 
@@ -25,6 +26,7 @@ type SimulatorFormData = z.infer<typeof simulatorFormSchema>;
 
 export function SimulatorPage() {
   const conversations = useQuery(api.conversations.list);
+  const channels = useQuery(api.channels.list);
   const insertMessage = useMutation(api.messages.insertMessage);
 
   const [status, setStatus] = useState<
@@ -43,6 +45,7 @@ export function SimulatorPage() {
     defaultValues: {
       sender: "",
       roomId: "",
+      channelId: "",
       message: "",
     },
   });
@@ -55,10 +58,14 @@ export function SimulatorPage() {
     try {
       await insertMessage({
         matrixRoomId: data.roomId,
+        eventId: `sim_${Date.now().toString()}`,
         sender: data.sender,
         text: data.message,
         direction: "in",
         timestamp: Date.now(),
+        channelId: data.channelId as Id<"channels">,
+        memberCount: 1,
+        participants: [data.sender],
       });
 
       setStatus("success");
@@ -132,6 +139,29 @@ export function SimulatorPage() {
                 </p>
               )}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="channelId">Channel</Label>
+            <select
+              id="channelId"
+              {...register("channelId")}
+              className="flex w-full rounded-md border border-gray-200 bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:focus-visible:ring-gray-300 transition-colors"
+            >
+              <option value="">Select a channel...</option>
+              {channels?.map((ch) => (
+                <option key={ch._id} value={ch._id}>
+                  {ch.label} ({ch.type})
+                </option>
+              ))}
+            </select>
+            {errors.channelId ? (
+              <p className="text-xs text-red-500">{errors.channelId.message}</p>
+            ) : (
+              <p className="text-xs text-gray-500">
+                The channel this simulated message comes through.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

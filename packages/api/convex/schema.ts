@@ -57,35 +57,13 @@ export default defineSchema({
   })
     .index("by_matrixId", ["matrixId"])
     .index("by_contactId", ["contactId"]),
-  groups: defineTable({
-    matrixRoomId: v.string(), // Matrix room ID for this group
-    name: v.string(), // Group name (e.g. "Family Chat")
-    topic: v.optional(v.string()), // Group description/topic
-    avatarUrl: v.optional(v.string()), // Group avatar
-    memberCount: v.number(), // Total member count
-    members: v.optional(
-      v.array(
-        v.object({
-          matrixId: v.string(), // Member's Matrix user ID
-          displayName: v.optional(v.string()), // Display name at time of sync
-          role: v.optional(
-            v.union(
-              v.literal("admin"),
-              v.literal("moderator"),
-              v.literal("member"),
-            ),
-          ),
-        }),
-      ),
-    ),
-    createdAt: v.optional(v.number()),
-    updatedAt: v.number(),
-  }).index("by_matrixRoomId", ["matrixRoomId"]),
   conversations: defineTable({
     matrixRoomId: v.string(), // Matrix room ID
     name: v.optional(v.string()), // Group or DM name
-    isGroup: v.boolean(),
-    groupId: v.optional(v.id("groups")), // Reference to group (if isGroup is true)
+    memberCount: v.number(), // Total members; > 2 means group
+    participants: v.array(v.string()), // Matrix user IDs of participants
+    topic: v.optional(v.string()), // Group topic/description
+    channelId: v.id("channels"), // Originating channel (WhatsApp, Telegram, etc.)
     avatarUrl: v.optional(v.string()),
     lastMessageId: v.optional(v.id("messages")), // Useful for sorting listing
     updatedAt: v.number(),
@@ -105,10 +83,10 @@ export default defineSchema({
   })
     .index("by_matrixRoomId", ["matrixRoomId"])
     .index("by_updatedAt", ["updatedAt"])
-    .index("by_groupId", ["groupId"]),
+    .index("by_channelId", ["channelId"]),
   messages: defineTable({
     conversationId: v.id("conversations"),
-    eventId: v.optional(v.string()), // Matrix event ID to prevent dupes
+    eventId: v.string(), // Matrix event ID to prevent dupes
     sender: v.string(), // Matrix ID of sender
     text: v.string(),
     direction: v.union(v.literal("in"), v.literal("out")),

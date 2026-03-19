@@ -30,29 +30,28 @@ export const listMessages = query({
 export const insertMessage = mutation({
   args: {
     matrixRoomId: v.string(),
-    eventId: v.optional(v.string()),
+    eventId: v.string(),
     sender: v.string(),
     text: v.string(),
     direction: v.union(v.literal("in"), v.literal("out")),
     timestamp: v.number(),
-    // Optional group metadata — the listener populates these after checking room state
-    isGroup: v.optional(v.boolean()),
+    // Group & channel metadata — the listener populates these after checking room state
+    channelId: v.id("channels"),
+    memberCount: v.number(),
+    participants: v.array(v.string()),
+    topic: v.optional(v.string()),
     roomName: v.optional(v.string()),
-    groupId: v.optional(v.id("groups")),
     senderName: v.optional(v.string()),
     senderAvatarUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Basic deduplication
-    const eventId = args.eventId;
-    if (eventId) {
-      const existing = await ctx.db
-        .query("messages")
-        .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-        .first();
-      if (existing) {
-        return existing._id;
-      }
+    const existing = await ctx.db
+      .query("messages")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .first();
+    if (existing) {
+      return existing._id;
     }
 
     // Ensure conversation exists for this Matrix Room
@@ -67,23 +66,28 @@ export const insertMessage = mutation({
     if (!conversation) {
       conversationId = await ctx.db.insert("conversations", {
         matrixRoomId: args.matrixRoomId,
-        isGroup: args.isGroup ?? false,
+        channelId: args.channelId,
+        memberCount: args.memberCount,
+        participants: args.participants,
+        topic: args.topic,
         name: args.roomName,
-        groupId: args.groupId,
         updatedAt: args.timestamp,
       });
     } else {
       conversationId = conversation._id;
-      // Update group info if provided and conversation was previously uncategorized
+      // Update metadata if provided
       const patch: Record<string, unknown> = { updatedAt: args.timestamp };
-      if (args.isGroup !== undefined && !conversation.isGroup && args.isGroup) {
-        patch.isGroup = true;
+      if (args.memberCount > conversation.memberCount) {
+        patch.memberCount = args.memberCount;
+      }
+      if (args.participants.length > conversation.participants.length) {
+        patch.participants = args.participants;
+      }
+      if (args.topic && !conversation.topic) {
+        patch.topic = args.topic;
       }
       if (args.roomName && !conversation.name) {
         patch.name = args.roomName;
-      }
-      if (args.groupId && !conversation.groupId) {
-        patch.groupId = args.groupId;
       }
       await ctx.db.patch(conversationId, patch);
     }
@@ -134,14 +138,16 @@ export const insertMessage = mutation({
 
 /**
  * Sync room metadata — called by the listener after fetching room state
- * to update an existing conversation's group status, name, and group link.
+ * to update an existing conversation's group status, name, and participants.
  */
 export const syncConversationMeta = mutation({
   args: {
     matrixRoomId: v.string(),
-    isGroup: v.boolean(),
+    channelId: v.id("channels"),
+    memberCount: v.number(),
+    participants: v.array(v.string()),
+    topic: v.optional(v.string()),
     name: v.optional(v.string()),
-    groupId: v.optional(v.id("groups")),
     avatarUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -155,9 +161,11 @@ export const syncConversationMeta = mutation({
     if (!conversation) return null;
 
     await ctx.db.patch(conversation._id, {
-      isGroup: args.isGroup,
+      channelId: args.channelId,
+      memberCount: args.memberCount,
+      participants: args.participants,
+      topic: args.topic ?? conversation.topic,
       name: args.name ?? conversation.name,
-      groupId: args.groupId ?? conversation.groupId,
       avatarUrl: args.avatarUrl ?? conversation.avatarUrl,
     });
 
@@ -178,7 +186,7 @@ export const sendMessage = mutation({
     // Insert the outbound message
     const messageId = await ctx.db.insert("messages", {
       conversationId: args.conversationId,
-      eventId: `outbound_${Date.now().toString()}`, // temporary generated ID
+      eventId: `outbound_${Date.now().toString()}`,
       sender: "dashboard_user",
       text: args.content,
       direction: "out",

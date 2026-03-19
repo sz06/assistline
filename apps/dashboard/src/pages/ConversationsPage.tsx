@@ -12,6 +12,7 @@ import { useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
   Bot,
+  Inbox,
   MessageSquare,
   MoreVertical,
   Search,
@@ -22,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { channelColorMap, channelIconMap } from "../components/ChannelIcons";
 
 // Status Badge styles matching our three states
 const statusConfig: Record<string, { color: string; label: string }> = {
@@ -30,12 +32,36 @@ const statusConfig: Record<string, { color: string; label: string }> = {
   waiting_on_contact: { color: "bg-amber-500", label: "Waiting on Contact" },
 };
 
+// Channel status dot colors
+const channelStatusDot: Record<string, string> = {
+  connected: "bg-emerald-400",
+  pairing: "bg-amber-400 animate-pulse",
+  error: "bg-red-400",
+  disconnected: "bg-gray-400",
+};
+
 export function ConversationsPage() {
-  const conversations = useQuery(api.conversations.list, { limit: 20 });
+  const channels = useQuery(api.channels.list);
+  const [selectedChannelId, setSelectedChannelId] =
+    useState<Id<"channels"> | null>(null);
+
+  const conversations = useQuery(
+    api.conversations.list,
+    selectedChannelId
+      ? { limit: 20, channelId: selectedChannelId }
+      : { limit: 20 },
+  );
+
   const [selectedId, setSelectedId] = useState<Id<"conversations"> | null>(
     null,
   );
   const [search, setSearch] = useState("");
+
+  // Reset selected conversation when switching channels
+  useEffect(() => {
+    setSelectedId(null);
+    setSearch("");
+  }, [selectedChannelId]);
 
   const filtered = useMemo(() => {
     if (!conversations) return [];
@@ -50,10 +76,106 @@ export function ConversationsPage() {
 
   return (
     <div className="flex h-full">
+      {/* ── CHANNEL SIDEBAR ─────────────────────────────────────── */}
+      <div className="hidden md:flex w-14 shrink-0 flex-col items-center border-r border-gray-200 dark:border-gray-800 bg-gray-100/60 dark:bg-gray-900/80 py-3 gap-1">
+        {/* All channels */}
+        <button
+          type="button"
+          data-testid="channel-filter-all"
+          title="All channels"
+          onClick={() => setSelectedChannelId(null)}
+          className={`group relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 ${
+            selectedChannelId === null
+              ? "bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 shadow-sm ring-2 ring-blue-500/30"
+              : "text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800"
+          }`}
+        >
+          <Inbox className="h-5 w-5" />
+          {/* Tooltip */}
+          <span className="pointer-events-none absolute left-full ml-2 rounded-md bg-gray-900 dark:bg-gray-100 px-2 py-1 text-xs font-medium text-white dark:text-gray-900 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
+            All channels
+          </span>
+        </button>
+
+        {/* Divider */}
+        <div className="w-6 border-t border-gray-300 dark:border-gray-700 my-1.5" />
+
+        {/* Per-channel icons */}
+        {channels?.map((channel) => {
+          const IconComponent = channelIconMap[channel.type];
+          const colors = channelColorMap[channel.type];
+          const isActive = selectedChannelId === channel._id;
+          const dotColor =
+            channelStatusDot[channel.status] ?? channelStatusDot.disconnected;
+
+          if (!IconComponent || !colors) return null;
+
+          return (
+            <button
+              type="button"
+              key={channel._id}
+              data-testid={`channel-filter-${channel._id}`}
+              title={channel.label}
+              onClick={() => setSelectedChannelId(channel._id)}
+              className={`group relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 ${
+                isActive
+                  ? `${colors.bg} ${colors.text} shadow-sm ring-2 ring-current/20`
+                  : "text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800"
+              }`}
+            >
+              <IconComponent className="h-5 w-5" />
+              {/* Status dot */}
+              <span
+                className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-gray-100 dark:border-gray-900 ${dotColor}`}
+              />
+              {/* Tooltip */}
+              <span className="pointer-events-none absolute left-full ml-2 rounded-md bg-gray-900 dark:bg-gray-100 px-2 py-1 text-xs font-medium text-white dark:text-gray-900 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
+                {channel.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* ── LEFT PANEL: Conversation List ────────────────────────────── */}
       <div
         className={`w-full md:w-80 shrink-0 border-r border-gray-200 dark:border-gray-800 flex flex-col bg-gray-50/50 dark:bg-gray-900/50 ${selectedId ? "hidden md:flex" : "flex"}`}
       >
+        {/* Mobile channel selector (shown below md breakpoint) */}
+        <div className="md:hidden flex items-center gap-1.5 px-3 pt-3 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setSelectedChannelId(null)}
+            className={`shrink-0 flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+              selectedChannelId === null
+                ? "bg-blue-100 dark:bg-blue-900/40 text-blue-600"
+                : "text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800"
+            }`}
+          >
+            <Inbox className="h-4 w-4" />
+          </button>
+          {channels?.map((channel) => {
+            const IconComponent = channelIconMap[channel.type];
+            const colors = channelColorMap[channel.type];
+            const isActive = selectedChannelId === channel._id;
+            if (!IconComponent || !colors) return null;
+            return (
+              <button
+                type="button"
+                key={channel._id}
+                onClick={() => setSelectedChannelId(channel._id)}
+                className={`shrink-0 flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                  isActive
+                    ? `${colors.bg} ${colors.text}`
+                    : "text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800"
+                }`}
+              >
+                <IconComponent className="h-4 w-4" />
+              </button>
+            );
+          })}
+        </div>
+
         <div className="p-3 border-b border-gray-200 dark:border-gray-800">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
@@ -105,12 +227,12 @@ export function ConversationsPage() {
                 >
                   <div
                     className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white font-semibold text-sm shadow-sm relative ${
-                      conv.isGroup
+                      conv.memberCount > 2
                         ? "bg-gradient-to-br from-violet-500 to-purple-600"
                         : "bg-gradient-to-br from-blue-500 to-indigo-600"
                     }`}
                   >
-                    {conv.isGroup ? (
+                    {conv.memberCount > 2 ? (
                       <Users className="h-4.5 w-4.5" />
                     ) : (
                       conv.contactDetails.name.charAt(0).toUpperCase()
@@ -126,9 +248,9 @@ export function ConversationsPage() {
                         {conv.contactDetails.name}
                       </span>
                       <div className="flex items-center gap-1.5">
-                        {conv.isGroup && conv.groupDetails && (
+                        {conv.memberCount > 2 && (
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-medium leading-tight bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400">
-                            {conv.groupDetails.memberCount} members
+                            {conv.memberCount} members
                           </span>
                         )}
                         {conv.currentIntent && (
@@ -139,8 +261,8 @@ export function ConversationsPage() {
                       </div>
                     </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                      {conv.isGroup
-                        ? (conv.groupDetails?.topic ?? "Group conversation")
+                      {conv.memberCount > 2
+                        ? (conv.topic ?? "Group conversation")
                         : conv.contactDetails.phone || conv.matrixRoomId}
                     </p>
                   </div>
@@ -230,12 +352,12 @@ function ChatPanel({
         </button>
         <div
           className={`flex h-9 w-9 items-center justify-center rounded-full text-white font-semibold ${
-            data.isGroup
+            data.memberCount > 2
               ? "bg-gradient-to-br from-violet-500 to-purple-600"
               : "bg-gradient-to-br from-blue-500 to-indigo-600"
           }`}
         >
-          {data.isGroup ? (
+          {data.memberCount > 2 ? (
             <Users className="h-4 w-4" />
           ) : (
             data.contactDetails.name.charAt(0).toUpperCase()
@@ -246,8 +368,8 @@ function ChatPanel({
             {data.contactDetails.name}
           </h2>
           <div className="text-[11px] text-gray-500">
-            {data.isGroup
-              ? `${data.groupDetails?.memberCount ?? ""} members${data.groupDetails?.topic ? ` · ${data.groupDetails.topic}` : ""}`
+            {data.memberCount > 2
+              ? `${data.memberCount} members${data.topic ? ` · ${data.topic}` : ""}`
               : data.contactDetails.phone || "No phone linked"}
           </div>
         </div>

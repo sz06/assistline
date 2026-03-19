@@ -1,17 +1,27 @@
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 
 export const list = query({
   args: {
     limit: v.optional(v.number()),
+    channelId: v.optional(v.id("channels")),
   },
   handler: async (ctx, args) => {
-    // Fetch recently updated conversations (default 20)
-    const conversations = await ctx.db
-      .query("conversations")
-      .withIndex("by_updatedAt")
-      .order("desc")
-      .take(args.limit ?? 20);
+    // Fetch recently updated conversations, optionally filtered by channel
+    const conversations = args.channelId
+      ? await ctx.db
+          .query("conversations")
+          .withIndex("by_channelId", (q) =>
+            q.eq("channelId", args.channelId as Id<"channels">),
+          )
+          .order("desc")
+          .take(args.limit ?? 20)
+      : await ctx.db
+          .query("conversations")
+          .withIndex("by_updatedAt")
+          .order("desc")
+          .take(args.limit ?? 20);
 
     // Map contacts to conversations if possible
     const withDetails = await Promise.all(
@@ -48,26 +58,15 @@ export const list = query({
           }
         }
 
-        // Fetch group details if this is a group conversation
-        let groupDetails = null;
-        if (conv.isGroup && conv.groupId) {
-          const group = await ctx.db.get(conv.groupId);
-          if (group) {
-            groupDetails = {
-              name: group.name,
-              topic: group.topic,
-              memberCount: group.memberCount,
-              avatarUrl: group.avatarUrl,
-            };
-            // Override contact name with group name
-            contactDetails.name = group.name;
-          }
+        // For group conversations, use the room name directly
+        const isGroup = (conv.memberCount ?? 0) > 2;
+        if (isGroup && conv.name) {
+          contactDetails.name = conv.name;
         }
 
         return {
           ...conv,
           contactDetails,
-          groupDetails,
         };
       }),
     );
@@ -128,26 +127,15 @@ export const getWithMessages = query({
       }
     }
 
-    // Fetch group details if this is a group conversation
-    let groupDetails = null;
-    if (conv.isGroup && conv.groupId) {
-      const group = await ctx.db.get(conv.groupId);
-      if (group) {
-        groupDetails = {
-          name: group.name,
-          topic: group.topic,
-          memberCount: group.memberCount,
-          avatarUrl: group.avatarUrl,
-        };
-        // Override contact name with group name
-        contactDetails.name = group.name;
-      }
+    // For group conversations, use the room name directly
+    const isGroup = (conv.memberCount ?? 0) > 2;
+    if (isGroup && conv.name) {
+      contactDetails.name = conv.name;
     }
 
     return {
       ...conv,
       contactDetails,
-      groupDetails,
       messages,
     };
   },
