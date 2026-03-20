@@ -16,3 +16,34 @@ export function isPhoneNumberLike(value: string): boolean {
 export function cleanPhoneNumber(value: string): string {
   return value.replace(/[^\d]/g, "");
 }
+
+/**
+ * Derive platform, phone number, and other-name entry from a Matrix sender ID
+ * and optional bridge-provided display name.
+ */
+export function extractSenderInfo(
+  matrixId: string,
+  senderName?: string,
+): {
+  platform: string | undefined;
+  phone: string | undefined;
+  otherName: string | undefined;
+} {
+  const localpart = matrixId.split(":")[0];
+  const platform = localpart?.includes("whatsapp_") ? "whatsapp" : undefined;
+
+  // Extract phone from Matrix ID (e.g. @whatsapp_14155552671:server)
+  const trimmed = senderName?.trim() || undefined;
+  const nameIsPhone = trimmed ? isPhoneNumberLike(trimmed) : false;
+
+  // Prefer digits from Matrix ID; fall back to cleaning phone-like displayname
+  const phoneFromId = localpart?.match(/^@?whatsapp_\+?(\d+)$/)?.[1] ?? null;
+  const phone =
+    phoneFromId ??
+    (nameIsPhone && trimmed ? cleanPhoneNumber(trimmed) : undefined);
+
+  // Any non-empty senderName becomes an otherName entry (kept as-is with bridge suffixes)
+  const otherName = trimmed ?? undefined;
+
+  return { platform, phone, otherName };
+}

@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.1] - 2026-03-20
+
+### Fixed
+- **Outgoing Messages Not Delivered** (`packages/api`): Messages sent from the dashboard were inserted into the database but never relayed to the Matrix homeserver, so contacts never received them. Added a `sendMatrixMessage` internalAction that calls the Matrix `PUT /send/m.room.message` endpoint and patches the message with the real event ID. The `sendMessage` mutation now schedules this action asynchronously via `ctx.scheduler.runAfter`.
+
 ## [2.13.0] - 2026-03-20
 
 ### Changed

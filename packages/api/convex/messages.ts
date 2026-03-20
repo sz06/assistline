@@ -2,8 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
-import { cleanPhoneNumber, isPhoneNumberLike } from "./utils/contacts";
-import { extractWhatsAppPhoneNumber } from "./utils/matrix";
+import { extractSenderInfo } from "./utils/contacts";
 
 export const listMessages = query({
   args: {
@@ -108,44 +107,17 @@ export const insertMessage = mutation({
       .withIndex("by_matrixId", (q) => q.eq("matrixId", args.sender))
       .first();
 
-    // Derive phone number from Matrix ID (e.g. @whatsapp_14155552671:server)
-    const localpart = args.sender.split(":")[0];
-    const phoneFromMatrixId = extractWhatsAppPhoneNumber(args.sender);
-
-    // Determine if the senderName is actually a phone number (bridge uses
-    // the phone number as displayname when no contact name is saved)
-    const senderNameTrimmed = args.senderName?.trim() || undefined;
-    const nameIsPhone = senderNameTrimmed
-      ? isPhoneNumberLike(senderNameTrimmed)
-      : false;
-
-    // Build the best available phone number — prefer extraction from Matrix
-    // ID (pure digits), fall back to cleaning the phone-like displayname
-    const bestPhone =
-      phoneFromMatrixId ??
-      (nameIsPhone && senderNameTrimmed
-        ? cleanPhoneNumber(senderNameTrimmed)
-        : undefined);
-
-    // Determine the platform from the Matrix ID localpart
-    const platform = localpart?.includes("whatsapp_") ? "whatsapp" : undefined;
-
-    // Build otherNames entry — any non-empty senderName goes here (both
-    // phone-like and real names). Stored as plain strings; bridge suffixes
-    // like "(WA)" are kept as-is since they provide useful context.
-    const otherNameEntry = senderNameTrimmed ?? undefined;
+    const { platform, phone, otherName } = extractSenderInfo(
+      args.sender,
+      args.senderName,
+    );
 
     if (!existingIdentity) {
       // ───── Create a brand-new contact ─────
-      // name is NEVER auto-filled — only the user sets it
-      const phoneNumbers = bestPhone
-        ? [{ label: "Mobile", value: bestPhone }]
-        : undefined;
-
       const contactId = await ctx.db.insert("contacts", {
         avatarUrl: args.senderAvatarUrl,
-        phoneNumbers,
-        otherNames: otherNameEntry ? [otherNameEntry] : undefined,
+        phoneNumbers: phone ? [{ label: "Mobile", value: phone }] : undefined,
+        otherNames: otherName ? [otherName] : undefined,
       });
       await ctx.db.insert("contactIdentities", {
         contactId,
@@ -158,36 +130,21 @@ export const insertMessage = mutation({
       if (contact) {
         const patch: Record<string, unknown> = {};
 
-        // Fill phone if currently empty and we have one
         if (
           (!contact.phoneNumbers || contact.phoneNumbers.length === 0) &&
-          bestPhone
+          phone
         ) {
-          patch.phoneNumbers = [{ label: "Mobile", value: bestPhone }];
+          patch.phoneNumbers = [{ label: "Mobile", value: phone }];
         }
 
-        // Fill avatar if currently empty
         if (!contact.avatarUrl && args.senderAvatarUrl) {
           patch.avatarUrl = args.senderAvatarUrl;
         }
 
-        // Fix existing contacts where name was incorrectly set to a phone number
-        if (contact.name && isPhoneNumberLike(contact.name)) {
-          // Move the phone-like name to phoneNumbers if they're empty
-          if (!contact.phoneNumbers || contact.phoneNumbers.length === 0) {
-            patch.phoneNumbers = [
-              { label: "Mobile", value: cleanPhoneNumber(contact.name) },
-            ];
-          }
-          // Clear the name — it should only be user-set
-          patch.name = undefined;
-        }
-
-        // Append to otherNames if we have a new entry and it's not already present
-        if (otherNameEntry) {
+        if (otherName) {
           const existing = contact.otherNames ?? [];
-          if (!existing.includes(otherNameEntry)) {
-            patch.otherNames = [...existing, otherNameEntry];
+          if (!existing.includes(otherName)) {
+            patch.otherNames = [...existing, otherName];
           }
         }
 
@@ -325,6 +282,17 @@ export const sendMessage = mutation({
       details: JSON.stringify({ conversationId: args.conversationId }),
       timestamp: now,
     });
+
+    // Schedule Matrix delivery so the message reaches the bridge
+    await ctx.scheduler.runAfter(
+      0,
+      internal.matrixActions.sendMatrixMessage,
+      {
+        matrixRoomId: conv.matrixRoomId,
+        messageId,
+        content: args.content,
+      },
+    );
 
     return messageId;
   },
