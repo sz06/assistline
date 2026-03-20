@@ -493,6 +493,41 @@ function ChatPanel({
                       )}
                     </div>
 
+                    {/* Edit history — previous versions */}
+                    {isEdited &&
+                      msg.editHistory &&
+                      msg.editHistory.length > 0 && (
+                        <div
+                          className={`mt-2 border-t ${isUser ? "border-gray-200 dark:border-gray-700" : "border-white/20"} pt-1.5`}
+                        >
+                          <p
+                            className={`text-[10px] font-medium mb-1 ${isUser ? "text-gray-400 dark:text-gray-500" : "text-white/50"}`}
+                          >
+                            Previous{" "}
+                            {msg.editHistory.length === 1
+                              ? "version"
+                              : "versions"}
+                          </p>
+                          {[...msg.editHistory].reverse().map((entry, idx) => (
+                            <div
+                              key={idx}
+                              className={`${idx > 0 ? "mt-1.5" : ""}`}
+                            >
+                              <p
+                                className={`whitespace-pre-wrap text-xs line-through ${isUser ? "text-gray-400 dark:text-gray-500" : "text-white/40"}`}
+                              >
+                                {entry.text}
+                              </p>
+                              <p
+                                className={`text-[9px] ${isUser ? "text-gray-300 dark:text-gray-600" : "text-white/30"}`}
+                              >
+                                {new Date(entry.editedAt).toLocaleString()}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                     {/* Timestamp + edited label */}
                     <p
                       className={`text-[10px] mt-1.5 ${isUser ? "text-gray-400" : "text-white/70"}`}

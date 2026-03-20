@@ -107,13 +107,18 @@ export function ProvidersPage() {
     setDeletingId(null);
   };
 
+  const languageProviders =
+    providers?.filter((p) => p.type === "language") ?? [];
+  const embeddingProviders =
+    providers?.filter((p) => p.type === "embedding") ?? [];
+
   return (
     <div className="p-4 md:p-6 overflow-auto h-full">
       <div>
         <div className="flex items-start justify-between gap-4">
           <PageHeader
             title="AI Providers"
-            description="Manage Large-Language-Model providers powering your AI assistant."
+            description="Manage Large-Language-Model and Embedding providers powering your AI assistant."
           />
           <Button
             onClick={() => navigate("/providers/add")}
@@ -126,25 +131,73 @@ export function ProvidersPage() {
         </div>
 
         {/* ── Provider List ──────────────────────────────────────── */}
-        <div className="mt-8 space-y-4">
-          {providers === undefined ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-            </div>
-          ) : providers.length === 0 ? (
+        {providers === undefined ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+          </div>
+        ) : providers.length === 0 ? (
+          <div className="mt-8">
             <EmptyState onAdd={() => navigate("/providers/add")} />
-          ) : (
-            providers.map((p) => (
-              <ProviderCard
-                key={p._id}
-                provider={p}
-                onSetDefault={() => setDefault({ id: p._id })}
-                onClick={() => navigate(`/providers/${p._id}/update`)}
-                onDelete={() => setDeletingId(p._id)}
-              />
-            ))
-          )}
-        </div>
+          </div>
+        ) : (
+          <>
+            {/* Language Models Section */}
+            <div className="mt-8">
+              <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                Language Models
+              </h2>
+              {languageProviders.length === 0 ? (
+                <p className="text-sm text-gray-400 dark:text-gray-500 italic py-4">
+                  No language model providers configured.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {languageProviders.map((p) => (
+                    <ProviderCard
+                      key={p._id}
+                      provider={p}
+                      onSetDefault={() => setDefault({ id: p._id })}
+                      onClick={() => navigate(`/providers/${p._id}/update`)}
+                      onDelete={() => setDeletingId(p._id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Embedding Models Section */}
+            <div className="mt-10">
+              <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
+                Embedding Models
+              </h2>
+              {embeddingProviders.length === 0 ? (
+                <p className="text-sm text-gray-400 dark:text-gray-500 italic py-4">
+                  No embedding providers configured.{" "}
+                  <button
+                    type="button"
+                    onClick={() => navigate("/providers/add?type=embedding")}
+                    className="text-blue-500 hover:text-blue-600 underline"
+                  >
+                    Add one
+                  </button>{" "}
+                  to enable semantic search on artifacts.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {embeddingProviders.map((p) => (
+                    <ProviderCard
+                      key={p._id}
+                      provider={p}
+                      onSetDefault={() => setDefault({ id: p._id })}
+                      onClick={() => navigate(`/providers/${p._id}/update`)}
+                      onDelete={() => setDeletingId(p._id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
         {/* ── Delete Confirmation Dialog ────────────────────────── */}
         {deletingId && (
@@ -178,6 +231,7 @@ function ProviderCard({
     _id: Id<"aiProviders">;
     _creationTime: number;
     provider: string;
+    type: "language" | "embedding";
     name?: string;
     model?: string;
     apiKey?: string;

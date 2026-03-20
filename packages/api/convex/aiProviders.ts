@@ -22,10 +22,20 @@ export const get = query({
   },
 });
 
-/** Get the current default provider. */
+/** Get the current default provider, optionally filtered by type. */
 export const getDefault = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    type: v.optional(v.union(v.literal("language"), v.literal("embedding"))),
+  },
+  handler: async (ctx, args) => {
+    if (args.type) {
+      // Find a default provider of the requested type
+      const all = await ctx.db
+        .query("aiProviders")
+        .withIndex("by_type", (q) => q.eq("type", args.type!))
+        .collect();
+      return all.find((p) => p.isDefault) ?? all[0] ?? null;
+    }
     return ctx.db
       .query("aiProviders")
       .withIndex("by_isDefault", (q) => q.eq("isDefault", true))
@@ -41,24 +51,28 @@ export const getDefault = query({
 export const create = mutation({
   args: {
     provider: v.string(),
+    type: v.union(v.literal("language"), v.literal("embedding")),
     name: v.optional(v.string()),
     model: v.optional(v.string()),
     apiKey: v.optional(v.string()),
     isDefault: v.boolean(),
   },
   handler: async (ctx, args) => {
-    // If marking as default, un-default any existing default provider
+    // If marking as default, un-default any existing default of the same type
     if (args.isDefault) {
-      const currentDefault = await ctx.db
+      const sameType = await ctx.db
         .query("aiProviders")
-        .withIndex("by_isDefault", (q) => q.eq("isDefault", true))
-        .first();
-      if (currentDefault) {
-        await ctx.db.patch(currentDefault._id, { isDefault: false });
+        .withIndex("by_type", (q) => q.eq("type", args.type))
+        .collect();
+      for (const p of sameType) {
+        if (p.isDefault) {
+          await ctx.db.patch(p._id, { isDefault: false });
+        }
       }
     }
     const id = await ctx.db.insert("aiProviders", {
       provider: args.provider,
+      type: args.type,
       name: args.name,
       model: args.model,
       apiKey: args.apiKey,
@@ -85,6 +99,7 @@ export const update = mutation({
   args: {
     id: v.id("aiProviders"),
     provider: v.optional(v.string()),
+    type: v.optional(v.union(v.literal("language"), v.literal("embedding"))),
     name: v.optional(v.string()),
     model: v.optional(v.string()),
     apiKey: v.optional(v.string()),
@@ -94,19 +109,23 @@ export const update = mutation({
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Provider not found");
 
-    // If setting as default, un-default the current default
+    // If setting as default, un-default only same type
     if (args.isDefault === true) {
-      const currentDefault = await ctx.db
+      const resolvedType = args.type ?? existing.type;
+      const sameType = await ctx.db
         .query("aiProviders")
-        .withIndex("by_isDefault", (q) => q.eq("isDefault", true))
-        .first();
-      if (currentDefault && currentDefault._id !== args.id) {
-        await ctx.db.patch(currentDefault._id, { isDefault: false });
+        .withIndex("by_type", (q) => q.eq("type", resolvedType))
+        .collect();
+      for (const p of sameType) {
+        if (p.isDefault && p._id !== args.id) {
+          await ctx.db.patch(p._id, { isDefault: false });
+        }
       }
     }
 
     const patch: Record<string, unknown> = {};
     if (args.provider !== undefined) patch.provider = args.provider;
+    if (args.type !== undefined) patch.type = args.type;
     if (args.name !== undefined) patch.name = args.name;
     if (args.model !== undefined) patch.model = args.model;
     if (args.apiKey !== undefined) patch.apiKey = args.apiKey;
@@ -155,9 +174,12 @@ export const setDefault = mutation({
     const provider = await ctx.db.get(args.id);
     if (!provider) throw new Error("Provider not found");
 
-    // Un-default all others
-    const allProviders = await ctx.db.query("aiProviders").collect();
-    for (const p of allProviders) {
+    // Un-default all others of the same type
+    const sameType = await ctx.db
+      .query("aiProviders")
+      .withIndex("by_type", (q) => q.eq("type", provider.type))
+      .collect();
+    for (const p of sameType) {
       if (p.isDefault && p._id !== args.id) {
         await ctx.db.patch(p._id, { isDefault: false });
       }

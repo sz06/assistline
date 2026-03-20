@@ -430,9 +430,17 @@ export const editMessage = mutation({
       .first();
     if (!message) return;
 
+    // Preserve previous version in edit history
+    const history = message.editHistory ?? [];
+    history.push({
+      text: message.text,
+      editedAt: message.editedAt ?? message.timestamp,
+    });
+
     await ctx.db.patch(message._id, {
       text: args.newText,
       editedAt: args.editTimestamp,
+      editHistory: history,
     });
 
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {

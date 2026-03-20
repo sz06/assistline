@@ -4,11 +4,14 @@ import { v } from "convex/values";
 export default defineSchema({
   aiProviders: defineTable({
     provider: v.string(), // "openai", "anthropic", "ollama", etc.
+    type: v.union(v.literal("language"), v.literal("embedding")),
     name: v.optional(v.string()), // User-friendly label, e.g. "Work OpenAI", "Personal GPT"
     model: v.optional(v.string()), // "gpt-4o", "claude-3.5-sonnet", etc.
     apiKey: v.optional(v.string()), // Optional for local models
     isDefault: v.boolean(),
-  }).index("by_isDefault", ["isDefault"]),
+  })
+    .index("by_isDefault", ["isDefault"])
+    .index("by_type", ["type"]),
   settings: defineTable({
     key: v.string(),
     value: v.any(), // JSON config values
@@ -137,6 +140,14 @@ export default defineSchema({
 
     // Edit tracking
     editedAt: v.optional(v.number()),
+    editHistory: v.optional(
+      v.array(
+        v.object({
+          text: v.string(),
+          editedAt: v.number(),
+        }),
+      ),
+    ),
   })
     .index("by_conversationId_timestamp", ["conversationId", "timestamp"])
     .index("by_eventId", ["eventId"]),

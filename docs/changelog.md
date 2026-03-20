@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.11.0] - 2026-03-19
+
+### Added
+- **Provider Type** (`packages/api`, `apps/dashboard`): AI providers now have a `type` field — `"language"` or `"embedding"`. Defaults are tracked per-type (one default language, one default embedding). New `by_type` index on `aiProviders`. The Add Provider form includes a type toggle and filters provider options (e.g., only OpenAI and Google appear for embedding). ProvidersPage shows two sections: "Language Models" and "Embedding Models".
+- **Autocomplete Model Selector** (`apps/dashboard`): Replaced the plain `<select>` model dropdown with a searchable Base UI `Autocomplete` component. Supports type-to-filter, clear, empty state, and keyboard navigation. Added `@base-ui/react` as a dashboard dependency.
+
 ## [2.10.1] - 2026-03-19
 
 ### Changed

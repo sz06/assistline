@@ -1,3 +1,4 @@
+import { Autocomplete } from "@base-ui/react/autocomplete";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api, type Id } from "@repo/api";
 import { Button, Input, Label, PageHeader } from "@repo/ui";
@@ -6,6 +7,7 @@ import {
   ArrowLeft,
   Bot,
   Check,
+  ChevronDown,
   Copy,
   Cpu,
   Eye,
@@ -13,10 +15,11 @@ import {
   Loader2,
   RefreshCcw,
   Sparkles,
+  X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
@@ -31,6 +34,7 @@ interface ProviderMeta {
   textColor: string;
   requiresApiKey: boolean;
   placeholder: string;
+  supportsEmbedding: boolean;
 }
 
 const PROVIDER_META: Record<string, ProviderMeta> = {
@@ -42,6 +46,7 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     textColor: "text-emerald-600 dark:text-emerald-400",
     requiresApiKey: true,
     placeholder: "sk-…",
+    supportsEmbedding: true,
   },
   anthropic: {
     label: "Anthropic",
@@ -51,6 +56,7 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     textColor: "text-orange-600 dark:text-orange-400",
     requiresApiKey: true,
     placeholder: "sk-ant-…",
+    supportsEmbedding: false,
   },
   google: {
     label: "Google AI",
@@ -60,6 +66,7 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     textColor: "text-blue-600 dark:text-blue-400",
     requiresApiKey: true,
     placeholder: "AIza…",
+    supportsEmbedding: true,
   },
   ollama: {
     label: "Ollama",
@@ -69,6 +76,7 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     textColor: "text-violet-600 dark:text-violet-400",
     requiresApiKey: false,
     placeholder: "",
+    supportsEmbedding: true,
   },
   groq: {
     label: "Groq",
@@ -78,6 +86,7 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     textColor: "text-rose-600 dark:text-rose-400",
     requiresApiKey: true,
     placeholder: "gsk_…",
+    supportsEmbedding: false,
   },
 };
 
@@ -91,6 +100,7 @@ function getMeta(provider: string): ProviderMeta {
       textColor: "text-gray-600 dark:text-gray-400",
       requiresApiKey: true,
       placeholder: "API key…",
+      supportsEmbedding: false,
     }
   );
 }
@@ -104,6 +114,7 @@ const ALL_PROVIDER_KEYS = Object.keys(PROVIDER_META);
 const providerFormSchema = z
   .object({
     provider: z.string().min(1, "Please select a provider"),
+    type: z.enum(["language", "embedding"]),
     name: z.string(),
     model: z.string().min(1, "Please select a model"),
     apiKey: z.string(),
@@ -126,6 +137,61 @@ interface ModelInfo {
   id: string;
   name: string;
   description?: string;
+}
+
+/** Turn raw server / API error strings into short, friendly messages. */
+function parseModelError(raw: string): string {
+  const lower = raw.toLowerCase();
+
+  if (
+    lower.includes("api key not valid") ||
+    lower.includes("invalid api key") ||
+    lower.includes("incorrect api key") ||
+    lower.includes("invalid_api_key") ||
+    lower.includes("api_key_invalid")
+  ) {
+    return "Invalid API key. Please double-check and try again.";
+  }
+
+  if (
+    lower.includes("unauthorized") ||
+    lower.includes("authentication") ||
+    lower.includes("permission denied") ||
+    lower.includes("403")
+  ) {
+    return "Authentication failed. Your API key may lack the required permissions.";
+  }
+
+  if (lower.includes("rate limit") || lower.includes("429")) {
+    return "Rate limited by the provider. Please wait a moment and retry.";
+  }
+
+  if (lower.includes("not found") || lower.includes("404")) {
+    return "Provider endpoint not found. Check your provider configuration.";
+  }
+
+  if (
+    lower.includes("econnrefused") ||
+    lower.includes("fetch failed") ||
+    lower.includes("network")
+  ) {
+    return "Could not reach the provider. Is it running and accessible?";
+  }
+
+  if (lower.includes("timeout") || lower.includes("timed out")) {
+    return "Request timed out. The provider may be slow or unreachable.";
+  }
+
+  // Fallback: strip Convex wrapper noise, keep first sentence
+  const cleaned = raw
+    .replace(/^.*?Uncaught Error:\s*/i, "")
+    .replace(/^.*?Server Error:\s*/i, "");
+  const firstSentence = cleaned.split(/[.!]\s/)[0];
+  if (firstSentence && firstSentence.length < 120) {
+    return firstSentence.endsWith(".") ? firstSentence : `${firstSentence}.`;
+  }
+
+  return "Failed to fetch models. Please verify your API key and try again.";
 }
 
 function useProviderModels(provider: string | null, apiKey: string) {
@@ -154,9 +220,8 @@ function useProviderModels(provider: string | null, apiKey: string) {
       });
       setModels(result);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to fetch models";
-      setError(message);
+      const raw = err instanceof Error ? err.message : String(err);
+      setError(parseModelError(raw));
       setModels([]);
     } finally {
       setLoading(false);
@@ -180,7 +245,78 @@ function useProviderModels(provider: string | null, apiKey: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Model Selector
+// Model Autocomplete — self-contained, uncontrolled input
+// ---------------------------------------------------------------------------
+
+function ModelAutocomplete({
+  models,
+  selectedModel,
+  onModelChange,
+}: {
+  models: ModelInfo[];
+  selectedModel: string;
+  onModelChange: (modelId: string) => void;
+}) {
+  const modelIds = useMemo(() => new Set(models.map((m) => m.id)), [models]);
+
+  return (
+    <Autocomplete.Root
+      items={models}
+      defaultValue={selectedModel}
+      onValueChange={(val) => {
+        if (modelIds.has(val)) {
+          onModelChange(val);
+        }
+      }}
+      autoHighlight
+      openOnInputClick
+    >
+      <div className="relative mt-1.5">
+        <Autocomplete.Input
+          id="model-select"
+          placeholder="Search models…"
+          className="w-full h-10 px-3 pr-16 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+          <Autocomplete.Clear className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+            <X className="h-3.5 w-3.5" />
+          </Autocomplete.Clear>
+          <Autocomplete.Trigger className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+            <ChevronDown className="h-4 w-4" />
+          </Autocomplete.Trigger>
+        </div>
+      </div>
+      <Autocomplete.Portal>
+        <Autocomplete.Positioner className="z-50" sideOffset={4}>
+          <Autocomplete.Popup className="max-h-60 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl">
+            <Autocomplete.Empty className="px-3 py-2 text-sm text-gray-400 italic">
+              No matching models.
+            </Autocomplete.Empty>
+            <Autocomplete.List className="p-1">
+              {(model: ModelInfo) => (
+                <Autocomplete.Item
+                  key={model.id}
+                  value={model.id}
+                  className="flex items-center gap-2 px-3 py-2 text-sm rounded-md cursor-pointer text-gray-900 dark:text-gray-100 hover:bg-blue-50 dark:hover:bg-blue-900/20 data-[highlighted]:bg-blue-50 dark:data-[highlighted]:bg-blue-900/20 data-[selected]:font-medium"
+                >
+                  <span className="font-mono text-xs truncate flex-1">
+                    {model.id}
+                  </span>
+                  {model.id === selectedModel && (
+                    <Check className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                  )}
+                </Autocomplete.Item>
+              )}
+            </Autocomplete.List>
+          </Autocomplete.Popup>
+        </Autocomplete.Positioner>
+      </Autocomplete.Portal>
+    </Autocomplete.Root>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Model Selector — Base UI Autocomplete
 // ---------------------------------------------------------------------------
 
 function ModelSelector({
@@ -252,18 +388,11 @@ function ModelSelector({
           No models found for this provider.
         </p>
       ) : (
-        <select
-          id="model-select"
-          value={selectedModel}
-          onChange={(e) => onModelChange(e.target.value)}
-          className="mt-1.5 w-full h-10 px-3 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name} ({m.id})
-            </option>
-          ))}
-        </select>
+        <ModelAutocomplete
+          models={models}
+          selectedModel={selectedModel}
+          onModelChange={onModelChange}
+        />
       )}
 
       {loading && models.length > 0 && (
@@ -298,6 +427,10 @@ export function ProviderFormPage() {
   const createProvider = useMutation(api.aiProviders.create);
   const updateProvider = useMutation(api.aiProviders.update);
 
+  const [searchParams] = useSearchParams();
+  const initialType =
+    searchParams.get("type") === "embedding" ? "embedding" : "language";
+
   const {
     register,
     handleSubmit,
@@ -309,6 +442,7 @@ export function ProviderFormPage() {
     resolver: zodResolver(providerFormSchema),
     defaultValues: {
       provider: "",
+      type: initialType,
       name: "",
       model: "",
       apiKey: "",
@@ -319,16 +453,24 @@ export function ProviderFormPage() {
   const [copied, setCopied] = useState(false);
 
   const selectedProvider = watch("provider");
+  const selectedType = watch("type");
   const apiKeyValue = watch("apiKey");
   const selectedModel = watch("model");
 
   const meta = selectedProvider ? getMeta(selectedProvider) : null;
+
+  // Filter provider keys based on selected type
+  const availableProviders =
+    selectedType === "embedding"
+      ? ALL_PROVIDER_KEYS.filter((k) => PROVIDER_META[k].supportsEmbedding)
+      : ALL_PROVIDER_KEYS;
 
   // When editing and data loads, populate the form once
   useEffect(() => {
     if (isEditing && provider) {
       reset({
         provider: provider.provider,
+        type: provider.type,
         name: provider.name ?? "",
         model: provider.model ?? "",
         apiKey: provider.apiKey ?? "",
@@ -359,12 +501,16 @@ export function ProviderFormPage() {
         apiKey: data.apiKey || undefined,
       });
     } else {
+      // Determine which providers of this type already exist
+      const sameTypeCount =
+        allProviders?.filter((p) => p.type === data.type).length ?? 0;
       await createProvider({
         provider: data.provider,
+        type: data.type,
         name: data.name || undefined,
         model: data.model,
         apiKey: data.apiKey || undefined,
-        isDefault: allProviders?.length === 0,
+        isDefault: sameTypeCount === 0,
       });
     }
     navigate("/providers");
@@ -419,12 +565,59 @@ export function ProviderFormPage() {
         onSubmit={handleSubmit(onValid)}
         className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6 space-y-6"
       >
+        {/* ── Type Toggle (Add mode only) ── */}
+        {!isEditing && (
+          <div>
+            <Label>Model Type</Label>
+            <div className="mt-2 flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden w-fit">
+              {(["language", "embedding"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => {
+                    setValue("type", t);
+                    setValue("provider", "");
+                    setValue("model", "");
+                  }}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                    selectedType === t
+                      ? "bg-blue-500 text-white"
+                      : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  {t === "language" ? "Language Model" : "Embedding Model"}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+              {selectedType === "language"
+                ? "For chat, text generation, and AI agent responses."
+                : "For vectorizing artifacts and semantic search."}
+            </p>
+          </div>
+        )}
+
+        {/* ── Type badge (Edit mode) ── */}
+        {isEditing && provider && (
+          <span
+            className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${
+              provider.type === "embedding"
+                ? "text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20"
+                : "text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20"
+            }`}
+          >
+            {provider.type === "embedding"
+              ? "Embedding Model"
+              : "Language Model"}
+          </span>
+        )}
+
         {/* ── Provider Selection (Add mode only) ── */}
         {!isEditing && (
           <div>
             <Label>Provider</Label>
             <div className="mt-3 space-y-3">
-              {ALL_PROVIDER_KEYS.map((key) => {
+              {availableProviders.map((key) => {
                 const m = PROVIDER_META[key];
                 const isSelected = selectedProvider === key;
                 return (
