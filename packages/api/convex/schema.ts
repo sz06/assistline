@@ -19,6 +19,7 @@ export default defineSchema({
   contacts: defineTable({
     name: v.optional(v.string()),
     nickname: v.optional(v.string()),
+    otherNames: v.optional(v.array(v.string())),
     roles: v.optional(v.array(v.id("roles"))),
     avatarUrl: v.optional(v.string()),
     phoneNumbers: v.optional(

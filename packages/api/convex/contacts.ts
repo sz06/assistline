@@ -28,6 +28,7 @@ const addressValidator = v.object({
 const contactFields = {
   name: v.optional(v.string()),
   nickname: v.optional(v.string()),
+  otherNames: v.optional(v.array(v.string())),
   phoneNumbers: v.optional(v.array(phoneNumberValidator)),
   emails: v.optional(v.array(emailValidator)),
   company: v.optional(v.string()),

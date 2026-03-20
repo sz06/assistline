@@ -1,13 +1,28 @@
 import { api, type Id } from "@repo/api";
 import { Button, Input, PageHeader } from "@repo/ui";
 import { useQuery } from "convex/react";
-import { Loader2, Mail, Phone, Plus, Search, Users } from "lucide-react";
+import {
+  ArrowUpDown,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Loader2,
+  Mail,
+  Phone,
+  Plus,
+  Search,
+  Users,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+type SortField = "name" | "company" | "created";
+type SortDir = "asc" | "desc";
 
 interface PhoneEntry {
   label?: string;
@@ -19,32 +34,39 @@ interface EmailEntry {
   value: string;
 }
 
-interface AddressEntry {
-  label?: string;
-  street?: string;
-  city?: string;
-  state?: string;
-  postalCode?: string;
-  country?: string;
+interface Contact {
+  _id: Id<"contacts">;
+  _creationTime: number;
+  name?: string;
+  nickname?: string;
+  otherNames?: string[];
+  phoneNumbers?: PhoneEntry[];
+  emails?: EmailEntry[];
+  company?: string;
+  jobTitle?: string;
+  birthday?: string;
+  notes?: string;
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Generate initials for avatar */
-function getInitials(name?: string, nickname?: string): string {
-  if (name) {
-    const parts = name.trim().split(" ");
-    if (parts.length > 1)
-      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-    return name[0].toUpperCase();
-  }
-  if (nickname) return nickname[0].toUpperCase();
-  return "?";
+const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
+
+function getInitials(
+  name?: string,
+  nickname?: string,
+  otherNames?: string[],
+): string {
+  const displayStr = name || nickname || otherNames?.[0];
+  if (!displayStr) return "?";
+  const parts = displayStr.trim().split(" ");
+  if (parts.length > 1)
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  return displayStr[0].toUpperCase();
 }
 
-/** Pick a gradient based on the name for visual variety */
 const GRADIENTS = [
   "from-violet-500 to-purple-600",
   "from-blue-500 to-cyan-500",
@@ -56,16 +78,28 @@ const GRADIENTS = [
   "from-sky-500 to-blue-500",
 ];
 
-function pickGradient(name: string): string {
+function pickGradient(str: string): string {
   let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
   }
   return GRADIENTS[Math.abs(hash) % GRADIENTS.length];
 }
 
-function displayName(name?: string, nickname?: string): string {
-  return name?.trim() || nickname || "Unnamed Contact";
+function displayName(
+  name?: string,
+  nickname?: string,
+  otherNames?: string[],
+): string {
+  return name?.trim() || nickname || otherNames?.[0] || "Unnamed Contact";
+}
+
+function formatDate(ts: number): string {
+  return new Date(ts).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -77,31 +111,98 @@ export function ContactsPage() {
   const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(10);
 
-  // Filter contacts by search query
-  const filtered = useMemo(() => {
-    if (!contacts) return undefined;
-    if (!search.trim()) return contacts;
-    const q = search.toLowerCase();
-    return contacts.filter((c) => {
-      const name = displayName(c.name, c.nickname).toLowerCase();
-      const company = (c.company ?? "").toLowerCase();
-      const phones = (c.phoneNumbers ?? [])
-        .map((p) => p.value)
-        .join(" ")
-        .toLowerCase();
-      const emails = (c.emails ?? [])
-        .map((e) => e.value)
-        .join(" ")
-        .toLowerCase();
-      return (
-        name.includes(q) ||
-        company.includes(q) ||
-        phones.includes(q) ||
-        emails.includes(q)
-      );
+  // Toggle sort on column click
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+    setPage(1);
+  };
+
+  // Filter → Sort → Paginate
+  const { paged, totalFiltered } = useMemo(() => {
+    if (!contacts) return { paged: undefined, totalFiltered: 0 };
+
+    // 1. Filter
+    let list = contacts;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = contacts.filter((c) => {
+        const n = displayName(c.name, c.nickname).toLowerCase();
+        const comp = (c.company ?? "").toLowerCase();
+        const phones = (c.phoneNumbers ?? [])
+          .map((p) => p.value)
+          .join(" ")
+          .toLowerCase();
+        const emails = (c.emails ?? [])
+          .map((e) => e.value)
+          .join(" ")
+          .toLowerCase();
+        return (
+          n.includes(q) ||
+          comp.includes(q) ||
+          phones.includes(q) ||
+          emails.includes(q)
+        );
+      });
+    }
+
+    // 2. Sort
+    const sorted = [...list].sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "name": {
+          const na = displayName(
+            a.name,
+            a.nickname,
+            a.otherNames,
+          ).toLowerCase();
+          const nb = displayName(
+            b.name,
+            b.nickname,
+            b.otherNames,
+          ).toLowerCase();
+          cmp = na.localeCompare(nb);
+          break;
+        }
+        case "company": {
+          const ca = (a.company ?? "").toLowerCase();
+          const cb = (b.company ?? "").toLowerCase();
+          cmp = ca.localeCompare(cb);
+          break;
+        }
+        case "created":
+          cmp = a._creationTime - b._creationTime;
+          break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [contacts, search]);
+
+    // 3. Paginate
+    const start = (page - 1) * pageSize;
+    return {
+      paged: sorted.slice(start, start + pageSize),
+      totalFiltered: sorted.length,
+    };
+  }, [contacts, search, sortField, sortDir, page, pageSize]);
+
+  // Reset page when search changes
+  const handleSearch = (value: string) => {
+    setSearch(value);
+    setPage(1);
+  };
+
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const rangeStart = totalFiltered === 0 ? 0 : (page - 1) * pageSize + 1;
+  const rangeEnd = Math.min(page * pageSize, totalFiltered);
 
   return (
     <div className="p-4 md:p-6 overflow-auto h-full">
@@ -127,7 +228,7 @@ export function ContactsPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => handleSearch(e.target.value)}
               placeholder="Search by name, company, phone, email…"
               className="pl-10"
               data-testid="contacts-search"
@@ -135,15 +236,15 @@ export function ContactsPage() {
           </div>
         )}
 
-        {/* ── Contact Grid ──────────────────────────────────── */}
+        {/* ── Content ────────────────────────────────────────── */}
         <div className="mt-4">
-          {filtered === undefined ? (
+          {paged === undefined ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
             </div>
-          ) : filtered.length === 0 && !search ? (
+          ) : paged.length === 0 && !search ? (
             <EmptyState onAdd={() => navigate("/contacts/add")} />
-          ) : filtered.length === 0 && search ? (
+          ) : paged.length === 0 && search ? (
             <div className="text-center py-16">
               <Search className="h-10 w-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
               <p className="text-gray-500 dark:text-gray-400 text-sm">
@@ -152,15 +253,108 @@ export function ContactsPage() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filtered.map((contact) => (
-                <ContactCard
-                  key={contact._id}
-                  contact={contact}
-                  onEdit={() => navigate(`/contacts/${contact._id}/update`)}
-                />
-              ))}
-            </div>
+            <>
+              {/* Table */}
+              <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
+                <table
+                  className="w-full text-left text-sm"
+                  data-testid="contacts-table"
+                >
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-gray-900/60 border-b border-gray-200 dark:border-gray-800">
+                      <SortableHeader
+                        label="Name"
+                        field="name"
+                        activeField={sortField}
+                        dir={sortDir}
+                        onSort={handleSort}
+                      />
+                      <SortableHeader
+                        label="Company"
+                        field="company"
+                        activeField={sortField}
+                        dir={sortDir}
+                        onSort={handleSort}
+                        className="hidden sm:table-cell"
+                      />
+                      <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden md:table-cell">
+                        Phone
+                      </th>
+                      <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden lg:table-cell">
+                        Email
+                      </th>
+                      <SortableHeader
+                        label="Added"
+                        field="created"
+                        activeField={sortField}
+                        dir={sortDir}
+                        onSort={handleSort}
+                        className="hidden xl:table-cell"
+                      />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {paged.map((contact) => (
+                      <ContactRow
+                        key={contact._id}
+                        contact={contact}
+                        onEdit={() =>
+                          navigate(`/contacts/${contact._id}/update`)
+                        }
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination bar */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 text-sm text-gray-500 dark:text-gray-400">
+                <div className="flex items-center gap-2">
+                  <span>Rows per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setPage(1);
+                    }}
+                    className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    data-testid="page-size-select"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span data-testid="pagination-info">
+                    {rangeStart}–{rangeEnd} of {totalFiltered}
+                  </span>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => p - 1)}
+                      className="p-1.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      data-testid="pagination-prev"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={page >= totalPages}
+                      onClick={() => setPage((p) => p + 1)}
+                      className="p-1.5 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      data-testid="pagination-next"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -169,73 +363,139 @@ export function ContactsPage() {
 }
 
 // ---------------------------------------------------------------------------
-// Contact Card
+// Sortable Header
 // ---------------------------------------------------------------------------
 
-function ContactCard({
+function SortableHeader({
+  label,
+  field,
+  activeField,
+  dir,
+  onSort,
+  className = "",
+}: {
+  label: string;
+  field: SortField;
+  activeField: SortField;
+  dir: SortDir;
+  onSort: (f: SortField) => void;
+  className?: string;
+}) {
+  const isActive = field === activeField;
+  return (
+    <th className={`px-4 py-3 ${className}`}>
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+        data-testid={`sort-${field}`}
+      >
+        {label}
+        {isActive ? (
+          dir === "asc" ? (
+            <ChevronUp className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-40" />
+        )}
+      </button>
+    </th>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Contact Row
+// ---------------------------------------------------------------------------
+
+function ContactRow({
   contact,
   onEdit,
 }: {
-  contact: {
-    _id: Id<"contacts">;
-    name?: string;
-    nickname?: string;
-    phoneNumbers?: PhoneEntry[];
-    emails?: EmailEntry[];
-    company?: string;
-    jobTitle?: string;
-    birthday?: string;
-    notes?: string;
-    addresses?: AddressEntry[];
-  };
+  contact: Contact;
   onEdit: () => void;
 }) {
-  const name = displayName(contact.name, contact.nickname);
-  const initials = getInitials(contact.name, contact.nickname);
+  const name = displayName(contact.name, contact.nickname, contact.otherNames);
+  const initials = getInitials(
+    contact.name,
+    contact.nickname,
+    contact.otherNames,
+  );
   const gradient = pickGradient(name);
   const primaryPhone = contact.phoneNumbers?.[0]?.value;
   const primaryEmail = contact.emails?.[0]?.value;
 
   return (
-    <button
-      type="button"
+    <tr
       onClick={onEdit}
-      data-testid={`contact-card-${contact._id}`}
-      className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden group w-full text-left px-4 py-4 flex items-center gap-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      data-testid={`contact-row-${contact._id}`}
+      className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/60 cursor-pointer transition-colors group"
     >
-      {/* Avatar */}
-      <div
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-white font-semibold text-sm shadow-sm group-hover:scale-105 transition-transform`}
-      >
-        {initials}
-      </div>
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
-          {name}
-        </h3>
-        {(contact.company || contact.jobTitle) && (
-          <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-            {[contact.jobTitle, contact.company].filter(Boolean).join(" · ")}
-          </p>
-        )}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-          {primaryPhone && (
-            <span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-              <Phone className="h-3 w-3" />
-              {primaryPhone}
-            </span>
-          )}
-          {primaryEmail && (
-            <span className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-              <Mail className="h-3 w-3" />
-              <span className="truncate max-w-[140px]">{primaryEmail}</span>
-            </span>
-          )}
+      {/* Name + Avatar */}
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-white font-semibold text-xs shadow-sm group-hover:scale-105 transition-transform`}
+          >
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
+              {name}
+            </h3>
+            {contact.nickname && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                aka {contact.nickname}
+              </p>
+            )}
+            {contact.otherNames && contact.otherNames.length > 0 && (
+              <p className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5">
+                {contact.otherNames.join(", ")}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
-    </button>
+      </td>
+
+      {/* Company */}
+      <td className="px-4 py-3 hidden sm:table-cell">
+        <span className="text-sm text-gray-600 dark:text-gray-300 truncate block max-w-[180px]">
+          {contact.company || "—"}
+        </span>
+      </td>
+
+      {/* Phone */}
+      <td className="px-4 py-3 hidden md:table-cell">
+        {primaryPhone ? (
+          <span className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300">
+            <Phone className="h-3.5 w-3.5 text-gray-400" />
+            {primaryPhone}
+          </span>
+        ) : (
+          <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
+        )}
+      </td>
+
+      {/* Email */}
+      <td className="px-4 py-3 hidden lg:table-cell">
+        {primaryEmail ? (
+          <span className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 truncate max-w-[200px]">
+            <Mail className="h-3.5 w-3.5 text-gray-400" />
+            {primaryEmail}
+          </span>
+        ) : (
+          <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
+        )}
+      </td>
+
+      {/* Added date */}
+      <td className="px-4 py-3 hidden xl:table-cell">
+        <span className="text-sm text-gray-500 dark:text-gray-400">
+          {formatDate(contact._creationTime)}
+        </span>
+      </td>
+    </tr>
   );
 }
 

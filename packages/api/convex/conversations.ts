@@ -42,7 +42,10 @@ async function resolveOtherParticipantContact(
       const contact = await ctx.db.get(identity.contactId);
       if (contact) {
         return {
-          name: contact.name?.trim() || (conv.name ?? participantMatrixId),
+          name:
+            contact.name?.trim() ||
+            contact.otherNames?.[0] ||
+            (conv.name ?? participantMatrixId),
           phone: contact.phoneNumbers?.[0]?.value ?? "",
           email: contact.emails?.[0]?.value ?? "",
         };
@@ -169,7 +172,8 @@ export const getWithMessages = query({
           if (identity) {
             const contact = await ctx.db.get(identity.contactId);
             if (contact) {
-              senderName = contact.name?.trim() || undefined;
+              senderName =
+                contact.name?.trim() || contact.otherNames?.[0] || undefined;
             }
           }
 

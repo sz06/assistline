@@ -66,7 +66,7 @@ test.describe("Contacts Page", () => {
     // Click card and wait for navigation to the update page
     await Promise.all([
       contactsPage.page.waitForURL("**/contacts/*/update"),
-      contactsPage.clickCard("Bob Jones"),
+      contactsPage.clickRow("Bob Jones"),
     ]);
 
     // Wait for form data to load
@@ -85,7 +85,7 @@ test.describe("Contacts Page", () => {
     // Verify update: navigate back and check
     await Promise.all([
       contactsPage.page.waitForURL("**/contacts/*/update"),
-      contactsPage.clickCard("Bob Jones"),
+      contactsPage.clickRow("Bob Jones"),
     ]);
     await expect(contactsPage.companyInput).toHaveValue("NewCorp");
   });

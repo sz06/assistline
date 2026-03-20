@@ -127,35 +127,36 @@ export const insertMessage = mutation({
         ? cleanPhoneNumber(senderNameTrimmed)
         : undefined);
 
-    // Build the real display name — only use senderName if it's not a phone number
-    const realName = nameIsPhone ? undefined : senderNameTrimmed;
+    // Determine the platform from the Matrix ID localpart
+    const platform = localpart?.includes("whatsapp_") ? "whatsapp" : undefined;
+
+    // Build otherNames entry — any non-empty senderName goes here (both
+    // phone-like and real names). Stored as plain strings; bridge suffixes
+    // like "(WA)" are kept as-is since they provide useful context.
+    const otherNameEntry = senderNameTrimmed ?? undefined;
 
     if (!existingIdentity) {
       // ───── Create a brand-new contact ─────
+      // name is NEVER auto-filled — only the user sets it
       const phoneNumbers = bestPhone
         ? [{ label: "Mobile", value: bestPhone }]
         : undefined;
 
       const contactId = await ctx.db.insert("contacts", {
-        name: realName,
         avatarUrl: args.senderAvatarUrl,
         phoneNumbers,
+        otherNames: otherNameEntry ? [otherNameEntry] : undefined,
       });
       await ctx.db.insert("contactIdentities", {
         contactId,
         matrixId: args.sender,
-        platform: localpart?.includes("whatsapp_") ? "whatsapp" : undefined,
+        platform,
       });
     } else {
       // ───── Update existing contact with any missing data ─────
       const contact = await ctx.db.get(existingIdentity.contactId);
       if (contact) {
         const patch: Record<string, unknown> = {};
-
-        // Fill name if currently empty and we have a real (non-phone) name
-        if (!contact.name?.trim() && realName) {
-          patch.name = realName;
-        }
 
         // Fill phone if currently empty and we have one
         if (
@@ -178,8 +179,16 @@ export const insertMessage = mutation({
               { label: "Mobile", value: cleanPhoneNumber(contact.name) },
             ];
           }
-          // Clear or replace the name
-          patch.name = realName ?? undefined;
+          // Clear the name — it should only be user-set
+          patch.name = undefined;
+        }
+
+        // Append to otherNames if we have a new entry and it's not already present
+        if (otherNameEntry) {
+          const existing = contact.otherNames ?? [];
+          if (!existing.includes(otherNameEntry)) {
+            patch.otherNames = [...existing, otherNameEntry];
+          }
         }
 
         if (Object.keys(patch).length > 0) {

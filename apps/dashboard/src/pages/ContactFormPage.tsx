@@ -31,22 +31,20 @@ const addressEntrySchema = z.object({
   country: z.string().optional(),
 });
 
-const contactFormSchema = z
-  .object({
-    name: z.string(),
-    nickname: z.string(),
-    phoneNumbers: z.array(phoneEntrySchema),
-    emails: z.array(emailEntrySchema),
-    company: z.string(),
-    jobTitle: z.string(),
-    birthday: z.string(),
-    notes: z.string(),
-    addresses: z.array(addressEntrySchema),
-  })
-  .refine((data) => data.name.trim() || data.nickname.trim(), {
-    message: "Either name or nickname is required",
-    path: ["name"],
-  });
+const otherNameEntrySchema = z.string().min(1, "Name is required");
+
+const contactFormSchema = z.object({
+  name: z.string(),
+  nickname: z.string(),
+  otherNames: z.array(otherNameEntrySchema),
+  phoneNumbers: z.array(phoneEntrySchema),
+  emails: z.array(emailEntrySchema),
+  company: z.string(),
+  jobTitle: z.string(),
+  birthday: z.string(),
+  notes: z.string(),
+  addresses: z.array(addressEntrySchema),
+});
 
 type ContactFormData = z.infer<typeof contactFormSchema>;
 
@@ -79,12 +77,15 @@ export function ContactFormPage() {
     handleSubmit,
     control,
     reset,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<ContactFormData>({
     resolver: zodResolver(contactFormSchema),
     defaultValues: {
       name: "",
       nickname: "",
+      otherNames: [],
       phoneNumbers: [],
       emails: [],
       company: "",
@@ -113,12 +114,16 @@ export function ContactFormPage() {
     remove: removeAddress,
   } = useFieldArray({ control, name: "addresses" });
 
+  // otherNames is string[] — useFieldArray needs objects, so manage manually
+  const otherNames = watch("otherNames");
+
   // When editing and data loads, populate the form once
   useEffect(() => {
     if (isEditing && contact) {
       reset({
         name: contact.name ?? "",
         nickname: contact.nickname ?? "",
+        otherNames: contact.otherNames ?? [],
         phoneNumbers: contact.phoneNumbers ?? [],
         emails: contact.emails ?? [],
         company: contact.company ?? "",
@@ -134,6 +139,7 @@ export function ContactFormPage() {
     const payload = {
       name: data.name || undefined,
       nickname: data.nickname || undefined,
+      otherNames: data.otherNames.length > 0 ? data.otherNames : undefined,
       phoneNumbers:
         data.phoneNumbers.length > 0 ? data.phoneNumbers : undefined,
       emails: data.emails.length > 0 ? data.emails : undefined,
@@ -248,6 +254,56 @@ export function ContactFormPage() {
             placeholder="Optional"
             className="mt-1.5 max-w-sm"
           />
+        </div>
+
+        {/* ── Other Names ── */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <Label>Other Names</Label>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Names from messaging platforms or alternate identities.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setValue("otherNames", [...otherNames, ""])}
+              className="text-xs text-blue-500 hover:text-blue-600 font-medium transition-colors"
+            >
+              + Add Name
+            </button>
+          </div>
+          {otherNames.map((_val, i) => (
+            <div key={i} className="flex items-center gap-2 mt-2">
+              <Input
+                {...register(`otherNames.${i}` as const)}
+                placeholder="e.g. Shahzaib (WA)"
+                className="flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const updated = [...otherNames];
+                  updated.splice(i, 1);
+                  setValue("otherNames", updated);
+                }}
+                className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                aria-label="Remove other name"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+          {otherNames.length === 0 && (
+            <p className="text-sm text-gray-500 italic">No other names added</p>
+          )}
+          {errors.otherNames && (
+            <p className="text-xs text-red-500 mt-1">
+              {typeof errors.otherNames.message === "string"
+                ? errors.otherNames.message
+                : "Please fix other names errors"}
+            </p>
+          )}
         </div>
 
         {/* ── Phone Numbers ── */}

@@ -48,13 +48,13 @@ export class ContactsPage {
 
   // ── Helpers ──────────────────────────────────────
 
-  /** Returns all visible contact cards */
-  getContactCards() {
-    return this.page.locator("[data-testid^='contact-card-']");
+  /** Returns all visible contact rows */
+  getContactRows() {
+    return this.page.locator("[data-testid^='contact-row-']");
   }
 
-  /** Click on a contact card by its displayed name */
-  async clickCard(name: string) {
+  /** Click on a contact row by its displayed name */
+  async clickRow(name: string) {
     await this.page.locator("h3", { hasText: name }).first().click();
   }
 

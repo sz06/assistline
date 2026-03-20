@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.0] - 2026-03-20
+
+### Changed
+- **Contacts Page Redesign** (`apps/dashboard`): Replaced the card grid layout with a sortable data table. Contacts are now displayed as rows with columns for name, company, phone, email, and date added. Sortable column headers (name, company, added) toggle ascending/descending. Client-side pagination with configurable page size (10/25/50), prev/next navigation, and "X–Y of Z" range indicator. Responsive — phone, email, and date columns hide at smaller breakpoints. Rows show nickname and other names below the contact's display name.
+- **`otherNames` Simplified** (`packages/api`): Changed `otherNames` from `{ source: string; name: string }[]` to `string[]`. Bridge-provided display names (e.g. "Shahzaib (WA)") are now stored as plain strings. Updated schema, validators, `messages.ts` insert/update logic, and `conversations.ts` display-name resolution.
+- **Contact Form** (`apps/dashboard`): `otherNames` field is now an editable list of plain text inputs on both Add and Edit contact pages.
+
+## [2.12.0] - 2026-03-20
+
+### Changed
+- **Contact Auto-Creation** (`packages/api`): The `name` field is no longer auto-filled from bridge display names — it is now exclusively user-controlled. Bridge-provided names (e.g. WhatsApp contact names) are stored in a new `otherNames` array with source attribution. Phone numbers are stored as digits only (no `+` prefix). Existing contacts with phone-number-like names are migrated on next message.
+- **Display Name Fallback** (`packages/api`, `apps/dashboard`): Conversation list, chat headers, sender labels, and contact cards now follow the chain: `name` → `otherNames[0].name` → Matrix ID → "Unknown".
+
+### Added
+- **`otherNames` field** (`packages/api`): New `otherNames: [{ source, name }]` array on the `contacts` table for platform-provided display names.
+- **Other Names UI** (`apps/dashboard`): The contact edit page shows `otherNames` as read-only source-badged chips.
+
+## [2.11.1] - 2026-03-20
+
+### Fixed
+- **Outgoing Messages Shown as Incoming** (`apps/listener`): Messages sent from the user's WhatsApp phone app were displayed as incoming in the dashboard because the self-puppet Matrix ID was built with a `+` prefix (from the stored phone number) while mautrix-whatsapp creates puppet IDs without it. Stripped the leading `+` so the IDs match.
+
 ## [2.11.0] - 2026-03-19
 
 ### Added

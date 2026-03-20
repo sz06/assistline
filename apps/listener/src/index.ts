@@ -99,7 +99,8 @@ async function refreshChannelCache(): Promise<void> {
 
       // Build the self-puppet Matrix ID from the channel's connected phone
       if (channel.phoneNumber && platformType === "whatsapp") {
-        const puppetId = `@whatsapp_${channel.phoneNumber}:${serverName}`;
+        const digits = channel.phoneNumber.replace(/^\+/, "");
+        const puppetId = `@whatsapp_${digits}:${serverName}`;
         selfPuppetIds.add(puppetId);
         console.log(`[listener] ✓ Self-puppet: ${puppetId}`);
       }
