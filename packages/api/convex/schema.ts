@@ -16,6 +16,7 @@ export default defineSchema({
   contacts: defineTable({
     name: v.optional(v.string()),
     nickname: v.optional(v.string()),
+    roles: v.optional(v.array(v.id("roles"))),
     avatarUrl: v.optional(v.string()),
     phoneNumbers: v.optional(
       v.array(
@@ -139,11 +140,13 @@ export default defineSchema({
   })
     .index("by_conversationId_timestamp", ["conversationId", "timestamp"])
     .index("by_eventId", ["eventId"]),
-  user_context: defineTable({
-    fact: v.string(),
-    embedding: v.array(v.float64()),
-    sourceMessageId: v.optional(v.id("messages")),
-    timestamp: v.number(),
+  artifacts: defineTable({
+    value: v.string(), // The actual memory value
+    description: v.string(), // Textual description for semantic search
+    embedding: v.optional(v.array(v.float64())), // Vector for [description, value]
+    accessibleToRoles: v.array(v.id("roles")), // Roles allowed to access it
+    expiresAt: v.optional(v.number()),
+    updatedAt: v.number(),
   }).vectorIndex("by_embedding", {
     vectorField: "embedding",
     dimensions: 1536, // default OpenAI text-embedding-3-small dims
@@ -163,4 +166,20 @@ export default defineSchema({
     connectedAt: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_type", ["type"]),
+  roles: defineTable({
+    name: v.string(),
+    description: v.optional(v.string()),
+    color: v.optional(v.string()), // e.g. tailwind class "bg-red-100 text-red-700"
+  }).index("by_name", ["name"]),
+  auditLogs: defineTable({
+    action: v.string(), // e.g. "contact.create", "conversation.toggleAI"
+    source: v.union(v.literal("auto"), v.literal("manual")),
+    entity: v.optional(v.string()), // Table name: "contacts", "conversations", etc.
+    entityId: v.optional(v.string()), // Convex document ID of affected record
+    details: v.optional(v.string()), // JSON-stringified summary of what changed
+    timestamp: v.number(),
+  })
+    .index("by_timestamp", ["timestamp"])
+    .index("by_entity", ["entity", "timestamp"])
+    .index("by_action", ["action", "timestamp"]),
 });

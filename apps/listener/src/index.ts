@@ -75,7 +75,7 @@ const BRIDGE_BOT_PREFIXES: Record<string, "whatsapp" | "telegram"> = {
 };
 
 /** In-memory cache: platform type → Convex channel ID */
-let channelIdByType: Map<string, string> = new Map();
+const channelIdByType: Map<string, string> = new Map();
 
 /**
  * Set of Matrix user IDs that represent the authenticated user's own

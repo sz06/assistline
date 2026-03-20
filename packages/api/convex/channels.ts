@@ -44,12 +44,21 @@ export const create = mutation({
     label: v.string(),
   },
   handler: async (ctx, args) => {
-    return ctx.db.insert("channels", {
+    const id = await ctx.db.insert("channels", {
       type: args.type,
       label: args.label,
       status: "disconnected",
       updatedAt: Date.now(),
     });
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "channel.create",
+      source: "manual",
+      entity: "channels",
+      entityId: id,
+      details: JSON.stringify({ type: args.type, label: args.label }),
+      timestamp: Date.now(),
+    });
+    return id;
   },
 });
 
@@ -78,6 +87,15 @@ export const requestPairing = mutation({
         { channelId: args.id },
       );
     }
+
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "channel.requestPairing",
+      source: "manual",
+      entity: "channels",
+      entityId: args.id,
+      details: JSON.stringify({ type: channel.type }),
+      timestamp: Date.now(),
+    });
   },
 });
 
@@ -92,6 +110,13 @@ export const disconnect = mutation({
       connectedAt: undefined,
       error: undefined,
       updatedAt: Date.now(),
+    });
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "channel.disconnect",
+      source: "manual",
+      entity: "channels",
+      entityId: args.id,
+      timestamp: Date.now(),
     });
   },
 });
@@ -113,6 +138,14 @@ export const update = mutation({
     patch.updatedAt = Date.now();
 
     await ctx.db.patch(args.id, patch);
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "channel.update",
+      source: "manual",
+      entity: "channels",
+      entityId: args.id,
+      details: JSON.stringify({ label: args.label, type: args.type }),
+      timestamp: Date.now(),
+    });
   },
 });
 
@@ -120,7 +153,16 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("channels") },
   handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.id);
     await ctx.db.delete(args.id);
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "channel.delete",
+      source: "manual",
+      entity: "channels",
+      entityId: args.id,
+      details: JSON.stringify({ label: existing?.label, type: existing?.type }),
+      timestamp: Date.now(),
+    });
   },
 });
 

@@ -6,7 +6,9 @@ import {
   MessageSquare,
   Moon,
   Radio,
+  ScrollText,
   Settings,
+  Shield,
   Sun,
   Terminal,
   Users,
@@ -30,11 +32,21 @@ const navLinks = [
     href: "/channels",
     icon: <Radio className="h-5 w-5" />,
   },
-  { label: "Artifacts", href: "/artifacts", icon: <Database className="h-5 w-5" /> },
+  {
+    label: "Artifacts",
+    href: "/artifacts",
+    icon: <Database className="h-5 w-5" />,
+  },
+  { label: "Roles", href: "/roles", icon: <Shield className="h-5 w-5" /> },
   {
     label: "AI Providers",
     href: "/providers",
     icon: <Cpu className="h-5 w-5" />,
+  },
+  {
+    label: "Audit Logs",
+    href: "/audit-logs",
+    icon: <ScrollText className="h-5 w-5" />,
   },
   { label: "Config", href: "/config", icon: <Settings className="h-5 w-5" /> },
   {

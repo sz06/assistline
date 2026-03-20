@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 
 // ---------------------------------------------------------------------------
@@ -56,13 +57,26 @@ export const create = mutation({
         await ctx.db.patch(currentDefault._id, { isDefault: false });
       }
     }
-    return ctx.db.insert("aiProviders", {
+    const id = await ctx.db.insert("aiProviders", {
       provider: args.provider,
       name: args.name,
       model: args.model,
       apiKey: args.apiKey,
       isDefault: args.isDefault,
     });
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "aiProvider.create",
+      source: "manual",
+      entity: "aiProviders",
+      entityId: id,
+      details: JSON.stringify({
+        provider: args.provider,
+        name: args.name,
+        model: args.model,
+      }),
+      timestamp: Date.now(),
+    });
+    return id;
   },
 });
 
@@ -99,6 +113,18 @@ export const update = mutation({
     if (args.isDefault !== undefined) patch.isDefault = args.isDefault;
 
     await ctx.db.patch(args.id, patch);
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "aiProvider.update",
+      source: "manual",
+      entity: "aiProviders",
+      entityId: args.id,
+      details: JSON.stringify({
+        provider: args.provider,
+        name: args.name,
+        model: args.model,
+      }),
+      timestamp: Date.now(),
+    });
   },
 });
 
@@ -106,7 +132,19 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("aiProviders") },
   handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.id);
     await ctx.db.delete(args.id);
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "aiProvider.delete",
+      source: "manual",
+      entity: "aiProviders",
+      entityId: args.id,
+      details: JSON.stringify({
+        provider: existing?.provider,
+        name: existing?.name,
+      }),
+      timestamp: Date.now(),
+    });
   },
 });
 
@@ -126,5 +164,16 @@ export const setDefault = mutation({
     }
 
     await ctx.db.patch(args.id, { isDefault: true });
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "aiProvider.setDefault",
+      source: "manual",
+      entity: "aiProviders",
+      entityId: args.id,
+      details: JSON.stringify({
+        provider: provider.provider,
+        name: provider.name,
+      }),
+      timestamp: Date.now(),
+    });
   },
 });

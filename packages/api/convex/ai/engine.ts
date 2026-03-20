@@ -10,6 +10,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createGroq } from "@ai-sdk/groq";
 import { createOpenAI } from "@ai-sdk/openai";
+import type { EmbeddingModel, LanguageModel } from "ai";
 
 // ---------------------------------------------------------------------------
 // Supported provider keys (must match `aiProviders.provider` values)
@@ -41,7 +42,10 @@ interface ProviderConfig {
  * The returned object can be passed directly to `generateText`, `streamText`,
  * `generateObject`, etc.
  */
-export function resolveLanguageModel(config: ProviderConfig, modelId: string) {
+export function resolveLanguageModel(
+  config: ProviderConfig,
+  modelId: string,
+): LanguageModel {
   const { provider, apiKey } = config;
 
   switch (provider) {
@@ -72,7 +76,10 @@ export function resolveLanguageModel(config: ProviderConfig, modelId: string) {
 /**
  * Create an AI SDK embedding model from a stored provider config + model id.
  */
-export function resolveEmbeddingModel(config: ProviderConfig, modelId: string) {
+export function resolveEmbeddingModel(
+  config: ProviderConfig,
+  modelId: string,
+): EmbeddingModel {
   const { provider, apiKey } = config;
 
   switch (provider) {

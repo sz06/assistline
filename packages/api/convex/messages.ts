@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { cleanPhoneNumber, isPhoneNumberLike } from "./utils/contacts";
@@ -225,6 +226,19 @@ export const insertMessage = mutation({
     }
     await ctx.db.patch(conversationId, convPatch);
 
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "message.insert",
+      source: "auto",
+      entity: "messages",
+      entityId: messageId,
+      details: JSON.stringify({
+        conversationId,
+        sender: args.sender,
+        direction: args.direction,
+      }),
+      timestamp: args.timestamp,
+    });
+
     return messageId;
   },
 });
@@ -287,10 +301,20 @@ export const sendMessage = mutation({
     });
 
     // Update conversation lastMessageId, timestamp, and status
+    const now = Date.now();
     await ctx.db.patch(args.conversationId, {
       lastMessageId: messageId,
-      updatedAt: Date.now(),
+      updatedAt: now,
       status: "waiting_on_contact",
+    });
+
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "message.send",
+      source: "manual",
+      entity: "messages",
+      entityId: messageId,
+      details: JSON.stringify({ conversationId: args.conversationId }),
+      timestamp: now,
     });
 
     return messageId;
@@ -377,6 +401,15 @@ export const redactMessage = mutation({
     await ctx.db.patch(message._id, {
       isRedacted: true,
     });
+
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "message.redact",
+      source: "auto",
+      entity: "messages",
+      entityId: message._id,
+      details: JSON.stringify({ eventId: args.eventId }),
+      timestamp: Date.now(),
+    });
   },
 });
 
@@ -400,6 +433,15 @@ export const editMessage = mutation({
     await ctx.db.patch(message._id, {
       text: args.newText,
       editedAt: args.editTimestamp,
+    });
+
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "message.edit",
+      source: "auto",
+      entity: "messages",
+      entityId: message._id,
+      details: JSON.stringify({ eventId: args.eventId }),
+      timestamp: args.editTimestamp,
     });
   },
 });

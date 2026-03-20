@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
@@ -231,6 +231,7 @@ export const deleteConversation = mutation({
     conversationId: v.id("conversations"),
   },
   handler: async (ctx, args) => {
+    const conv = await ctx.db.get(args.conversationId);
     // Delete all messages first
     const messages = await ctx.db
       .query("messages")
@@ -245,6 +246,17 @@ export const deleteConversation = mutation({
 
     // Delete conversation
     await ctx.db.delete(args.conversationId);
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "conversation.delete",
+      source: "manual",
+      entity: "conversations",
+      entityId: args.conversationId,
+      details: JSON.stringify({
+        name: conv?.name,
+        messageCount: messages.length,
+      }),
+      timestamp: Date.now(),
+    });
   },
 });
 
@@ -284,6 +296,13 @@ export const markAsRead = mutation({
     if (!conv || (conv.unreadCount ?? 0) === 0) return;
 
     await ctx.db.patch(args.conversationId, { unreadCount: 0 });
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "conversation.markAsRead",
+      source: "manual",
+      entity: "conversations",
+      entityId: args.conversationId,
+      timestamp: Date.now(),
+    });
 
     // Find the latest message in this conversation to use as the read marker
     const lastMessage = await ctx.db

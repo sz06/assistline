@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 
 // ---------------------------------------------------------------------------
@@ -78,9 +79,22 @@ export const getIdentities = query({
 
 /** Create a new contact. */
 export const create = mutation({
-  args: contactFields,
+  args: {
+    ...contactFields,
+    source: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
+  },
   handler: async (ctx, args) => {
-    return ctx.db.insert("contacts", args);
+    const { source, ...fields } = args;
+    const id = await ctx.db.insert("contacts", fields);
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "contact.create",
+      source: source ?? "manual",
+      entity: "contacts",
+      entityId: id,
+      details: JSON.stringify({ name: args.name }),
+      timestamp: Date.now(),
+    });
+    return id;
   },
 });
 
@@ -89,19 +103,32 @@ export const update = mutation({
   args: {
     id: v.id("contacts"),
     ...contactFields,
+    source: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
   },
   handler: async (ctx, args) => {
-    const { id, ...fields } = args;
+    const { id, source, ...fields } = args;
     const existing = await ctx.db.get(id);
     if (!existing) throw new Error("Contact not found");
     await ctx.db.patch(id, fields);
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "contact.update",
+      source: source ?? "manual",
+      entity: "contacts",
+      entityId: id,
+      details: JSON.stringify({ name: fields.name }),
+      timestamp: Date.now(),
+    });
   },
 });
 
 /** Remove a contact and all associated contactIdentities. */
 export const remove = mutation({
-  args: { id: v.id("contacts") },
+  args: {
+    id: v.id("contacts"),
+    source: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
+  },
   handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.id);
     // Cascade-delete linked identities
     const identities = await ctx.db
       .query("contactIdentities")
@@ -111,5 +138,13 @@ export const remove = mutation({
       await ctx.db.delete(identity._id);
     }
     await ctx.db.delete(args.id);
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "contact.delete",
+      source: args.source ?? "manual",
+      entity: "contacts",
+      entityId: args.id,
+      details: JSON.stringify({ name: existing?.name }),
+      timestamp: Date.now(),
+    });
   },
 });

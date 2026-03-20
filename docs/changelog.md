@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.1] - 2026-03-19
+
+### Changed
+- **Artifacts: Removed `key` field** (`packages/api`, `apps/dashboard`): Artifacts no longer use a deterministic `key` for upserts. The `save` mutation has been split into separate `create` and `update` mutations that operate by document `_id`. The `by_key` index has been dropped. This simplifies the schema and aligns with the intended AI workflow where semantic search discovers existing artifacts and updates them by ID.
+- **Artifact Form** (`apps/dashboard`): Removed the key input field from the add/edit form. Description is now the primary label for each artifact.
+
+## [2.10.0] - 2026-03-19
+
+### Added
+- **Audit Logs** (`packages/api`, `apps/dashboard`): System-wide audit trail that records every mutation across the app. Each log entry captures the action, source (`auto` for listener/AI actions, `manual` for dashboard-triggered actions), entity, entity ID, details, and timestamp. New `auditLogs` table with `by_timestamp`, `by_entity`, and `by_action` indexes. Internal `log` mutation scheduled non-blockingly via `ctx.scheduler.runAfter(0, …)` from all existing mutations across `contacts`, `conversations`, `messages`, `channels`, `aiProviders`, `roles`, and `artifacts`.
+- **Audit Logs Page** (`apps/dashboard`): Premium timeline page at `/audit-logs` with source filter pills (All/Auto/Manual), entity dropdown filter, text search, action-specific icons, auto/manual badges, relative timestamps, and empty state.
+- **E2E Tests** (`apps/e2e`): Playwright page object and test spec for the Audit Logs page covering rendering, source/entity filtering, and search.
+
 ## [2.9.1] - 2026-03-19
 
 ### Fixed
