@@ -43,14 +43,26 @@ const contactFields = {
 // Queries
 // ---------------------------------------------------------------------------
 
-/** List all contacts, sorted by name. */
+/**
+ * List all contacts, sorted in three tiers:
+ * 1. Contacts with a user-set `name` (alphabetically)
+ * 2. Contacts with `otherNames` but no `name` (alphabetically by first otherName)
+ * 3. Everything else (by creation time)
+ */
 export const list = query({
   args: {},
   handler: async (ctx) => {
     const contacts = await ctx.db.query("contacts").collect();
+
     return contacts.sort((a, b) => {
-      const nameA = (a.name ?? "").trim().toLowerCase();
-      const nameB = (b.name ?? "").trim().toLowerCase();
+      const aTier = a.name?.trim() ? 0 : a.otherNames?.length ? 1 : 2;
+      const bTier = b.name?.trim() ? 0 : b.otherNames?.length ? 1 : 2;
+      if (aTier !== bTier) return aTier - bTier;
+
+      // Within the same tier, sort alphabetically (or by creation time for tier 2)
+      if (aTier === 2) return a._creationTime - b._creationTime;
+      const nameA = (a.name ?? a.otherNames?.[0] ?? "").trim().toLowerCase();
+      const nameB = (b.name ?? b.otherNames?.[0] ?? "").trim().toLowerCase();
       return nameA.localeCompare(nameB);
     });
   },
@@ -197,3 +209,5 @@ export const getContactProfileQuery = internalQuery({
     };
   },
 });
+
+

@@ -5,14 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.19.1] - 2026-03-21
+
+### Changed
+- **Contacts Sort Order** (`packages/api`, `apps/dashboard`): Default sort on the contacts page now uses a 3-tier ordering: contacts with a user-set `name` first, then contacts with bridge-provided `otherNames`, then unnamed contacts. Within each tier, contacts are sorted alphabetically (or by creation time for unnamed contacts). This ensures named contacts always appear at the top of the list.
+
+### Fixed
+- **Phone Numbers Saved as Other Names** (`packages/api`): When a WhatsApp contact had no display name, the bridge sent their phone number (e.g. "+14155552671 (WA)") as the display name, which was saved as an `otherName`. Now phone-number-like display names (with or without bridge suffixes) are detected via `stripBridgeSuffix` + `isPhoneNumberLike`, skipped as `otherNames`, and the phone number is extracted into `phoneNumbers` instead.
+
 ## [2.19.0] - 2026-03-21
 
 ### Changed
 - **Unified Init Container** (`docker`): Merged `convex-deployer` and `matrix-setup` into a single `assistline-init` container. It runs both Matrix bot setup (user creation, access token) and Convex function deployment in one shot on every `docker compose up`. Source code (`packages/api`, `packages/config`) is now volume-mounted read-only instead of baked into the image, so the container always deploys the latest code from disk — no more stale schemas after restarts.
+- **README Rewrite**: Replaced the stale Turbostack template README with AssistLine's actual architecture, 4-step quick start, development workflows table, environment variables reference, and tech stack.
 
 ### Added
+- **Auto Seed Data** (`docker/assistline-init`): Phase 3 of the init container now calls the `seedData` mutation via the Convex HTTP API to populate default config entries and roles on first boot.
 - **`pnpm listener:rebuild`** (`package.json`): One-command rebuild and restart of the `matrix-listener` container.
 - **`pnpm deploy`** (`package.json`): Full-stack deploy — pushes Convex functions and rebuilds the listener in one command.
+- **Admin Password** (`.env.example`, `scripts/setup.mjs`): Added `MATRIX_ADMIN_USERNAME` / `MATRIX_ADMIN_PASSWORD` to the env template and auto-generation script.
 
 ### Removed
 - **`convex-deployer`** container (`docker`): Replaced by `assistline-init`.

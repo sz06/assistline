@@ -1,146 +1,170 @@
-# Turbostack: Convex + Next.js + Vite + Clerk + Turborepo + Vercel
+# AssistLine
 
-![Turbostack Banner](./docs/assets/banner.png)
+A self-hosted, AI-powered messaging assistant that bridges WhatsApp (and soon Telegram) into a unified dashboard. Messages flow through a Matrix homeserver, get processed by AI agents, and surface as conversations with suggested replies, automated actions, and a persistent knowledge base.
 
-A premium, production-ready monorepo template for building high-performance, type-safe full-stack applications. Includes a Next.js marketing site and a Vite-powered app ready for native deployment via Capacitor.
+## Architecture
 
-## ✨ Features
+```text
+WhatsApp ←→ Mautrix Bridge ←→ Dendrite (Matrix) ←→ Listener → Convex ←→ Dashboard
+                                                                 ↕
+                                                            AI Agents
+```
 
-- 🏎️ **Turborepo** - High-performance build system for JavaScript/TypeScript monorepos.
-- 🎨 **Modern UI** - **Tailwind CSS v4** with **shadcn/ui** and **Base UI** primitives. No Radix UI.
-- 📱 **Cross-Platform** - Shared logic and components across **Next.js** (Marketing) and **Vite React** (App), with **Capacitor** for native deployments.
-- ⚡ **Reactive Backend** - **Convex** for a 100% type-safe, real-time backend and database.
-- 🔐 **Secure Auth** - **Clerk** integration for robust user management and authentication.
-- 🛠️ **Unified Toolchain** - **Biome** for lightning-fast linting and formatting.
-- 📈 **Insights** - **Vercel Analytics** integrated and ready for production.
+| Component | Description |
+|---|---|
+| **Dendrite** | Self-hosted Matrix homeserver — the event backbone |
+| **Mautrix WhatsApp** | WhatsApp ↔ Matrix bridge |
+| **Convex** | Self-hosted real-time backend (database, functions, agents) |
+| **Listener** | Node.js service that syncs Matrix events → Convex |
+| **Dashboard** | Vite + React SPA for managing conversations, contacts, and AI |
+| **AI Agents** | Chatter (reply suggestions) + Artifactor (knowledge base) |
 
-## 🛠️ Tech Stack
-
-- **Monorepo:** [Turborepo](https://turbo.build/)
-- **Package Manager:** [pnpm](https://pnpm.io/)
-- **Backend:** [Convex](https://convex.dev/)
-- **Marketing (www):** [Next.js 16](https://nextjs.org/) (App Router)
-- **App:** [Vite](https://vite.dev/) + [React](https://react.dev/) (SPA, Capacitor-ready)
-- **Auth:** [Clerk](https://clerk.com/)
-- **Toolchain:** [Biome](https://biomejs.dev/)
-- **Styling:** [Tailwind CSS v4](https://tailwindcss.com/), [shadcn/ui](https://ui.shadcn.com/), [Base UI](https://base-ui.com/)
-- **Analytics:** [Vercel Analytics](https://vercel.com/analytics)
-- **Testing:** [Playwright](https://playwright.dev/) (E2E), [Vite](https://vitest.dev/) (Unit)
-
-## 📁 Project Structure
+## Project Structure
 
 ```text
 ├── apps/
-│   ├── www/          # Next.js marketing site & landing pages
-│   ├── app/          # Vite React app (Capacitor-ready, runs on port 5173)
-│   └── e2e/          # Playwright end-to-end tests
+│   ├── dashboard/       # Vite React SPA (dev port 5174)
+│   ├── listener/        # Matrix → Convex sync service (Docker)
+│   └── e2e/             # Playwright end-to-end tests
 ├── packages/
-│   ├── api/          # Convex backend, schema, and shared business logic
-│   ├── ui/           # Shared high-performance UI components
-│   └── config/       # Shared TypeScript & Tailwind configurations
-└── docs/             # Project documentation and changelogs
+│   ├── api/             # Convex backend — schema, functions, agents
+│   ├── ui/              # Shared UI components + Storybook
+│   └── config/          # Shared TypeScript & Tailwind config
+├── docker/
+│   ├── docker-compose.yml
+│   ├── assistline-init/  # Unified init container (setup + deploy + seed)
+│   ├── dendrite.yaml     # Matrix homeserver config
+│   └── mautrix-data/     # WhatsApp bridge config & registration
+└── docs/
+    ├── changelog.md
+    └── glossary.md
 ```
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
-- Node.js (LTS)
-- [pnpm](https://pnpm.io/installation) (`npm install -g pnpm`)
-- [Docker & Docker Compose](https://docs.docker.com/get-docker/)
+- **Node.js** ≥ 20
+- **pnpm** ≥ 10 — `npm install -g pnpm`
+- **Docker & Docker Compose** — [Install Docker](https://docs.docker.com/get-docker/)
 
-### Quick Start (Local Development)
+### Quick Start
 
-1. **Clone the repo:**
-   ```bash
-   git clone <repository-url>
-   cd turbostack
-   ```
+```bash
+# 1. Clone and install
+git clone <repository-url>
+cd assistline
+pnpm install
 
-2. **Install dependencies:**
-   ```bash
-   pnpm install
-   ```
+# 2. Generate environment files and secrets
+pnpm setup:envs
 
-3. **Set up environment variables:**
-   ```bash
-   pnpm setup:envs
-   ```
-   *This copies all `.env.example` files to `.env.local` across the monorepo. You can optionally add a `TS_AUTHKEY` in the root `.env.local`.*
+# 3. Start all services (Dendrite, Convex, bridges, init)
+docker compose -f docker/docker-compose.yml up -d
 
-4. **Start the local backend services (Docker):**
-   ```bash
-   cd docker
-   docker compose up -d
-   cd ..
-   ```
-   *This spins up a local self-hosted Convex instance, Dendrite (Matrix), Mautrix-WhatsApp, and a Tailscale proxy.*
+# 4. Start the dashboard dev server
+pnpm dev
+```
 
-5. **Run the development environment:**
-   ```bash
-   # From the root
-   pnpm dev
-   ```
-   *This starts the frontend applications along with local Convex dev mode, seamlessly connecting them to the Docker backend.*
+That's it. The `assistline-init` container automatically:
+- Creates the Matrix bot user on Dendrite
+- Deploys all Convex functions and schema
+- Seeds default config entries and roles
 
-## 🔐 Authentication Setup
+Once running:
+- **Dashboard:** http://localhost:5174
+- **Convex Inspector:** http://localhost:6791 (run `pnpm convex:key` for the admin key)
 
-To sync Clerk auth with your Convex backend:
+### Connecting WhatsApp
 
-1. **Clerk Dashboard:**
-   - Go to **Configure** > **JWT Templates** > **New Template** > **Convex**.
-   - This creates a template named `convex`.
-   - Copy the **Issuer URL** (or use the **Frontend API URL** from API Keys).
+1. Open the Dashboard → **Channels** → **Add Channel** → **WhatsApp**
+2. Click **Connect** — a QR code will appear
+3. Scan the QR code with WhatsApp on your phone
+4. Messages will start flowing into the dashboard
 
-2. **Convex Dashboard:**
-   - Go to **Settings** > **Environment Variables**.
-   - Add `CLERK_JWT_ISSUER_DOMAIN` and paste the URL.
+## Development Workflows
 
-*Note: Ensure you do this for both Production and Development environments in Clerk.*
+| Command | Description |
+|---|---|
+| `pnpm dev` | Start the dashboard dev server |
+| `pnpm convex:push` | Deploy Convex functions to the self-hosted backend |
+| `pnpm listener:rebuild` | Rebuild and restart the Matrix listener container |
+| `pnpm deploy` | Full deploy — Convex push + listener rebuild |
+| `pnpm update` | After `git pull` — installs deps + deploys everything |
+| `pnpm storybook` | Launch Storybook for UI components |
+| `pnpm format` | Format code with Biome |
+| `pnpm lint` | Lint code with Biome |
+| `pnpm --filter e2e test` | Run Playwright E2E tests |
 
-## 🛠️ Development Workflows
+### When to deploy what
 
-- **Lint & Format:** `pnpm check` (powered by Biome)
-- **Storybook:** `pnpm storybook` (visualize shared components)
-- **Tests:** `pnpm --filter e2e test` (run Playwright tests)
-- **Build:** `pnpm build` (optimized production build for all apps)
+- **Changed Convex functions** (`packages/api/convex/`) → `pnpm convex:push`
+- **Changed listener code** (`apps/listener/`) → `pnpm listener:rebuild`
+- **Changed both** → `pnpm deploy`
+- **Restarted Docker** → Just `docker compose up -d` — the init container re-deploys automatically
 
-## 🚢 Deployment
+### After `git pull`
 
-### Vercel (Full Stack)
+```bash
+git pull
+pnpm update
+```
 
-1. **Create Vercel Project:**
-   - Go to [Vercel](https://vercel.com), create a new project, and import your repository.
-   - Hit **Deploy**. The initial build will fail—this is expected as we haven't connected services yet.
+This installs any new dependencies and deploys all changes (Convex functions + listener) in one command.
 
-2. **Connect Integrations:**
-   - In your Vercel project, go to **Settings** > **Integrations**.
-   - Install and connect **Clerk**.
-   - Install and connect **Convex**. Vercel will automatically handle production environment variables.
+## Environment Variables
 
-3. **Configure Clerk Domains:**
-   - In the **Clerk Dashboard**, go to **Configure** > **Domains**.
-   - Complete the domain configuration for your Vercel URL, otherwise Vercel's production checks may fail.
+Run `pnpm setup:envs` to auto-generate all secrets. The script:
+1. Copies `.env.example` → `.env.local` with random passwords
+2. Updates `docker/dendrite.yaml` with the shared secret
+3. Creates `docker/.env` for Docker Compose
 
-4. **Add JWT Template:**
-   - In **Clerk**, go to **JWT Templates** and add the **Convex** template for both `prod` and `dev`.
+| Variable | Purpose |
+|---|---|
+| `DENDRITE_SERVER_NAME` | Matrix server domain (default: `matrix.local`) |
+| `DENDRITE_SHARED_SECRET` | Shared secret for bot user registration |
+| `MATRIX_BOT_USERNAME` | Bot user for the listener (default: `listener-bot`) |
+| `MATRIX_BOT_PASSWORD` | Bot password (auto-generated) |
+| `VITE_CONVEX_URL` | Convex backend URL for the dashboard |
+| `TS_AUTHKEY` | Optional Tailscale auth key for remote access |
+| `ASSISTLINE_DATA` | Root data directory (default: `./assistline-data`) |
 
-5. **Finalize Convex Prod Env:**
-   - Go to the **Clerk Dashboard** > **API Keys** and copy the **Frontend API URL**.
-   - In the **Convex Dashboard**, go to your production project > **Settings** > **Environment Variables**.
-   - Add `CLERK_JWT_ISSUER_DOMAIN` with the value you copied.
+### Data & Backups
 
-6. **Redeploy:**
-   - Go back to Vercel and trigger a redeploy. Your app should now be live and fully integrated!
+All persistent data lives under a single directory (`ASSISTLINE_DATA`):
 
-## 🤝 Contributing
+```text
+assistline-data/
+├── convex/              # Convex SQLite DB + credentials (most critical)
+├── dendrite/            # Matrix homeserver state
+├── mautrix-whatsapp/    # WhatsApp bridge config + session
+├── listener/            # Sync token
+└── tailscale/           # VPN state
+```
 
-Before contributing, please read [AGENTS.md](./AGENTS.md) for our standards on:
+To point data at an external drive or NAS:
+
+```bash
+# In .env.local (or docker/.env)
+ASSISTLINE_DATA="/mnt/nas/assistline"
+```
+
+## Tech Stack
+
+- **Runtime:** [Node.js](https://nodejs.org/) · [pnpm](https://pnpm.io/) · [Turborepo](https://turbo.build/)
+- **Backend:** [Convex](https://convex.dev/) (self-hosted) · [Convex Agent Component](https://www.npmjs.com/package/@convex-dev/agent)
+- **Frontend:** [Vite](https://vite.dev/) · [React](https://react.dev/) · [Tailwind CSS v4](https://tailwindcss.com/)
+- **UI:** [shadcn/ui](https://ui.shadcn.com/) · [Base UI](https://base-ui.com/)
+- **Messaging:** [Dendrite](https://matrix-org.github.io/dendrite/) · [Mautrix WhatsApp](https://docs.mau.fi/bridges/go/whatsapp/)
+- **AI:** [Vercel AI SDK](https://sdk.vercel.ai/) · OpenAI · Anthropic · Google AI
+- **Testing:** [Playwright](https://playwright.dev/) · [Vitest](https://vitest.dev/)
+- **Toolchain:** [Biome](https://biomejs.dev/)
+
+## Contributing
+
+Before contributing, read [AGENTS.md](./AGENTS.md) for standards on:
 - Conventional Commits
-- Tailwind v4 & shadcn/ui patterns
-- Mandatory Base UI usage (No Radix UI)
-- Type safety and strict Biome checks
-
----
-
-Built with ❤️ by [Cloudexible](https://cloudexible.com)
+- TypeScript (no `any`)
+- Tailwind v4 + shadcn/ui + Base UI (no Radix)
+- Testing requirements
+- Deployment workflows

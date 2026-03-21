@@ -89,7 +89,7 @@ function timeAgo(timestamp: number): string {
 // Component
 // ---------------------------------------------------------------------------
 
-type SourceFilter = "all" | "auto" | "manual";
+type SourceFilter = "all" | "user" | "agent" | "system";
 
 const ENTITY_OPTIONS = [
   "all",
@@ -144,7 +144,7 @@ export function AuditLogsPage() {
           className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800/60 rounded-lg p-1"
           data-testid="source-filter"
         >
-          {(["all", "auto", "manual"] as const).map((s) => (
+          {(["all", "user", "agent", "system"] as const).map((s) => (
             <button
               key={s}
               type="button"
@@ -238,9 +238,11 @@ export function AuditLogsPage() {
                   {/* Icon */}
                   <div
                     className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg mt-0.5 ${
-                      log.source === "auto"
+                      log.source === "agent"
                         ? "bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400"
-                        : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                        : log.source === "system"
+                          ? "bg-gray-100 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400"
+                          : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
                     }`}
                   >
                     {getEntityIcon(log.entity)}
@@ -254,9 +256,11 @@ export function AuditLogsPage() {
                       </span>
                       <span
                         className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded-full ${
-                          log.source === "auto"
+                          log.source === "agent"
                             ? "bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-300"
-                            : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300"
+                            : log.source === "system"
+                              ? "bg-gray-100 dark:bg-gray-700/50 text-gray-500 dark:text-gray-300"
+                              : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300"
                         }`}
                       >
                         {log.source}

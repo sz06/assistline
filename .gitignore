@@ -49,7 +49,7 @@ playwright-report/
 
 /docs/reference/*
 # Docker local data
-docker/*-data
+docker/assistline-data
 docker/dendrite.yaml
 docker/.env
 

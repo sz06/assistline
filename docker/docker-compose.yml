@@ -1,4 +1,4 @@
-  
+name: assistline
 
 services:
   # 1. Matrix Homeserver (Dendrite)
@@ -6,12 +6,11 @@ services:
     image: matrixdotorg/dendrite-monolith:latest
     container_name: dendrite
     restart: unless-stopped
-    ports:
-      - "8008:8008"
+    # No ports exposed — all consumers (mautrix, listener, init) are on the Docker network
     volumes:
-      - ./dendrite-data:/var/dendrite
+      - ${ASSISTLINE_DATA:-./assistline-data}/dendrite:/var/dendrite
       - ./dendrite.yaml:/etc/dendrite/dendrite.yaml
-      - ./mautrix-data/registration.yaml:/etc/dendrite/whatsapp-registration.yaml
+      - ${ASSISTLINE_DATA:-./assistline-data}/mautrix-whatsapp/registration.yaml:/etc/dendrite/whatsapp-registration.yaml
     environment:
       - SERVER_NAME=${DENDRITE_SERVER_NAME:-matrix.local}
     networks:
@@ -24,7 +23,7 @@ services:
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-c", "cd /data && /usr/bin/mautrix-whatsapp --ignore-unsupported-server"]
     volumes:
-      - ./mautrix-data:/data
+      - ${ASSISTLINE_DATA:-./assistline-data}/mautrix-whatsapp:/data
     networks:
       - assistline-net
     depends_on:
@@ -39,7 +38,7 @@ services:
       - "3410:3210"   # Host 3410 → Container 3210 (avoids conflict with local convex dev)
       - "3411:3211"
     volumes:
-      - ./convex-data:/convex/data
+      - ${ASSISTLINE_DATA:-./assistline-data}/convex:/convex/data
     environment:
       - CONVEX_CLOUD_ORIGIN=http://127.0.0.1:3210
       - CONVEX_SITE_ORIGIN=http://127.0.0.1:3211
@@ -54,7 +53,7 @@ services:
     container_name: assistline-init
     restart: "no"
     volumes:
-      - ./convex-data/credentials:/convex-credentials:ro
+      - ${ASSISTLINE_DATA:-./assistline-data}/convex/credentials:/convex-credentials:ro
       - convex-shared:/shared-convex
       - matrix-shared:/shared-matrix
       - ../packages/api:/app/packages/api:ro
@@ -96,7 +95,7 @@ services:
       - TS_EXTRA_ARGS=--advertise-tags=tag:container
       - TS_STATE_DIR=/var/lib/tailscale
     volumes:
-      - ./tailscale-data:/var/lib/tailscale
+      - ${ASSISTLINE_DATA:-./assistline-data}/tailscale:/var/lib/tailscale
       - /dev/net/tun:/dev/net/tun
     cap_add:
       - net_admin
@@ -111,7 +110,10 @@ services:
       dockerfile: apps/dashboard/Dockerfile
     container_name: dashboard-app
     restart: unless-stopped
-    network_mode: "service:tailscale"
+    ports:
+      - "5173:5173"
+    networks:
+      - assistline-net
     depends_on:
       - tailscale
 
@@ -129,7 +131,7 @@ services:
       - DENDRITE_SERVER_NAME=${DENDRITE_SERVER_NAME:-matrix.local}
       - CONVEX_URL=http://convex:3210
     volumes:
-      - ./listener-data:/app/data
+      - ${ASSISTLINE_DATA:-./assistline-data}/listener:/app/data
       - matrix-shared:/shared
     networks:
       - assistline-net

@@ -31,6 +31,7 @@ function randomPassword(length = 16) {
 
 const replacements = {
   DENDRITE_SHARED_SECRET: randomSecret(48),
+  MATRIX_ADMIN_PASSWORD: randomPassword(),
   MATRIX_BOT_PASSWORD: randomPassword(),
 };
 
@@ -152,6 +153,7 @@ try {
 
   console.log("");
   console.log("→ Generated credentials:");
+  console.log(`  Matrix Admin   : ${replacements.MATRIX_ADMIN_PASSWORD}`);
   console.log(`  Matrix Bot     : ${replacements.MATRIX_BOT_PASSWORD}`);
   console.log(
     `  Shared Secret  : ${replacements.DENDRITE_SHARED_SECRET.slice(0, 12)}…`,

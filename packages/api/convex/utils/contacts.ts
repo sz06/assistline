@@ -18,8 +18,21 @@ export function cleanPhoneNumber(value: string): string {
 }
 
 /**
+ * Strip common bridge suffixes from display names.
+ * E.g. "+14155552671 (WA)" → "+14155552671", "John (Telegram)" → "John"
+ */
+export function stripBridgeSuffix(value: string): string {
+  return value
+    .replace(/\s*\((?:WA|WhatsApp|Telegram|TG|Signal)\)\s*$/i, "")
+    .trim();
+}
+
+/**
  * Derive platform, phone number, and other-name entry from a Matrix sender ID
  * and optional bridge-provided display name.
+ *
+ * If the display name is just a phone number (optionally with a bridge suffix
+ * like "(WA)"), it is NOT returned as `otherName` — only as `phone`.
  */
 export function extractSenderInfo(
   matrixId: string,
@@ -32,18 +45,19 @@ export function extractSenderInfo(
   const localpart = matrixId.split(":")[0];
   const platform = localpart?.includes("whatsapp_") ? "whatsapp" : undefined;
 
-  // Extract phone from Matrix ID (e.g. @whatsapp_14155552671:server)
   const trimmed = senderName?.trim() || undefined;
-  const nameIsPhone = trimmed ? isPhoneNumberLike(trimmed) : false;
+  // Strip bridge suffix before checking if the name is a phone number
+  const stripped = trimmed ? stripBridgeSuffix(trimmed) : undefined;
+  const nameIsPhone = stripped ? isPhoneNumberLike(stripped) : false;
 
   // Prefer digits from Matrix ID; fall back to cleaning phone-like displayname
   const phoneFromId = localpart?.match(/^@?whatsapp_\+?(\d+)$/)?.[1] ?? null;
   const phone =
     phoneFromId ??
-    (nameIsPhone && trimmed ? cleanPhoneNumber(trimmed) : undefined);
+    (nameIsPhone && stripped ? cleanPhoneNumber(stripped) : undefined);
 
-  // Any non-empty senderName becomes an otherName entry (kept as-is with bridge suffixes)
-  const otherName = trimmed ?? undefined;
+  // Only save as otherName if it's NOT a phone number
+  const otherName = nameIsPhone ? undefined : trimmed;
 
   return { platform, phone, otherName };
 }

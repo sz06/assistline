@@ -13,7 +13,8 @@
     "convex:key": "docker exec convex-backend ./generate_admin_key.sh",
     "convex:push": "CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3410 CONVEX_SELF_HOSTED_ADMIN_KEY=$(pnpm --silent convex:key) pnpm --filter @repo/api push",
     "listener:rebuild": "docker compose -f docker/docker-compose.yml build matrix-listener --no-cache && docker compose -f docker/docker-compose.yml up -d matrix-listener",
-    "deploy": "pnpm convex:push && pnpm listener:rebuild"
+    "deploy": "pnpm convex:push && pnpm listener:rebuild",
+    "update": "pnpm install && pnpm deploy"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",

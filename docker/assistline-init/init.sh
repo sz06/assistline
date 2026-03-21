@@ -3,10 +3,11 @@
 # init.sh — Unified init script for AssistLine.
 #
 # Runs inside the assistline-init container on every `docker compose up`.
-# Both phases are idempotent and safe to re-run.
+# All three phases are idempotent and safe to re-run.
 #
 #   Phase 1: Matrix Setup   — create bot user, save access token
 #   Phase 2: Convex Deploy  — generate admin key, deploy functions
+#   Phase 3: Seed Data      — populate config entries and default roles
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -162,6 +163,36 @@ echo ""
 echo "  ✓ Admin key saved to /shared-convex/convex-admin-key"
 
 echo ""
+echo "  ✓ Phase 2 complete — Convex functions deployed"
+
+# ═══════════════════════════════════════════════════════════════════
+# PHASE 3: Seed Data
+# ═══════════════════════════════════════════════════════════════════
+
+echo ""
+echo "┌──────────────────────────────────────────────┐"
+echo "│  Phase 3: Seed Data                          │"
+echo "└──────────────────────────────────────────────┘"
+echo ""
+echo "→ Seeding config and roles…"
+
+SEED_RESPONSE=$(curl -sf "${CONVEX_URL}/api/mutation" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Convex ${ADMIN_KEY}" \
+  -d '{"path": "init:seedData", "args": {}, "format": "json"}' 2>&1) || true
+
+if echo "$SEED_RESPONSE" | grep -q "Seeding complete"; then
+  SEED_RESULT=$(echo "$SEED_RESPONSE" | sed -n 's/.*"value":"\([^"]*\)".*/\1/p')
+  echo "  ✓ ${SEED_RESULT}"
+elif echo "$SEED_RESPONSE" | grep -q "status.*\"success\""; then
+  echo "  ✓ Seed data applied"
+else
+  echo "  ⚠ Seed response: ${SEED_RESPONSE}"
+  echo "    (This is non-fatal — you can seed manually from the Convex dashboard)"
+fi
+
+echo ""
 echo "╔══════════════════════════════════════════════╗"
 echo "║  ✓ AssistLine init complete!                 ║"
 echo "╚══════════════════════════════════════════════╝"
+

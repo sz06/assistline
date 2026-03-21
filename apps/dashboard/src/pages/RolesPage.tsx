@@ -10,7 +10,6 @@ import { z } from "zod";
 const roleSchema = z.object({
   name: z.string().min(1, "Name is required").max(64),
   description: z.string().optional(),
-  color: z.string().optional(),
 });
 
 type RoleFormData = z.infer<typeof roleSchema>;
@@ -30,14 +29,13 @@ export function RolesPage() {
     formState: { errors },
   } = useForm<RoleFormData>({
     resolver: zodResolver(roleSchema),
-    defaultValues: { name: "", description: "", color: "" },
+    defaultValues: { name: "", description: "" },
   });
 
   const onValid = async (data: RoleFormData) => {
     await createRole({
       name: data.name,
       description: data.description || undefined,
-      color: data.color || undefined,
     });
     reset();
     setIsAdding(false);
@@ -100,12 +98,6 @@ export function RolesPage() {
                   <Input
                     {...register("description")}
                     placeholder="Description (optional)"
-                  />
-                </div>
-                <div>
-                  <Input
-                    {...register("color")}
-                    placeholder="Color class (e.g. bg-blue-100)"
                   />
                 </div>
               </div>

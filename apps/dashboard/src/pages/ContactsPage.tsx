@@ -160,6 +160,17 @@ export function ContactsPage() {
       let cmp = 0;
       switch (sortField) {
         case "name": {
+          // 3-tier: name (0) → otherNames (1) → rest (2)
+          const aTier = a.name?.trim() ? 0 : a.otherNames?.length ? 1 : 2;
+          const bTier = b.name?.trim() ? 0 : b.otherNames?.length ? 1 : 2;
+          if (aTier !== bTier) {
+            cmp = aTier - bTier;
+            break;
+          }
+          if (aTier === 2) {
+            cmp = a._creationTime - b._creationTime;
+            break;
+          }
           const na = displayName(
             a.name,
             a.nickname,

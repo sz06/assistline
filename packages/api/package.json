@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "convex dev",
     "push": "convex deploy --cmd 'echo ✓ Types generated'",
-    "build": "tsc",
+    "build": "echo '✓ @repo/api — Convex functions are deployed via convex deploy'",
     "lint": "biome check .",
     "test": "vitest run"
   },
