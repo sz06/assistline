@@ -5,7 +5,7 @@ import { action, internalAction, internalMutation } from "./_generated/server";
 /**
  * Send a read receipt to the Matrix homeserver so the bridge forwards it
  * to WhatsApp. This makes messages appear as "read" (blue checkmarks) on
- * the sender's phone when the user views them in the dashboard.
+ * the contact's phone when the user views them in the dashboard.
  *
  * The action reads the bot access token from the `config` table (persisted
  * by the listener on startup) and calls the Matrix receipt API.

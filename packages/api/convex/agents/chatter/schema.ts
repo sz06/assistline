@@ -14,15 +14,15 @@ const UpdateContactAction = z.object({
   notes: z.string().optional(),
 });
 
-/** Action: create a new artifact (memory/fact). */
+/** Action: create a new artifact. */
 const CreateArtifactAction = z.object({
   type: z.literal("createArtifact"),
-  value: z.string().describe("The fact or memory value"),
+  value: z.string().describe("The artifact value"),
   description: z.string().describe("Human-readable description for search"),
   expiresAt: z
     .number()
     .optional()
-    .describe("Unix timestamp (ms) when this fact expires, if temporary"),
+    .describe("Unix timestamp (ms) when this artifact expires, if temporary"),
 });
 
 /** Action: assign a role to a contact. */

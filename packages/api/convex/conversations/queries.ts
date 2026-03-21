@@ -4,7 +4,7 @@ import { internalQuery, query } from "../_generated/server";
 import { getConfigNumber } from "../config";
 import {
   buildConversationWithMessages,
-  resolveOtherParticipantContact,
+  resolveParticipantDetails,
 } from "./helpers";
 
 export const list = query({
@@ -36,33 +36,14 @@ export const list = query({
           .order("desc")
           .take(limit);
 
-    // Map contacts to conversations if possible
+    // Resolve participant details for display
     const withDetails = await Promise.all(
       conversations.map(async (conv) => {
-        const contactDetails = {
-          name: conv.name ?? "Unknown",
-          phone: "",
-          email: "",
-        };
-
-        const isGroup = (conv.memberCount ?? 0) > 2;
-
-        if (isGroup && conv.name) {
-          // For group conversations, use the room name directly
-          contactDetails.name = conv.name;
-        } else {
-          // For DMs, resolve the OTHER participant's contact
-          const otherContact = await resolveOtherParticipantContact(ctx, conv);
-          if (otherContact) {
-            contactDetails.name = otherContact.name;
-            contactDetails.phone = otherContact.phone;
-            contactDetails.email = otherContact.email;
-          }
-        }
+        const participantDetails = await resolveParticipantDetails(ctx, conv);
 
         return {
           ...conv,
-          contactDetails,
+          participantDetails,
         };
       }),
     );

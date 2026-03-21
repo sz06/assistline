@@ -119,8 +119,8 @@ export function SimulatorPage() {
                   </option>
                   {conversations?.map((conv) => (
                     <option key={conv._id} value={conv.matrixRoomId}>
-                      {conv.contactDetails?.name || conv.name || "Unknown"} (
-                      {conv.matrixRoomId})
+                      {conv.participantDetails?.name || conv.name || "Unknown"}{" "}
+                      ({conv.matrixRoomId})
                     </option>
                   ))}
                 </select>

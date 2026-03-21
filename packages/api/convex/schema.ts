@@ -63,12 +63,12 @@ export default defineSchema({
     .index("by_matrixId", ["matrixId"])
     .index("by_contactId", ["contactId"]),
   conversations: defineTable({
-    matrixRoomId: v.string(), // Matrix room ID
+    matrixRoomId: v.string(), // Matrix room ID for this conversation
     name: v.optional(v.string()), // Group or DM name
     memberCount: v.number(), // Total members; > 2 means group
-    participants: v.array(v.string()), // Matrix user IDs of participants
+    participants: v.array(v.string()), // Matrix IDs of all participants (user and contacts)
     topic: v.optional(v.string()), // Group topic/description
-    channelId: v.id("channels"), // Originating channel (WhatsApp, Telegram, etc.)
+    channelId: v.id("channels"), // Channel this conversation was received through
     avatarUrl: v.optional(v.string()),
     lastMessageId: v.optional(v.id("messages")), // Useful for sorting listing
     updatedAt: v.number(),
@@ -157,9 +157,9 @@ export default defineSchema({
     .index("by_conversationId_timestamp", ["conversationId", "timestamp"])
     .index("by_eventId", ["eventId"]),
   artifacts: defineTable({
-    value: v.string(), // The actual memory value
+    value: v.string(), // The artifact value
     description: v.string(), // Textual description for semantic search
-    embedding: v.optional(v.array(v.float64())), // Vector for [description, value]
+    embedding: v.optional(v.array(v.float64())), // Embedding vector for semantic search
     accessibleToRoles: v.array(v.id("roles")), // Roles allowed to access it
     expiresAt: v.optional(v.number()),
     updatedAt: v.number(),

@@ -42,7 +42,7 @@ const contactFields = {
 // Queries
 // ---------------------------------------------------------------------------
 
-/** List all contacts, sorted by first name then last name. */
+/** List all contacts, sorted by name. */
 export const list = query({
   args: {},
   handler: async (ctx) => {

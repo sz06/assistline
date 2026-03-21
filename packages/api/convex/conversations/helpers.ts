@@ -6,7 +6,7 @@ import { extractWhatsAppPhoneNumber } from "../utils/matrix";
 /**
  * For a DM conversation, find the "other" participant (not the user) and
  * return their contact details. Uses the channel's connected phone number
- * to identify which participant is "self".
+ * to identify which participant is the user.
  */
 export async function resolveOtherParticipantContact(
   ctx: QueryCtx,
@@ -19,14 +19,14 @@ export async function resolveOtherParticipantContact(
   // Look up the channel to get the user's own phone number
   const channel = await ctx.db.get(conv.channelId);
   // Normalize to digits-only so "+16477127932" matches "16477127932"
-  const selfPhone = channel?.phoneNumber?.replace(/\D/g, "");
+  const userPhone = channel?.phoneNumber?.replace(/\D/g, "");
 
   // Find the participant whose phone number does NOT match the user's
   for (const participantMatrixId of conv.participants) {
     const participantPhone = extractWhatsAppPhoneNumber(participantMatrixId);
 
     // Skip this participant if they match the user's phone number
-    if (selfPhone && participantPhone === selfPhone) {
+    if (userPhone && participantPhone === userPhone) {
       continue;
     }
 
@@ -55,6 +55,36 @@ export async function resolveOtherParticipantContact(
 }
 
 /**
+ * Resolve display details for the "other side" of a conversation.
+ * For groups: uses the room name. For DMs: resolves the contact.
+ */
+export async function resolveParticipantDetails(
+  ctx: QueryCtx,
+  conv: {
+    participants: string[];
+    channelId: Id<"channels">;
+    name?: string;
+    memberCount: number;
+  },
+): Promise<{ name: string; phone: string; email: string }> {
+  const details = { name: conv.name ?? "Unknown", phone: "", email: "" };
+
+  const isGroup = (conv.memberCount ?? 0) > 2;
+  if (isGroup && conv.name) {
+    details.name = conv.name;
+  } else {
+    const otherContact = await resolveOtherParticipantContact(ctx, conv);
+    if (otherContact) {
+      details.name = otherContact.name;
+      details.phone = otherContact.phone;
+      details.email = otherContact.email;
+    }
+  }
+
+  return details;
+}
+
+/**
  * Shared helper: fetches messages for a conversation, resolves contact details
  * and sender display names. Used by both the public query and internal query.
  */
@@ -77,24 +107,7 @@ export async function buildConversationWithMessages(
 
   const messages = messagesDesc.reverse();
 
-  // Resolve header contact details — for DMs, use the OTHER participant
-  const contactDetails = {
-    name: conv.name ?? "Unknown",
-    phone: "",
-    email: "",
-  };
-
-  const isGroup = (conv.memberCount ?? 0) > 2;
-  if (isGroup && conv.name) {
-    contactDetails.name = conv.name;
-  } else {
-    const otherContact = await resolveOtherParticipantContact(ctx, conv);
-    if (otherContact) {
-      contactDetails.name = otherContact.name;
-      contactDetails.phone = otherContact.phone;
-      contactDetails.email = otherContact.email;
-    }
-  }
+  const participantDetails = await resolveParticipantDetails(ctx, conv);
 
   // Resolve sender display names — cache per sender to avoid redundant lookups
   const senderNameCache = new Map<string, string>();
@@ -122,7 +135,7 @@ export async function buildConversationWithMessages(
     }),
   );
 
-  return { ...conv, contactDetails, messages: resolvedMessages };
+  return { ...conv, participantDetails, messages: resolvedMessages };
 }
 
 // ---------------------------------------------------------------------------

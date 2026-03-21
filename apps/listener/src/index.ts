@@ -82,7 +82,7 @@ const channelIdByType: Map<string, string> = new Map();
  * bridge puppets (e.g. @whatsapp_16477127932:matrix.local).
  * Messages from these senders are "out" — the user sent them from their phone.
  */
-const selfPuppetIds = new Set<string>();
+const userPuppetIds = new Set<string>();
 
 /** Refresh the channel ID cache from Convex. */
 async function refreshChannelCache(): Promise<void> {
@@ -101,7 +101,7 @@ async function refreshChannelCache(): Promise<void> {
       if (channel.phoneNumber && platformType === "whatsapp") {
         const digits = channel.phoneNumber.replace(/^\+/, "");
         const puppetId = `@whatsapp_${digits}:${serverName}`;
-        selfPuppetIds.add(puppetId);
+        userPuppetIds.add(puppetId);
         console.log(`[listener] ✓ Self-puppet: ${puppetId}`);
       }
     }
@@ -395,7 +395,7 @@ async function syncRoomMetadata(roomId: string): Promise<{
         !m.state_key.startsWith("@whatsappbot:") &&
         !m.state_key.startsWith("@telegrambot:") &&
         m.state_key !== MATRIX_BOT_USER_ID &&
-        !selfPuppetIds.has(m.state_key),
+        !userPuppetIds.has(m.state_key),
     );
 
     const memberCount = realMembers.length;
@@ -550,7 +550,7 @@ async function handleTimelineEvent(
   },
 ): Promise<void> {
   const direction: "in" | "out" =
-    event.sender === MATRIX_BOT_USER_ID || selfPuppetIds.has(event.sender)
+    event.sender === MATRIX_BOT_USER_ID || userPuppetIds.has(event.sender)
       ? "out"
       : "in";
 
@@ -782,7 +782,7 @@ async function main(): Promise<void> {
                     for (const userId of Object.keys(readReceipts)) {
                       if (
                         userId === MATRIX_BOT_USER_ID ||
-                        selfPuppetIds.has(userId)
+                        userPuppetIds.has(userId)
                       ) {
                         await convex.mutation(
                           api.conversations.mutations.markRead,
@@ -805,7 +805,7 @@ async function main(): Promise<void> {
                   []) as string[];
                 // Filter out self and bot from typing list
                 const others = typingUserIds.filter(
-                  (id) => id !== MATRIX_BOT_USER_ID && !selfPuppetIds.has(id),
+                  (id) => id !== MATRIX_BOT_USER_ID && !userPuppetIds.has(id),
                 );
                 await convex.mutation(api.conversations.mutations.setTyping, {
                   matrixRoomId: roomId,

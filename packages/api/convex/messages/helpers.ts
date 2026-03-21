@@ -24,7 +24,7 @@ export async function insertOutboundMessage(
   const messageId = await ctx.db.insert("messages", {
     conversationId: args.conversationId,
     eventId: `outbound_${Date.now().toString()}`,
-    sender: "dashboard_user",
+    sender: "system",
     text: args.content,
     direction: "out",
     timestamp: Date.now(),

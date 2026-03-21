@@ -149,15 +149,15 @@ export function ChannelFormPage() {
 
       <form
         onSubmit={handleSubmit(onValid)}
-        className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6 space-y-6"
+        className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6 space-y-5"
       >
-        {/* ── Channel Type ── */}
-        <div>
-          <Label htmlFor="ch-type">Channel Type</Label>
+        {/* ── Platform ── */}
+        <div className="space-y-1.5">
+          <Label htmlFor="ch-type">Platform</Label>
           <select
             id="ch-type"
             {...register("type")}
-            className="mt-1.5 w-full max-w-sm h-10 px-3 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full h-10 px-3 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             data-testid="channel-type-select"
           >
             {CHANNEL_TYPE_OPTIONS.map((ct) => (
@@ -166,31 +166,33 @@ export function ChannelFormPage() {
               </option>
             ))}
           </select>
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            The messaging platform to connect.
+          </p>
           {errors.type && (
-            <p className="text-xs text-red-500 mt-1">{errors.type.message}</p>
+            <p className="text-xs text-red-500">{errors.type.message}</p>
           )}
         </div>
 
         {/* ── Label ── */}
-        <div>
+        <div className="space-y-1.5">
           <Label htmlFor="ch-label">Label</Label>
           <Input
             id="ch-label"
             {...register("label")}
             placeholder="My WhatsApp"
-            className="mt-1.5 max-w-sm"
             data-testid="channel-label-input"
           />
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+          <p className="text-xs text-gray-400 dark:text-gray-500">
             A friendly name to identify this channel.
           </p>
           {errors.label && (
-            <p className="text-xs text-red-500 mt-1">{errors.label.message}</p>
+            <p className="text-xs text-red-500">{errors.label.message}</p>
           )}
         </div>
 
         {/* ── Footer ── */}
-        <div className="pt-4 flex justify-end gap-3 border-t border-gray-100 dark:border-gray-800">
+        <div className="pt-3 flex justify-end gap-3 border-t border-gray-100 dark:border-gray-800">
           <Button
             type="button"
             variant="outline"

@@ -73,8 +73,8 @@ export function ConversationsPage() {
     const q = search.toLowerCase();
     return conversations.filter(
       (c) =>
-        c.contactDetails.name.toLowerCase().includes(q) ||
-        c.contactDetails.phone.toLowerCase().includes(q),
+        c.participantDetails.name.toLowerCase().includes(q) ||
+        c.participantDetails.phone.toLowerCase().includes(q),
     );
   }, [conversations, search]);
 
@@ -239,7 +239,7 @@ export function ConversationsPage() {
                     {conv.memberCount > 2 ? (
                       <Users className="h-4.5 w-4.5" />
                     ) : (
-                      conv.contactDetails.name.charAt(0).toUpperCase()
+                      conv.participantDetails.name.charAt(0).toUpperCase()
                     )}
                     <span
                       title={statusObj?.label}
@@ -249,7 +249,7 @@ export function ConversationsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium text-sm truncate text-gray-900 dark:text-gray-100">
-                        {conv.contactDetails.name}
+                        {conv.participantDetails.name}
                       </span>
                       <div className="flex items-center gap-1.5">
                         {(conv.unreadCount ?? 0) > 0 && (
@@ -267,7 +267,7 @@ export function ConversationsPage() {
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                       {conv.memberCount > 2
                         ? (conv.topic ?? "Group conversation")
-                        : conv.contactDetails.phone || conv.matrixRoomId}
+                        : conv.participantDetails.phone || conv.matrixRoomId}
                     </p>
                   </div>
                 </button>
@@ -377,17 +377,17 @@ function ChatPanel({
           {data.memberCount > 2 ? (
             <Users className="h-4 w-4" />
           ) : (
-            data.contactDetails.name.charAt(0).toUpperCase()
+            data.participantDetails.name.charAt(0).toUpperCase()
           )}
         </div>
         <div className="flex-1 min-w-0">
           <h2 className="font-semibold text-sm text-gray-900 dark:text-gray-100">
-            {data.contactDetails.name}
+            {data.participantDetails.name}
           </h2>
           <div className="text-[11px] text-gray-500">
             {data.memberCount > 2
               ? `${data.memberCount} members${data.topic ? ` · ${data.topic}` : ""}`
-              : data.contactDetails.phone || "No phone linked"}
+              : data.participantDetails.phone || "No phone linked"}
           </div>
         </div>
 

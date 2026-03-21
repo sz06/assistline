@@ -71,7 +71,7 @@ export const getConversationHistory = createTool<
 });
 
 /**
- * Search the user's knowledge base (artifacts) filtered by participant roles.
+ * Search the user's artifacts filtered by participant roles.
  */
 export const getArtifacts = createTool<
   { conversationId: string; query: string },
@@ -79,7 +79,7 @@ export const getArtifacts = createTool<
   ToolCtx<DataModel>
 >({
   description:
-    "Search the user's knowledge base (memories/facts) filtered by conversation participant roles. Only returns artifacts accessible to all participants.",
+    "Search the user's artifacts filtered by conversation participant roles. Only returns artifacts accessible to all participants.",
   inputSchema: z.object({
     conversationId: z.string().describe("The Convex conversation ID"),
     query: z.string().describe("The search query for artifacts"),

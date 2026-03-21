@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.1] - 2026-03-20
+
+### Added
+- **Entity Glossary** (`docs`): New `glossary.md` defining canonical names for all 17 system entities (User, Contact, Identity, Participant, Conversation, Message, Channel, Platform, Agent, Thread, Provider, Action, Artifact, System, Role, Config, Audit Log). Organized into Core, Messaging, AI, and System categories with schema mappings and usage examples.
+
+### Changed
+- **Renamed "Self" role → "User"** (`packages/api`): The seed role previously called "Self" is now "User" to align with the entity glossary and eliminate redundancy.
+- **Terminology alignment** (`packages/api`, `apps/dashboard`, `apps/listener`): Aligned comments, variable names, and string literals across 13 files with the entity glossary:
+  - `contactDetails` → `participantDetails` in conversation queries/helpers and dashboard UI (clearer for group conversations).
+  - `dashboard_user` sender → `system` in outbound message helper.
+  - `selfPhone` → `userPhone`, `selfPuppetIds` → `userPuppetIds` in conversation helpers and listener.
+  - Agent prompt: "knowledge base" / "memories/facts" / "memory" → "artifacts"; "the person" → "the contact" / "the user".
+  - Schema comments: "memory value" → "artifact value", clearer channel/participant annotations.
+  - Chatter action schema: "fact or memory value" → "artifact value".
+
 ## [2.17.0] - 2026-03-20
 
 ### Fixed
