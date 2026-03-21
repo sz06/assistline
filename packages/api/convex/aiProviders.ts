@@ -88,7 +88,7 @@ export const create = mutation({
     });
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "aiProvider.create",
-      source: "manual",
+      source: "user",
       entity: "aiProviders",
       entityId: id,
       details: JSON.stringify({
@@ -142,7 +142,7 @@ export const update = mutation({
     await ctx.db.patch(args.id, patch);
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "aiProvider.update",
-      source: "manual",
+      source: "user",
       entity: "aiProviders",
       entityId: args.id,
       details: JSON.stringify({
@@ -163,7 +163,7 @@ export const remove = mutation({
     await ctx.db.delete(args.id);
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "aiProvider.delete",
-      source: "manual",
+      source: "user",
       entity: "aiProviders",
       entityId: args.id,
       details: JSON.stringify({
@@ -196,7 +196,7 @@ export const setDefault = mutation({
     await ctx.db.patch(args.id, { isDefault: true });
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "aiProvider.setDefault",
-      source: "manual",
+      source: "user",
       entity: "aiProviders",
       entityId: args.id,
       details: JSON.stringify({

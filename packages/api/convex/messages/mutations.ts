@@ -171,7 +171,7 @@ export const insertMessage = mutation({
 
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "message.insert",
-      source: "auto",
+      source: "system",
       entity: "messages",
       entityId: messageId,
       details: JSON.stringify({
@@ -271,7 +271,9 @@ export const sendMessage = mutation({
     content: v.string(),
     // "manual" = dashboard user typed and sent; "auto" = Chatter agent auto-sent.
     // Flows through to the audit log so we can distinguish human vs AI actions.
-    source: v.optional(v.union(v.literal("manual"), v.literal("auto"))),
+    source: v.optional(
+      v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
+    ),
   },
   handler: async (ctx, args) => {
     const conv = await ctx.db.get(args.conversationId);
@@ -281,7 +283,7 @@ export const sendMessage = mutation({
       conversationId: args.conversationId,
       matrixRoomId: conv.matrixRoomId,
       content: args.content,
-      auditSource: args.source ?? "manual",
+      auditSource: args.source ?? "user",
     });
 
     // Trigger Chatter agent if AI is enabled on this conversation
@@ -319,7 +321,7 @@ export const internalSendMessage = internalMutation({
       conversationId: args.conversationId,
       matrixRoomId: conv.matrixRoomId,
       content: args.content,
-      auditSource: "auto",
+      auditSource: "agent",
       auditDetails: { autoSend: true },
     });
   },
@@ -408,7 +410,7 @@ export const redactMessage = mutation({
 
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "message.redact",
-      source: "auto",
+      source: "system",
       entity: "messages",
       entityId: message._id,
       details: JSON.stringify({ eventId: args.eventId }),
@@ -449,7 +451,7 @@ export const editMessage = mutation({
 
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "message.edit",
-      source: "auto",
+      source: "system",
       entity: "messages",
       entityId: message._id,
       details: JSON.stringify({ eventId: args.eventId }),

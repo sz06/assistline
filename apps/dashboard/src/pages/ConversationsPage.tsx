@@ -1,21 +1,11 @@
-import { Switch } from "@base-ui/react/switch";
 import { api, type Id } from "@repo/api";
-import {
-  Button,
-  ConfirmDialog,
-  DropdownMenu,
-  DropdownMenuItem,
-  DropdownMenuPopup,
-  DropdownMenuTrigger,
-  Input,
-} from "@repo/ui";
+import { Button, ConfirmDialog, ConversationDrawer, Input } from "@repo/ui";
 import { useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
   Bot,
   Inbox,
   MessageSquare,
-  MoreVertical,
   Pencil,
   Plus,
   Search,
@@ -391,165 +381,33 @@ function ChatPanel({
           </div>
         </div>
 
-        {/* AI Settings Dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            data-testid="ai-settings-trigger"
-            className={`relative h-8 w-8 flex items-center justify-center rounded-md transition-colors ${
-              data.aiEnabled
-                ? "text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-                : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-            }`}
-          >
-            <Sparkles className="h-4 w-4" />
-            {data.aiEnabled && (
-              <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-white dark:ring-gray-950" />
-            )}
-          </DropdownMenuTrigger>
-          <DropdownMenuPopup>
-            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                AI Settings
-              </p>
-            </div>
-            {/* Enable AI */}
-            <div className="px-3 py-2.5 flex items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-              <div className="flex items-center gap-2.5">
-                <Bot className="h-4 w-4 text-blue-500" />
-                <div>
-                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                    Enable AI
-                  </p>
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500">
-                    Activate Chatter agent
-                  </p>
-                </div>
-              </div>
-              <Switch.Root
-                data-testid="ai-toggle-enabled"
-                checked={data.aiEnabled === true}
-                onCheckedChange={(checked) =>
-                  updateAISettings({
-                    conversationId: id,
-                    aiEnabled: checked,
-                  })
-                }
-                className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out bg-gray-300 dark:bg-gray-700 data-[checked]:bg-emerald-500"
-              >
-                <Switch.Thumb className="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0 data-[checked]:translate-x-4" />
-              </Switch.Root>
-            </div>
-            {/* Auto Post Reply */}
-            <div
-              className={`px-3 py-2.5 flex items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${!data.aiEnabled ? "opacity-40" : ""}`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Send className="h-4 w-4 text-amber-500" />
-                <div>
-                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                    Auto Post Reply
-                  </p>
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500">
-                    Send suggested replies automatically
-                  </p>
-                </div>
-              </div>
-              <Switch.Root
-                data-testid="ai-toggle-autosend"
-                checked={data.autoSend === true}
-                disabled={!data.aiEnabled}
-                onCheckedChange={(checked) =>
-                  updateAISettings({
-                    conversationId: id,
-                    autoSend: checked,
-                  })
-                }
-                className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out bg-gray-300 dark:bg-gray-700 data-[checked]:bg-amber-500 disabled:cursor-not-allowed"
-              >
-                <Switch.Thumb className="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0 data-[checked]:translate-x-4" />
-              </Switch.Root>
-            </div>
-            {/* Auto Perform Actions */}
-            <div
-              className={`px-3 py-2.5 flex items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${!data.aiEnabled ? "opacity-40" : ""}`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Sparkles className="h-4 w-4 text-violet-500" />
-                <div>
-                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                    Auto Perform Actions
-                  </p>
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500">
-                    Execute suggested actions automatically
-                  </p>
-                </div>
-              </div>
-              <Switch.Root
-                data-testid="ai-toggle-autoact"
-                checked={data.autoAct === true}
-                disabled={!data.aiEnabled}
-                onCheckedChange={(checked) =>
-                  updateAISettings({
-                    conversationId: id,
-                    autoAct: checked,
-                  })
-                }
-                className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out bg-gray-300 dark:bg-gray-700 data-[checked]:bg-violet-500 disabled:cursor-not-allowed"
-              >
-                <Switch.Thumb className="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0 data-[checked]:translate-x-4" />
-              </Switch.Root>
-            </div>
-            {/* Token Usage Stats */}
-            {data.aiEnabled && (data.aiTokensIn || data.aiTokensOut) ? (
-              <>
-                <div className="border-t border-gray-100 dark:border-gray-800 mx-3" />
-                <div className="px-3 py-2.5">
-                  <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
-                    Token Usage
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-blue-50 dark:bg-blue-950/30 rounded-md px-2.5 py-1.5">
-                      <p className="text-[10px] text-blue-400 dark:text-blue-500 font-medium">
-                        Input
-                      </p>
-                      <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">
-                        {(data.aiTokensIn ?? 0).toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="bg-violet-50 dark:bg-violet-950/30 rounded-md px-2.5 py-1.5">
-                      <p className="text-[10px] text-violet-400 dark:text-violet-500 font-medium">
-                        Output
-                      </p>
-                      <p className="text-sm font-semibold text-violet-600 dark:text-violet-400">
-                        {(data.aiTokensOut ?? 0).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-1.5 text-[10px] text-gray-400 dark:text-gray-500 text-right">
-                    Total:{" "}
-                    {(
-                      (data.aiTokensIn ?? 0) + (data.aiTokensOut ?? 0)
-                    ).toLocaleString()}
-                  </div>
-                </div>
-              </>
-            ) : null}
-          </DropdownMenuPopup>
-        </DropdownMenu>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger className="h-8 w-8 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-100">
-            <MoreVertical className="h-4 w-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuPopup>
-            <DropdownMenuItem
-              className="text-red-600"
-              onClick={() => setShowDeleteConfirm(true)}
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-2" /> Delete
-            </DropdownMenuItem>
-          </DropdownMenuPopup>
-        </DropdownMenu>
+        {/* Conversation Settings Drawer */}
+        <ConversationDrawer
+          aiEnabled={data.aiEnabled === true}
+          autoSend={data.autoSend === true}
+          autoAct={data.autoAct === true}
+          tokensIn={data.aiTokensIn}
+          tokensOut={data.aiTokensOut}
+          onAIEnabledChange={(checked) =>
+            updateAISettings({
+              conversationId: id,
+              aiEnabled: checked,
+            })
+          }
+          onAutoSendChange={(checked) =>
+            updateAISettings({
+              conversationId: id,
+              autoSend: checked,
+            })
+          }
+          onAutoActChange={(checked) =>
+            updateAISettings({
+              conversationId: id,
+              autoAct: checked,
+            })
+          }
+          onDeleteChat={() => setShowDeleteConfirm(true)}
+        />
       </div>
 
       {/* Feed */}
@@ -807,7 +665,7 @@ function ChatPanel({
                     conversationId: id,
                     actionIndex: idx,
                     actionJson: actionStr,
-                    source: "manual",
+                    source: "user",
                   })
                 }
                 className={`h-6 px-2.5 text-[10px] font-semibold ${badge.accent} hover:opacity-90`}

@@ -160,7 +160,7 @@ const CONTACT_PATCH_KEYS = [
 export async function executeActionDispatch(
   ctx: MutationCtx,
   actionJson: string,
-  source: "auto" | "manual",
+  source: "user" | "agent" | "system",
   autoAct?: boolean,
 ) {
   const action = JSON.parse(actionJson) as Record<string, unknown>;

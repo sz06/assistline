@@ -13,7 +13,9 @@ export const create = mutation({
     description: v.string(),
     accessibleToRoles: v.array(v.id("roles")),
     expiresAt: v.optional(v.number()),
-    source: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
+    source: v.optional(
+      v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
+    ),
   },
   handler: async (ctx, args) => {
     const { source, ...fields } = args;
@@ -27,7 +29,7 @@ export const create = mutation({
 
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "artifact.create",
-      source: source ?? "manual",
+      source: source ?? "user",
       entity: "artifacts",
       entityId: id,
       details: JSON.stringify({ description: args.description }),
@@ -44,7 +46,9 @@ export const update = mutation({
     description: v.optional(v.string()),
     accessibleToRoles: v.optional(v.array(v.id("roles"))),
     expiresAt: v.optional(v.number()),
-    source: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
+    source: v.optional(
+      v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
+    ),
   },
   handler: async (ctx, args) => {
     const { id, source, ...patch } = args;
@@ -55,7 +59,7 @@ export const update = mutation({
 
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "artifact.update",
-      source: source ?? "manual",
+      source: source ?? "user",
       entity: "artifacts",
       entityId: id,
       details: JSON.stringify({
@@ -84,14 +88,16 @@ export const list = query({
 export const remove = mutation({
   args: {
     id: v.id("artifacts"),
-    source: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
+    source: v.optional(
+      v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
+    ),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db.get(args.id);
     await ctx.db.delete(args.id);
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "artifact.delete",
-      source: args.source ?? "manual",
+      source: args.source ?? "user",
       entity: "artifacts",
       entityId: args.id,
       details: JSON.stringify({ description: existing?.description }),
@@ -114,7 +120,7 @@ export const cleanupExpired = internalMutation({
       await ctx.db.delete(artifact._id);
       await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
         action: "artifact.expired",
-        source: "auto",
+        source: "system",
         entity: "artifacts",
         entityId: artifact._id,
         details: JSON.stringify({ description: artifact.description }),
@@ -182,5 +188,97 @@ export const getArtifactsQuery = internalQuery({
         return true;
       })
       .slice(0, 10);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Internal mutations/queries for Artifactor agent
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch full artifact documents by their IDs.
+ * Used after ctx.vectorSearch() in action context to hydrate results.
+ */
+export const fetchByIds = internalQuery({
+  args: {
+    ids: v.array(v.id("artifacts")),
+  },
+  handler: async (ctx, args) => {
+    const results = [];
+    for (const id of args.ids) {
+      const doc = await ctx.db.get(id);
+      if (doc) results.push(doc);
+    }
+    return results;
+  },
+});
+
+/**
+ * Create an artifact with an embedding vector.
+ * Used by the Artifactor agent to persist new facts.
+ */
+export const internalCreate = internalMutation({
+  args: {
+    value: v.string(),
+    description: v.string(),
+    accessibleToRoles: v.array(v.id("roles")),
+    embedding: v.optional(v.array(v.float64())),
+    expiresAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const id = await ctx.db.insert("artifacts", {
+      value: args.value,
+      description: args.description,
+      accessibleToRoles: args.accessibleToRoles,
+      embedding: args.embedding,
+      expiresAt: args.expiresAt,
+      updatedAt: Date.now(),
+    });
+
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "artifact.create",
+      source: "agent",
+      entity: "artifacts",
+      entityId: id,
+      details: JSON.stringify({
+        description: args.description,
+        via: "artifactor",
+      }),
+      timestamp: Date.now(),
+    });
+    return id;
+  },
+});
+
+/**
+ * Update an artifact's value, description, and/or embedding.
+ * Used by the Artifactor agent to update existing facts.
+ */
+export const internalUpdate = internalMutation({
+  args: {
+    id: v.id("artifacts"),
+    value: v.optional(v.string()),
+    description: v.optional(v.string()),
+    embedding: v.optional(v.array(v.float64())),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...patch } = args;
+    await ctx.db.patch(id, {
+      ...patch,
+      updatedAt: Date.now(),
+    });
+
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "artifact.update",
+      source: "agent",
+      entity: "artifacts",
+      entityId: id,
+      details: JSON.stringify({
+        description: patch.description,
+        via: "artifactor",
+      }),
+      timestamp: Date.now(),
+    });
+    return id;
   },
 });

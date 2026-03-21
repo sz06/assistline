@@ -188,7 +188,7 @@ export default defineSchema({
   }).index("by_name", ["name"]),
   auditLogs: defineTable({
     action: v.string(), // e.g. "contact.create", "conversation.toggleAI"
-    source: v.union(v.literal("auto"), v.literal("manual")),
+    source: v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
     entity: v.optional(v.string()), // Table name: "contacts", "conversations", etc.
     entityId: v.optional(v.string()), // Convex document ID of affected record
     details: v.optional(v.string()), // JSON-stringified summary of what changed

@@ -69,7 +69,7 @@ export const executeSuggestedAction = mutation({
     conversationId: v.id("conversations"),
     actionIndex: v.number(),
     actionJson: v.string(),
-    source: v.union(v.literal("auto"), v.literal("manual")),
+    source: v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
   },
   handler: async (ctx, args) => {
     await executeActionDispatch(ctx, args.actionJson, args.source);
@@ -108,7 +108,7 @@ export const deleteConversation = mutation({
     await ctx.db.delete(args.conversationId);
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "conversation.delete",
-      source: "manual",
+      source: "user",
       entity: "conversations",
       entityId: args.conversationId,
       details: JSON.stringify({
@@ -158,7 +158,7 @@ export const markAsRead = mutation({
     await ctx.db.patch(args.conversationId, { unreadCount: 0 });
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "conversation.markAsRead",
-      source: "manual",
+      source: "user",
       entity: "conversations",
       entityId: args.conversationId,
       timestamp: Date.now(),
@@ -266,6 +266,6 @@ export const internalExecuteSuggestedAction = internalMutation({
     actionJson: v.string(),
   },
   handler: async (ctx, args) => {
-    await executeActionDispatch(ctx, args.actionJson, "auto", true);
+    await executeActionDispatch(ctx, args.actionJson, "agent", true);
   },
 });

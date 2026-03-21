@@ -10,7 +10,7 @@ import { internalMutation, query } from "./_generated/server";
 export const log = internalMutation({
   args: {
     action: v.string(),
-    source: v.union(v.literal("auto"), v.literal("manual")),
+    source: v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
     entity: v.optional(v.string()),
     entityId: v.optional(v.string()),
     details: v.optional(v.string()),
@@ -35,7 +35,7 @@ export const log = internalMutation({
 /** List audit logs, newest first. Paginated. Supports optional source & entity filters. */
 export const list = query({
   args: {
-    source: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
+    source: v.optional(v.union(v.literal("user"), v.literal("agent"), v.literal("system"))),
     entity: v.optional(v.string()),
     paginationOpts: paginationOptsValidator,
   },
@@ -75,3 +75,4 @@ export const cleanupOld = internalMutation({
     console.log(`Cleaned up ${count} audit log entries older than 7 days.`);
   },
 });
+

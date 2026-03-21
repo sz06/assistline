@@ -35,7 +35,7 @@ export const create = mutation({
     const id = await ctx.db.insert("roles", args);
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "role.create",
-      source: "manual",
+      source: "user",
       entity: "roles",
       entityId: id,
       details: JSON.stringify({ name: args.name }),
@@ -67,7 +67,7 @@ export const update = mutation({
     });
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "role.update",
-      source: "manual",
+      source: "user",
       entity: "roles",
       entityId: args.id,
       details: JSON.stringify({ name: args.name }),
@@ -83,7 +83,7 @@ export const remove = mutation({
     await ctx.db.delete(args.id);
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "role.delete",
-      source: "manual",
+      source: "user",
       entity: "roles",
       entityId: args.id,
       details: JSON.stringify({ name: existing?.name }),

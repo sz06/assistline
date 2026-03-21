@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.18.0] - 2026-03-21
+
+### Added
+- **Artifactor Agent** (`packages/api`): New internal agent that receives extracted facts from Chatter and automatically persists them as artifacts. Uses vector search (`by_embedding` index) to find semantically similar existing artifacts and decides whether to create new rows or update existing ones. Facts about the user (e.g. home address, preferences) are assigned the "User" role for access control.
+  - `agents/artifactor/agent.ts` — Entry point (`processFacts` internalAction) that creates a one-off thread and runs the agent.
+  - `agents/artifactor/tools.ts` — Four tools: `searchArtifacts` (vector search + hydration), `createArtifact` (embed + insert), `updateArtifact` (re-embed + patch), `done`.
+  - `agents/artifactor/prompt.ts` — System prompt for search-then-decide logic.
+- **Embedding Action** (`packages/api`): New `ai/embeddings.ts` with `embedText` internalAction for generating embeddings via the default embedding provider. Reusable across agents and features.
+- **Artifact Internal Mutations** (`packages/api`): Added `fetchByIds` internalQuery, `internalCreate` and `internalUpdate` internalMutations to `artifacts.ts` for agent use.
+
+### Changed
+- **Chatter → Artifactor Handoff** (`packages/api`): Chatter's `suggestReply` and `noReplyNeeded` tools now schedule the Artifactor agent asynchronously via `ctx.scheduler.runAfter` when extracted facts are present, replacing the previous console.log-only behavior.
+- **Audit Log Sources** (`packages/api`, `apps/dashboard`): Migrated `source` field from `auto|manual` to `user|agent|system` across schema, validators, and all callsites. `user` = dashboard actions, `agent` = Chatter/Artifactor actions, `system` = listener events and cron jobs.
+
+## [2.17.2] - 2026-03-21
+
+### Added
+- **ConversationDrawer** (`packages/ui`): New presentational drawer component that slides in from the right, combining AI settings (Enable AI, Auto Post Reply, Auto Perform Actions toggles, token usage stats) and a bottom-pinned "Delete Chat" action. Built on `@base-ui/react/drawer`. Added Storybook stories with three variants (Default, AIEnabled, AllFeaturesOn).
+
+### Changed
+- **Conversation Header** (`apps/dashboard`): Replaced the separate AI settings dropdown and 3-dot menu with the unified `ConversationDrawer`. The ⋮ icon now opens the drawer with all conversation settings.
+
 ## [2.17.1] - 2026-03-20
 
 ### Added

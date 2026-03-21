@@ -52,7 +52,7 @@ export const create = mutation({
     });
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "channel.create",
-      source: "manual",
+      source: "user",
       entity: "channels",
       entityId: id,
       details: JSON.stringify({ type: args.type, label: args.label }),
@@ -90,7 +90,7 @@ export const requestPairing = mutation({
 
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "channel.requestPairing",
-      source: "manual",
+      source: "user",
       entity: "channels",
       entityId: args.id,
       details: JSON.stringify({ type: channel.type }),
@@ -113,7 +113,7 @@ export const disconnect = mutation({
     });
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "channel.disconnect",
-      source: "manual",
+      source: "user",
       entity: "channels",
       entityId: args.id,
       timestamp: Date.now(),
@@ -140,7 +140,7 @@ export const update = mutation({
     await ctx.db.patch(args.id, patch);
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "channel.update",
-      source: "manual",
+      source: "user",
       entity: "channels",
       entityId: args.id,
       details: JSON.stringify({ label: args.label, type: args.type }),
@@ -157,7 +157,7 @@ export const remove = mutation({
     await ctx.db.delete(args.id);
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "channel.delete",
-      source: "manual",
+      source: "user",
       entity: "channels",
       entityId: args.id,
       details: JSON.stringify({ label: existing?.label, type: existing?.type }),

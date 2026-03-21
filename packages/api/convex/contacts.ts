@@ -82,14 +82,16 @@ export const getIdentities = query({
 export const create = mutation({
   args: {
     ...contactFields,
-    source: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
+    source: v.optional(
+      v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
+    ),
   },
   handler: async (ctx, args) => {
     const { source, ...fields } = args;
     const id = await ctx.db.insert("contacts", fields);
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "contact.create",
-      source: source ?? "manual",
+      source: source ?? "user",
       entity: "contacts",
       entityId: id,
       details: JSON.stringify({ name: args.name }),
@@ -104,7 +106,9 @@ export const update = mutation({
   args: {
     id: v.id("contacts"),
     ...contactFields,
-    source: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
+    source: v.optional(
+      v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
+    ),
   },
   handler: async (ctx, args) => {
     const { id, source, ...fields } = args;
@@ -113,7 +117,7 @@ export const update = mutation({
     await ctx.db.patch(id, fields);
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "contact.update",
-      source: source ?? "manual",
+      source: source ?? "user",
       entity: "contacts",
       entityId: id,
       details: JSON.stringify({ name: fields.name }),
@@ -126,7 +130,9 @@ export const update = mutation({
 export const remove = mutation({
   args: {
     id: v.id("contacts"),
-    source: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
+    source: v.optional(
+      v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
+    ),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db.get(args.id);
@@ -141,7 +147,7 @@ export const remove = mutation({
     await ctx.db.delete(args.id);
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "contact.delete",
-      source: args.source ?? "manual",
+      source: args.source ?? "user",
       entity: "contacts",
       entityId: args.id,
       details: JSON.stringify({ name: existing?.name }),

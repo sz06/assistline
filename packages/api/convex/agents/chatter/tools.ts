@@ -154,9 +154,10 @@ export const suggestReply = createTool<
     }
 
     if (extractedFacts && Object.keys(extractedFacts).length > 0) {
-      console.log(
-        "[Chatter] Extracted facts (for Artifact Manager):",
-        JSON.stringify(extractedFacts),
+      await ctx.scheduler.runAfter(
+        0,
+        internal.agents.artifactor.agent.processFacts,
+        { facts: extractedFacts },
       );
     }
     return reply;
@@ -241,9 +242,10 @@ export const noReplyNeeded = createTool<
       patch: { suggestedReply: undefined },
     });
     if (extractedFacts && Object.keys(extractedFacts).length > 0) {
-      console.log(
-        "[Chatter] Extracted facts (for Artifact Manager):",
-        JSON.stringify(extractedFacts),
+      await ctx.scheduler.runAfter(
+        0,
+        internal.agents.artifactor.agent.processFacts,
+        { facts: extractedFacts },
       );
     }
     return "Acknowledged — no reply needed.";

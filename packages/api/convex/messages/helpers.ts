@@ -15,7 +15,7 @@ export async function insertOutboundMessage(
     conversationId: Id<"conversations">;
     matrixRoomId: string;
     content: string;
-    auditSource: "manual" | "auto";
+    auditSource: "user" | "agent" | "system";
     auditDetails?: Record<string, unknown>;
   },
 ): Promise<Id<"messages">> {
