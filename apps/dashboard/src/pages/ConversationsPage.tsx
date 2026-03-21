@@ -1,10 +1,11 @@
 import { api, type Id } from "@repo/api";
 import { Button, ConfirmDialog, ConversationDrawer, Input } from "@repo/ui";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import {
   ArrowLeft,
   Bot,
   Inbox,
+  Loader2,
   MessageSquare,
   Pencil,
   Plus,
@@ -16,8 +17,9 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { channelColorMap, channelIconMap } from "../components/ChannelIcons";
+import { AI_TOGGLE_COLORS } from "../constants";
 
 // Status Badge styles matching our three states
 const statusConfig: Record<string, { color: string; label: string }> = {
@@ -39,11 +41,14 @@ export function ConversationsPage() {
   const [selectedChannelId, setSelectedChannelId] =
     useState<Id<"channels"> | null>(null);
 
-  const conversations = useQuery(
+  const {
+    results: conversations,
+    status: paginationStatus,
+    loadMore,
+  } = usePaginatedQuery(
     api.conversations.queries.list,
-    selectedChannelId
-      ? { limit: 20, channelId: selectedChannelId }
-      : { limit: 20 },
+    selectedChannelId ? { channelId: selectedChannelId } : {},
+    { initialNumItems: 20 },
   );
 
   const [selectedId, setSelectedId] = useState<Id<"conversations"> | null>(
@@ -56,6 +61,26 @@ export function ConversationsPage() {
     setSelectedId(null);
     setSearch("");
   }, [selectedChannelId]);
+
+  // Infinite scroll — observe a sentinel element at the bottom of the list
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const handleIntersection = useCallback(
+    (entries: IntersectionObserverEntry[]) => {
+      if (entries[0]?.isIntersecting && paginationStatus === "CanLoadMore") {
+        loadMore(20);
+      }
+    },
+    [paginationStatus, loadMore],
+  );
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(handleIntersection, {
+      rootMargin: "200px",
+    });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [handleIntersection]);
 
   const filtered = useMemo(() => {
     if (!conversations) return [];
@@ -185,7 +210,8 @@ export function ConversationsPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {!conversations ? (
+          {conversations.length === 0 &&
+          paginationStatus === "LoadingFirstPage" ? (
             <div className="p-4 space-y-3">
               {[...Array(5)].map((_, i) => (
                 <div
@@ -206,63 +232,91 @@ export function ConversationsPage() {
               <p className="text-sm font-medium">No conversations found</p>
             </div>
           ) : (
-            filtered.map((conv) => {
-              const statusObj = statusConfig[conv.status || "idle"];
-              return (
-                <button
-                  type="button"
-                  key={conv._id}
-                  onClick={() => setSelectedId(conv._id)}
-                  className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-800/50 ${
-                    selectedId === conv._id
-                      ? "bg-blue-50 dark:bg-blue-950/30 border-l-2 border-l-blue-500"
-                      : ""
-                  }`}
-                >
-                  <div
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white font-semibold text-sm shadow-sm relative ${
-                      conv.memberCount > 2
-                        ? "bg-gradient-to-br from-violet-500 to-purple-600"
-                        : "bg-gradient-to-br from-blue-500 to-indigo-600"
+            <>
+              {filtered.map((conv) => {
+                const statusObj = statusConfig[conv.status || "idle"];
+                const isSelected = selectedId === conv._id;
+                const hasAnyAI =
+                  conv.aiEnabled || conv.autoSend || conv.autoAct;
+                return (
+                  <button
+                    type="button"
+                    key={conv._id}
+                    onClick={() => setSelectedId(conv._id)}
+                    className={`relative w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-800/50 ${
+                      isSelected
+                        ? "bg-blue-50 dark:bg-blue-950/30 border-l-2 border-l-blue-500"
+                        : ""
                     }`}
                   >
-                    {conv.memberCount > 2 ? (
-                      <Users className="h-4.5 w-4.5" />
-                    ) : (
-                      conv.participantDetails.name.charAt(0).toUpperCase()
-                    )}
-                    <span
-                      title={statusObj?.label}
-                      className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white dark:border-gray-900 ${statusObj?.color}`}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-sm truncate text-gray-900 dark:text-gray-100">
-                        {conv.participantDetails.name}
+                    {/* 3-segment AI status bar */}
+                    {!isSelected && hasAnyAI && (
+                      <span className="absolute left-0 top-0 bottom-0 w-[3px] flex flex-col">
+                        <span
+                          className={`flex-1 ${conv.aiEnabled ? AI_TOGGLE_COLORS.aiEnabled : "bg-transparent"}`}
+                        />
+                        <span
+                          className={`flex-1 ${conv.autoSend ? AI_TOGGLE_COLORS.autoSend : "bg-transparent"}`}
+                        />
+                        <span
+                          className={`flex-1 ${conv.autoAct ? AI_TOGGLE_COLORS.autoAct : "bg-transparent"}`}
+                        />
                       </span>
-                      <div className="flex items-center gap-1.5">
-                        {(conv.unreadCount ?? 0) > 0 && (
-                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[10px] font-bold text-white shadow-sm">
-                            {conv.unreadCount}
-                          </span>
-                        )}
-                        {conv.memberCount > 2 && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium leading-tight bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400">
-                            {conv.memberCount} members
-                          </span>
-                        )}
-                      </div>
+                    )}
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white font-semibold text-sm shadow-sm relative ${
+                        conv.memberCount > 2
+                          ? "bg-gradient-to-br from-violet-500 to-purple-600"
+                          : "bg-gradient-to-br from-blue-500 to-indigo-600"
+                      }`}
+                    >
+                      {conv.memberCount > 2 ? (
+                        <Users className="h-4.5 w-4.5" />
+                      ) : (
+                        conv.participantDetails.name.charAt(0).toUpperCase()
+                      )}
+                      <span
+                        title={statusObj?.label}
+                        className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white dark:border-gray-900 ${statusObj?.color}`}
+                      />
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                      {conv.memberCount > 2
-                        ? (conv.topic ?? "Group conversation")
-                        : conv.participantDetails.phone || conv.matrixRoomId}
-                    </p>
-                  </div>
-                </button>
-              );
-            })
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-sm truncate text-gray-900 dark:text-gray-100">
+                          {conv.participantDetails.name}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {(conv.unreadCount ?? 0) > 0 && (
+                            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[10px] font-bold text-white shadow-sm">
+                              {conv.unreadCount}
+                            </span>
+                          )}
+                          {conv.memberCount > 2 && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium leading-tight bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400">
+                              {conv.memberCount} members
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                        {conv.memberCount > 2
+                          ? (conv.topic ?? "Group conversation")
+                          : conv.participantDetails.phone || conv.matrixRoomId}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+
+              {/* Infinite scroll sentinel */}
+              <div ref={sentinelRef} className="h-1" />
+
+              {paginationStatus === "LoadingMore" && (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -380,6 +434,30 @@ function ChatPanel({
               : data.participantDetails.phone || "No phone linked"}
           </div>
         </div>
+
+        {/* AI toggle status dots (read-only) */}
+        {(data.aiEnabled || data.autoSend || data.autoAct) && (
+          <div
+            className="flex items-center gap-1 mr-1"
+            title="AI: green = Enabled, amber = Auto Send, violet = Auto Act"
+          >
+            {data.aiEnabled && (
+              <span
+                className={`h-2 w-2 rounded-full ${AI_TOGGLE_COLORS.aiEnabled}`}
+              />
+            )}
+            {data.autoSend && (
+              <span
+                className={`h-2 w-2 rounded-full ${AI_TOGGLE_COLORS.autoSend}`}
+              />
+            )}
+            {data.autoAct && (
+              <span
+                className={`h-2 w-2 rounded-full ${AI_TOGGLE_COLORS.autoAct}`}
+              />
+            )}
+          </div>
+        )}
 
         {/* Conversation Settings Drawer */}
         <ConversationDrawer

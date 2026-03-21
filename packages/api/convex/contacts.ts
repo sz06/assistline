@@ -209,5 +209,3 @@ export const getContactProfileQuery = internalQuery({
     };
   },
 });
-
-

@@ -40,7 +40,7 @@ export function ConversationDrawer({
   const [open, setOpen] = React.useState(false);
 
   return (
-    <Drawer.Root open={open} onOpenChange={setOpen} swipeDirection="left">
+    <Drawer.Root open={open} onOpenChange={setOpen} swipeDirection="right">
       <Drawer.Trigger
         data-testid="conversation-drawer-trigger"
         className="h-8 w-8 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -52,8 +52,7 @@ export function ConversationDrawer({
         <Drawer.Backdrop className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm transition-opacity" />
         <Drawer.Viewport className="fixed inset-0 z-50 flex justify-end">
           <Drawer.Popup
-            className="h-full w-80 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 shadow-xl flex flex-col"
-            style={{ position: "fixed", top: 0, right: 0, bottom: 0 }}
+            className="h-full w-80 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 shadow-xl flex flex-col ml-auto"
           >
             <Drawer.Content className="flex flex-col h-full overflow-hidden">
               {/* ── Header ──────────────────────────────── */}
@@ -217,11 +216,11 @@ function ToggleRow({
         disabled={disabled}
         onCheckedChange={onCheckedChange}
         className={cn(
-          "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out bg-gray-300 dark:bg-gray-700 disabled:cursor-not-allowed",
+          "relative inline-flex items-center h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out bg-gray-300 dark:bg-gray-700 disabled:cursor-not-allowed",
           switchAccentMap[accentColor],
         )}
       >
-        <Switch.Thumb className="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0 data-[checked]:translate-x-4" />
+        <Switch.Thumb className="pointer-events-none block h-4 w-4 rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out translate-x-0 data-[checked]:translate-x-4" />
       </Switch.Root>
     </div>
   );

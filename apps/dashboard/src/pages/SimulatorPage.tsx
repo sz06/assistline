@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { api, type Id } from "@repo/api";
 import { Button, Input, Label, PageHeader, Textarea } from "@repo/ui";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { AlertCircle, CheckCircle2, Send } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -25,7 +25,11 @@ type SimulatorFormData = z.infer<typeof simulatorFormSchema>;
 // ---------------------------------------------------------------------------
 
 export function SimulatorPage() {
-  const conversations = useQuery(api.conversations.queries.list, {});
+  const { results: conversations } = usePaginatedQuery(
+    api.conversations.queries.list,
+    {},
+    { initialNumItems: 100 },
+  );
   const channels = useQuery(api.channels.list);
   const insertMessage = useMutation(api.messages.mutations.insertMessage);
 

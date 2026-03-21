@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.19.2] - 2026-03-21
+
+### Added
+- **AI Status Indicator** (`apps/dashboard`): Conversations with AI features enabled now display a 3-segment left border on the sidebar list. Each segment maps to a toggle: **violet** = AI Enabled, **cyan** = Auto Post Reply, **amber** = Auto Perform Actions. Only active segments are visible, giving a quick at-a-glance view of which AI features are on.
+- **Infinite Scroll** (`packages/api`, `apps/dashboard`): The conversation list now loads 20 conversations at a time with automatic infinite scroll. An `IntersectionObserver` sentinel at the bottom of the list triggers `loadMore(20)` as the user scrolls. Backend `conversations.list` query converted from `.take(limit)` to Convex's cursor-based `.paginate()` API.
+
 ## [2.19.1] - 2026-03-21
 
 ### Changed

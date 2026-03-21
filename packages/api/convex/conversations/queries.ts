@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { internalQuery, query } from "../_generated/server";
@@ -9,46 +10,31 @@ import {
 
 export const list = query({
   args: {
-    limit: v.optional(v.number()),
     channelId: v.optional(v.id("channels")),
+    paginationOpts: paginationOptsValidator,
   },
   handler: async (ctx, args) => {
-    // Read default conversation fetch size from config table
-    const defaultLimit = await getConfigNumber(
-      ctx,
-      "historicalFetchSize.conversations",
-      20,
-    );
-    const limit = args.limit ?? defaultLimit;
-
-    // Fetch recently updated conversations, optionally filtered by channel
-    const conversations = args.channelId
-      ? await ctx.db
+    // Build query, optionally filtered by channel
+    const baseQuery = args.channelId
+      ? ctx.db
           .query("conversations")
           .withIndex("by_channelId", (q) =>
             q.eq("channelId", args.channelId as Id<"channels">),
           )
           .order("desc")
-          .take(limit)
-      : await ctx.db
-          .query("conversations")
-          .withIndex("by_updatedAt")
-          .order("desc")
-          .take(limit);
+      : ctx.db.query("conversations").withIndex("by_updatedAt").order("desc");
 
-    // Resolve participant details for display
-    const withDetails = await Promise.all(
-      conversations.map(async (conv) => {
+    const paginatedResult = await baseQuery.paginate(args.paginationOpts);
+
+    // Resolve participant details for each conversation in this page
+    const pageWithDetails = await Promise.all(
+      paginatedResult.page.map(async (conv) => {
         const participantDetails = await resolveParticipantDetails(ctx, conv);
-
-        return {
-          ...conv,
-          participantDetails,
-        };
+        return { ...conv, participantDetails };
       }),
     );
 
-    return withDetails;
+    return { ...paginatedResult, page: pageWithDetails };
   },
 });
 
