@@ -47,15 +47,20 @@ This document defines the core standards and automated workflows that any AI age
   This script automatically generates the admin key from the Docker container and pushes the functions. **Do not** attempt to run `convex dev` or `npx convex deploy` directly — always use the root-level `convex:push` script.
 * **Admin Key:** The admin key is generated on-the-fly via `docker exec convex-backend ./generate_admin_key.sh`. You do not need to store or manage it manually.
 * **Dashboard:** The Convex dashboard is available at `http://localhost:6791/`.
+* **Init Container:** On every `docker compose up`, the `assistline-init` container automatically deploys the latest Convex functions from the host's `packages/api` (volume-mounted read-only). This ensures deployed code always matches the working tree.
 
 ## 8. Matrix Listener (Dockerized)
 * **Runtime:** The Matrix listener (`apps/listener`) runs inside a Docker container named `matrix-listener`. It syncs events from the Dendrite homeserver into Convex.
 * **Deploying Changes:** After modifying **any** file in `apps/listener/`, you **must** rebuild and restart the container:
   ```bash
-  docker compose -f docker/docker-compose.yml build matrix-listener --no-cache && docker compose -f docker/docker-compose.yml up -d matrix-listener
+  pnpm listener:rebuild
   ```
 * **Logs:** To inspect listener output, run `docker logs -f matrix-listener`.
 * **When to Deploy:** Any change to the listener code (new features, bug fixes, dependency updates) requires a rebuild. Convex function changes do **not** require a listener rebuild — only `pnpm convex:push`.
+* **Full Deploy:** To deploy both Convex functions and rebuild the listener in one command:
+  ```bash
+  pnpm deploy
+  ```
 
 ## 9. Forms & Validation
 * **Zod:** Use `zod` for all form validation schemas. Define schemas alongside the form component and derive the TypeScript type via `z.infer<typeof schema>`.

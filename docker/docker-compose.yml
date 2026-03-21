@@ -46,19 +46,29 @@ services:
     networks:
       - assistline-net
 
-  # 4. Convex Auto-Deployer (runs once — deploys functions, then exits)
-  convex-deployer:
+  # 4. AssistLine Init (runs once — sets up Matrix bot + deploys Convex functions)
+  assistline-init:
     build:
       context: ..
-      dockerfile: docker/convex-deployer/Dockerfile
-    container_name: convex-deployer
+      dockerfile: docker/assistline-init/Dockerfile
+    container_name: assistline-init
     restart: "no"
     volumes:
       - ./convex-data/credentials:/convex-credentials:ro
-      - convex-shared:/shared
+      - convex-shared:/shared-convex
+      - matrix-shared:/shared-matrix
+      - ../packages/api:/app/packages/api:ro
+      - ../packages/config:/app/packages/config:ro
+    environment:
+      - MATRIX_HOMESERVER_URL=http://dendrite:8008
+      - DENDRITE_SERVER_NAME=${DENDRITE_SERVER_NAME:-matrix.local}
+      - DENDRITE_SHARED_SECRET=${DENDRITE_SHARED_SECRET}
+      - MATRIX_BOT_USERNAME=${MATRIX_BOT_USERNAME:-listener-bot}
+      - MATRIX_BOT_PASSWORD=${MATRIX_BOT_PASSWORD}
     networks:
       - assistline-net
     depends_on:
+      - dendrite
       - convex
 
   # 5. Convex Dashboard (web UI to inspect data, functions, logs)
@@ -74,26 +84,6 @@ services:
       - assistline-net
     depends_on:
       - convex
-
-  # 6. Matrix User Setup (runs once — creates bot user, then exits)
-  matrix-setup:
-    image: alpine:3.21
-    container_name: matrix-setup
-    restart: "no"
-    entrypoint: ["/bin/sh", "/setup.sh"]
-    volumes:
-      - ./matrix-setup/setup.sh:/setup.sh:ro
-      - matrix-shared:/shared
-    environment:
-      - MATRIX_HOMESERVER_URL=http://dendrite:8008
-      - DENDRITE_SERVER_NAME=${DENDRITE_SERVER_NAME:-matrix.local}
-      - DENDRITE_SHARED_SECRET=${DENDRITE_SHARED_SECRET}
-      - MATRIX_BOT_USERNAME=${MATRIX_BOT_USERNAME:-listener-bot}
-      - MATRIX_BOT_PASSWORD=${MATRIX_BOT_PASSWORD}
-    networks:
-      - assistline-net
-    depends_on:
-      - dendrite
 
   # 8. Tailscale Sidecar Proxy for the Vite Dashboard
   tailscale:
@@ -145,8 +135,7 @@ services:
       - assistline-net
     depends_on:
       - dendrite
-      - convex-deployer
-      - matrix-setup
+      - assistline-init
 
 networks:
   assistline-net:

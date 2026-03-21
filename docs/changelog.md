@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.19.0] - 2026-03-21
+
+### Changed
+- **Unified Init Container** (`docker`): Merged `convex-deployer` and `matrix-setup` into a single `assistline-init` container. It runs both Matrix bot setup (user creation, access token) and Convex function deployment in one shot on every `docker compose up`. Source code (`packages/api`, `packages/config`) is now volume-mounted read-only instead of baked into the image, so the container always deploys the latest code from disk — no more stale schemas after restarts.
+
+### Added
+- **`pnpm listener:rebuild`** (`package.json`): One-command rebuild and restart of the `matrix-listener` container.
+- **`pnpm deploy`** (`package.json`): Full-stack deploy — pushes Convex functions and rebuilds the listener in one command.
+
+### Removed
+- **`convex-deployer`** container (`docker`): Replaced by `assistline-init`.
+- **`matrix-setup`** container (`docker`): Replaced by `assistline-init`.
+
 ## [2.18.1] - 2026-03-21
 
 ### Changed
