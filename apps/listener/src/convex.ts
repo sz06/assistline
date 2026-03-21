@@ -10,7 +10,7 @@
 
 import { anyApi } from "convex/server";
 
-export const api = anyApi as {
+export const api = anyApi as unknown as {
   channels: {
     getByType: typeof anyApi.channels.getByType;
   };
@@ -23,8 +23,10 @@ export const api = anyApi as {
     editMessage: typeof anyApi.messages.editMessage;
   };
   conversations: {
-    markRead: typeof anyApi.conversations.markRead;
-    setTyping: typeof anyApi.conversations.setTyping;
+    mutations: {
+      markRead: typeof anyApi.conversations.mutations.markRead;
+      setTyping: typeof anyApi.conversations.mutations.setTyping;
+    };
   };
   settings: {
     set: typeof anyApi.settings.set;

@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.0] - 2026-03-20
+
+### Added
+- **Per-conversation AI token tracking** (`schema.ts`, `mutations.ts`): Added `aiTokensIn` and `aiTokensOut` fields to conversations table, with `incrementTokenUsage` internal mutation. The Chatter agent's `usageHandler` atomically increments these counters after each LLM call.
+- **Execute suggested actions** (`conversations/mutations.ts`): New `executeSuggestedAction` mutation that parses action JSON, dispatches by type (updateContact, createArtifact, assignRole), executes the write, and removes the action from the list.
+
+### Fixed
+- **Suggested action approve button** (`ConversationsPage.tsx`): The approve button was a dead button with no `onClick` handler. Now wired to `executeSuggestedAction`.
+
+### Changed
+- **Chatter tools write directly** (`agents/chatter/tools.ts`): Response tools (`suggestReply`, `suggestActions`, `noReplyNeeded`) now accept `conversationId` and write directly to the conversation via `ctx.runMutation`, eliminating fragile manual step iteration.
+- **Simplified agent handler** (`agents/chatter/agent.ts`): Removed the entire post-`generateText` tool call extraction loop. Added `usageHandler` for token tracking. Agent handler is now ~50 lines shorter.
+- **Docker self-hosted URL fix** (`docker-compose.yml`): Added `CONVEX_CLOUD_ORIGIN` and `CONVEX_SITE_ORIGIN` environment variables to the Convex backend container, fixing the `Invalid URL` error when running agents on self-hosted Convex.
+- **Redesigned suggested action cards** (`ConversationsPage.tsx`): Replaced raw JSON strips with structured cards showing CRUD type badges (green Add, blue Update, purple Assign), field-level data display, and operation-specific colors.
+
+## [2.14.0] - 2026-03-20
+
+### Changed
+- **Split `conversations.ts`** into `conversations/queries.ts`, `conversations/mutations.ts`, and `conversations/helpers.ts`. Updated all references across the dashboard, listener, and agent code. API paths now use submodule notation (e.g. `api.conversations.queries.list`, `api.conversations.mutations.markAsRead`).
+- **Chatter Agent → Convex Agent Component** (`packages/api`): Migrated from Vercel AI SDK `generateText` with structured output to `@convex-dev/agent@0.6.0-beta.0`. The agent now uses persistent threads, automatic context management, and native tool calling instead of a custom query-action loop.
+  - **Thread-based context** (`agents/chatter.ts`): Each conversation gets an `agentThreadId`. Messages sync into the agent thread via `saveMessage`; the LLM receives automatic context from thread history.
+  - **Native tool calling** (`agents/tools.ts`): Replaced `queryActions` with `createTool` wrappers (`getContactProfile`, `getConversationHistory`, `getArtifacts`). Response is captured via `suggestReply`, `suggestActions`, and `noReplyNeeded` tools. Backing queries live in their domain files (`contacts.ts`, `messages.ts`, `artifacts.ts`).
+  - **Simplified schema** (`agents/schema.ts`): Removed `ChatterResponseSchema` and `queryActions` (now handled by tool calls). Kept `ChatterMutationSchema` and added `INTENTS` enum.
+  - **Updated prompt** (`agents/prompt.ts`): Rewritten for tool-based architecture.
+- **AI Settings dropdown** (`ConversationsPage.tsx`): Replaced single AI toggle with a dropdown containing 3 switches (Enable AI, Auto Post Reply, Auto Perform Actions) using Base UI `Switch` primitive. Auto Send/Auto Act are disabled when AI is off.
+
+### Added
+- **`agentThreadId`** on `conversations` schema — links each conversation to its Convex Agent thread for persistent LLM context.
+- **`autoSend` and `autoAct` toggles** (`packages/api`): Two optional booleans on `conversations`. `autoSend` auto-sends suggested replies; `autoAct` auto-executes mutationActions. Both default to false.
+- **`updateAISettings` mutation** (`conversations.ts`): Flexible mutation to set any combination of `aiEnabled`, `autoSend`, `autoAct`.
+- **`convex.config.ts`**: Registers the `@convex-dev/agent` component with `app.use(agent)`.
+- **`getByIdInternal`** query on `conversations` — simple internal getter for the Chatter agent.
+
+### Removed
+- **`agents/queries.ts`**: Replaced by the agent playground's built-in prompt inspection.
+- **`agents/toolQueries.ts`**: Queries moved to their domain files (`contacts.ts`, `messages.ts`, `artifacts.ts`).
+
 ## [2.13.1] - 2026-03-20
 
 ### Fixed

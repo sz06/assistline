@@ -40,6 +40,9 @@ services:
       - "3411:3211"
     volumes:
       - ./convex-data:/convex/data
+    environment:
+      - CONVEX_CLOUD_ORIGIN=http://127.0.0.1:3210
+      - CONVEX_SITE_ORIGIN=http://127.0.0.1:3211
     networks:
       - assistline-net
 

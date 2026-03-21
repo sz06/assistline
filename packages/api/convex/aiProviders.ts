@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 
 // ---------------------------------------------------------------------------
 // Queries
@@ -8,6 +8,14 @@ import { mutation, query } from "./_generated/server";
 
 /** List all configured AI providers. */
 export const list = query({
+  args: {},
+  handler: async (ctx) => {
+    return ctx.db.query("aiProviders").collect();
+  },
+});
+
+/** Internal: list all providers (for use by internal actions like Chatter). */
+export const listInternal = internalQuery({
   args: {},
   handler: async (ctx) => {
     return ctx.db.query("aiProviders").collect();

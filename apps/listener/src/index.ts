@@ -781,10 +781,13 @@ async function main(): Promise<void> {
                         userId === MATRIX_BOT_USER_ID ||
                         selfPuppetIds.has(userId)
                       ) {
-                        await convex.mutation(api.conversations.markRead, {
-                          matrixRoomId: roomId,
-                          lastReadEventId: eventId,
-                        });
+                        await convex.mutation(
+                          api.conversations.mutations.markRead,
+                          {
+                            matrixRoomId: roomId,
+                            lastReadEventId: eventId,
+                          },
+                        );
                         console.log(
                           `[listener] ✓ Read receipt: ${roomId} → ${eventId}`,
                         );
@@ -801,7 +804,7 @@ async function main(): Promise<void> {
                 const others = typingUserIds.filter(
                   (id) => id !== MATRIX_BOT_USER_ID && !selfPuppetIds.has(id),
                 );
-                await convex.mutation(api.conversations.setTyping, {
+                await convex.mutation(api.conversations.mutations.setTyping, {
                   matrixRoomId: roomId,
                   typingUsers: others,
                 });

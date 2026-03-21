@@ -1,6 +1,11 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalMutation, mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 
 export const create = mutation({
   args: {
@@ -118,5 +123,64 @@ export const cleanupExpired = internalMutation({
       count++;
     }
     console.log(`Cleaned up ${count} expired artifacts.`);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Internal queries for Chatter agent tools
+// ---------------------------------------------------------------------------
+
+/**
+ * Search artifacts filtered by participant roles in a conversation.
+ * Only artifacts accessible to conversation participant roles are returned.
+ */
+export const getArtifactsQuery = internalQuery({
+  args: {
+    conversationId: v.id("conversations"),
+    query: v.string(),
+  },
+  handler: async (ctx, { conversationId, query }) => {
+    const conversation = await ctx.db.get(conversationId);
+    if (!conversation) return [];
+
+    // Gather roles of conversation participants via contactIdentities
+    const participantRoleIds: string[] = [];
+    if (conversation.participants) {
+      for (const pid of conversation.participants) {
+        const identity = await ctx.db
+          .query("contactIdentities")
+          .withIndex("by_matrixId", (q) => q.eq("matrixId", pid))
+          .first();
+        if (identity) {
+          const contact = await ctx.db.get(identity.contactId);
+          if (contact?.roles) {
+            for (const r of contact.roles) {
+              const rStr = r.toString();
+              if (!participantRoleIds.includes(rStr))
+                participantRoleIds.push(rStr);
+            }
+          }
+        }
+      }
+    }
+
+    const allArtifacts = await ctx.db.query("artifacts").collect();
+    const queryLower = query.toLowerCase();
+
+    return allArtifacts
+      .filter((a) => {
+        const matchesQuery =
+          a.value.toLowerCase().includes(queryLower) ||
+          a.description.toLowerCase().includes(queryLower);
+        if (!matchesQuery) return false;
+
+        if (a.accessibleToRoles && a.accessibleToRoles.length > 0) {
+          return a.accessibleToRoles.some((r) =>
+            participantRoleIds.includes(r.toString()),
+          );
+        }
+        return true;
+      })
+      .slice(0, 10);
   },
 });

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 
 // ---------------------------------------------------------------------------
 // Shared validators
@@ -147,5 +147,46 @@ export const remove = mutation({
       details: JSON.stringify({ name: existing?.name }),
       timestamp: Date.now(),
     });
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Internal queries for Chatter agent tools
+// ---------------------------------------------------------------------------
+
+/** Look up a contact by their Matrix sender ID (via contactIdentities join). */
+export const getContactProfileQuery = internalQuery({
+  args: { matrixId: v.string() },
+  handler: async (ctx, { matrixId }) => {
+    const identity = await ctx.db
+      .query("contactIdentities")
+      .withIndex("by_matrixId", (q) => q.eq("matrixId", matrixId))
+      .first();
+    if (!identity) return null;
+
+    const contact = await ctx.db.get(identity.contactId);
+    if (!contact) return null;
+
+    const roleNames: string[] = [];
+    if (contact.roles) {
+      for (const roleId of contact.roles) {
+        const role = await ctx.db.get(roleId);
+        if (role) roleNames.push(role.name);
+      }
+    }
+
+    return {
+      _id: contact._id,
+      name: contact.name,
+      nickname: contact.nickname,
+      otherNames: contact.otherNames,
+      phoneNumbers: contact.phoneNumbers,
+      emails: contact.emails,
+      company: contact.company,
+      jobTitle: contact.jobTitle,
+      birthday: contact.birthday,
+      notes: contact.notes,
+      roles: roleNames,
+    };
   },
 });

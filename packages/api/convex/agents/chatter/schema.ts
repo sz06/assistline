@@ -1,0 +1,42 @@
+import { z } from "zod";
+
+// ── Mutation Action Schemas ──────────────────────────────────────────────────
+
+/** Action: update fields on a contact. */
+const UpdateContactAction = z.object({
+  type: z.literal("updateContact"),
+  contactId: z.string().describe("Convex ID of the contact to update"),
+  name: z.string().optional(),
+  nickname: z.string().optional(),
+  company: z.string().optional(),
+  jobTitle: z.string().optional(),
+  birthday: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+/** Action: create a new artifact (memory/fact). */
+const CreateArtifactAction = z.object({
+  type: z.literal("createArtifact"),
+  value: z.string().describe("The fact or memory value"),
+  description: z.string().describe("Human-readable description for search"),
+  expiresAt: z
+    .number()
+    .optional()
+    .describe("Unix timestamp (ms) when this fact expires, if temporary"),
+});
+
+/** Action: assign a role to a contact. */
+const AssignRoleAction = z.object({
+  type: z.literal("assignRole"),
+  contactId: z.string().describe("Convex ID of the contact"),
+  roleName: z.string().describe("Name of the role to assign, e.g. 'spouse'"),
+});
+
+/** Discriminated union of all mutation actions Chatter can suggest. */
+export const ChatterMutationSchema = z.discriminatedUnion("type", [
+  UpdateContactAction,
+  CreateArtifactAction,
+  AssignRoleAction,
+]);
+
+export type ChatterMutationAction = z.infer<typeof ChatterMutationSchema>;

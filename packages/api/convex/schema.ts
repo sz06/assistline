@@ -87,9 +87,13 @@ export default defineSchema({
       ),
     ),
     aiEnabled: v.optional(v.boolean()), // Defaults to false per request
+    autoSend: v.optional(v.boolean()), // Defaults to false; when true, auto-sends replies
+    autoAct: v.optional(v.boolean()), // Defaults to false; when true, auto-executes mutationActions
+    agentThreadId: v.optional(v.string()), // Links to the Convex Agent component thread
     suggestedReply: v.optional(v.string()), // Pending draft reply
     suggestedActions: v.optional(v.array(v.string())), // Pending JSON agent actions
-    currentIntent: v.optional(v.string()), // AI categorized intent
+    aiTokensIn: v.optional(v.number()), // Cumulative LLM input tokens
+    aiTokensOut: v.optional(v.number()), // Cumulative LLM output tokens
   })
     .index("by_matrixRoomId", ["matrixRoomId"])
     .index("by_updatedAt", ["updatedAt"])

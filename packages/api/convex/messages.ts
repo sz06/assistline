@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { extractSenderInfo } from "./utils/contacts";
 
 export const listMessages = query({
@@ -205,6 +205,21 @@ export const insertMessage = mutation({
       timestamp: args.timestamp,
     });
 
+    // Trigger Chatter agent if AI is enabled on this conversation
+    const convRecord = conversation ?? (await ctx.db.get(conversationId));
+    if (convRecord?.aiEnabled) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.agents.chatter.agent.processMessage,
+        {
+          conversationId,
+          messageText: args.text ?? "",
+          messageDirection: args.direction,
+          senderName: args.senderName,
+        },
+      );
+    }
+
     return messageId;
   },
 });
@@ -246,17 +261,55 @@ export const syncConversationMeta = mutation({
   },
 });
 
+// ---------------------------------------------------------------------------
+// Outgoing message flow (dashboard → Matrix → bridge → WhatsApp/Telegram)
+//
+// 1. The dashboard UI calls this mutation with the conversation ID and text.
+// 2. We OPTIMISTICALLY insert the message into Convex with a temporary
+//    "outbound_<timestamp>" eventId. This makes the message appear instantly
+//    in the chat window — the user sees it right away.
+// 3. We update the conversation's metadata (lastMessageId, updatedAt, status)
+//    so the conversation list reflects the new message immediately.
+// 4. We schedule two async jobs via ctx.scheduler.runAfter(0, ...):
+//    a) An audit log entry (fire-and-forget logging).
+//    b) The sendMatrixMessage action (see matrixActions.ts), which:
+//       - Reads Matrix connection details from the settings table
+//       - Calls PUT /_matrix/client/v3/rooms/{roomId}/send/m.room.message/{txnId}
+//         on the Dendrite homeserver
+//       - The homeserver delivers the event to the mautrix bridge bot in the room
+//       - The bridge bot relays it to WhatsApp/Telegram via the native protocol
+//       - On success, patches our message's eventId with the real Matrix event ID
+//         (e.g. "$abc123:matrix.local"), replacing the placeholder "outbound_*" id
+//
+// Why a mutation + scheduled action (not a single action)?
+// - Mutations are fast, deterministic, and transactional — the message is saved
+//   and visible in the UI within milliseconds.
+// - Actions can do HTTP requests but are slower and may fail. By scheduling the
+//   Matrix delivery separately, the UI stays snappy and the message is never lost
+//   even if the Matrix call temporarily fails.
+// ---------------------------------------------------------------------------
 export const sendMessage = mutation({
   args: {
     conversationId: v.id("conversations"),
     content: v.string(),
+    // "manual" = dashboard user typed and sent; "auto" = Chatter agent auto-sent.
+    // Flows through to the audit log so we can distinguish human vs AI actions.
+    source: v.optional(v.union(v.literal("manual"), v.literal("auto"))),
   },
   handler: async (ctx, args) => {
-    // Basic verification the conversation exists
+    const auditSource = args.source ?? "manual";
+
+    // ── Step 1: Verify the conversation exists and grab its matrixRoomId ──
+    // We need matrixRoomId to tell the Matrix homeserver which room to send to.
     const conv = await ctx.db.get(args.conversationId);
     if (!conv) throw new Error("Conversation not found");
 
-    // Insert the outbound message
+    // ── Step 2: Optimistically insert the outbound message ──
+    // The eventId is a temporary placeholder ("outbound_<timestamp>").
+    // It will be replaced with the real Matrix event ID (e.g. "$xyz:matrix.local")
+    // once the sendMatrixMessage action succeeds (see matrixActions.ts).
+    // The sender is "dashboard_user" — distinct from bridge puppet IDs so the
+    // listener won't confuse our outbound messages with Matrix-originated ones.
     const messageId = await ctx.db.insert("messages", {
       conversationId: args.conversationId,
       eventId: `outbound_${Date.now().toString()}`,
@@ -266,7 +319,10 @@ export const sendMessage = mutation({
       timestamp: Date.now(),
     });
 
-    // Update conversation lastMessageId, timestamp, and status
+    // ── Step 3: Update conversation metadata ──
+    // - lastMessageId: so the conversation list shows this as the latest message
+    // - updatedAt: so the conversation sorts to the top
+    // - status: "waiting_on_contact" signals we've replied and are waiting for them
     const now = Date.now();
     await ctx.db.patch(args.conversationId, {
       lastMessageId: messageId,
@@ -274,26 +330,42 @@ export const sendMessage = mutation({
       status: "waiting_on_contact",
     });
 
+    // ── Step 4a: Audit log (async, fire-and-forget) ──
+    // source is "manual" when a human sends from the dashboard, or "auto"
+    // when the Chatter agent auto-sends (aiEnabled + autoSend on the conversation).
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "message.send",
-      source: "manual",
+      source: auditSource,
       entity: "messages",
       entityId: messageId,
       details: JSON.stringify({ conversationId: args.conversationId }),
       timestamp: now,
     });
 
-    // Schedule Matrix delivery so the message reaches the bridge
-    await ctx.scheduler.runAfter(
-      0,
-      internal.matrixActions.sendMatrixMessage,
-      {
-        matrixRoomId: conv.matrixRoomId,
-        messageId,
-        content: args.content,
-      },
-    );
+    // ── Step 4b: Schedule Matrix delivery (async) ──
+    // This is the critical step that actually sends the message out.
+    // The action runs immediately (delay=0) but outside this mutation's
+    // transaction, so it won't block the UI response.
+    await ctx.scheduler.runAfter(0, internal.matrixActions.sendMatrixMessage, {
+      matrixRoomId: conv.matrixRoomId,
+      messageId,
+      content: args.content,
+    });
 
+    // Trigger Chatter agent if AI is enabled on this conversation
+    if (conv.aiEnabled) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.agents.chatter.agent.processMessage,
+        {
+          conversationId: args.conversationId,
+          messageText: args.content,
+          messageDirection: "out",
+        },
+      );
+    }
+
+    // Return the Convex message ID so the UI can reference it immediately
     return messageId;
   },
 });
@@ -428,5 +500,32 @@ export const editMessage = mutation({
       details: JSON.stringify({ eventId: args.eventId }),
       timestamp: args.editTimestamp,
     });
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Internal queries for Chatter agent tools
+// ---------------------------------------------------------------------------
+
+/** Return the N most recent messages in a conversation. */
+export const getConversationHistoryQuery = internalQuery({
+  args: {
+    conversationId: v.id("conversations"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { conversationId, limit }) => {
+    const messages = await ctx.db
+      .query("messages")
+      .filter((q) => q.eq(q.field("conversationId"), conversationId))
+      .order("desc")
+      .take(limit ?? 20);
+
+    return messages.reverse().map((m) => ({
+      sender: m.sender,
+      direction: m.direction,
+      text: m.text ?? "",
+      timestamp: m._creationTime,
+      isRedacted: m.isRedacted,
+    }));
   },
 });
