@@ -46,6 +46,13 @@ export class ContactsPage {
     return this.page.locator("#cf-job");
   }
 
+  /** Returns a role chip by role name (lowercased, hyphenated) */
+  roleChip(name: string) {
+    return this.page.getByTestId(
+      `role-chip-${name.toLowerCase().replace(/\s+/g, "-")}`,
+    );
+  }
+
   // ── Helpers ──────────────────────────────────────
 
   /** Returns all visible contact rows */
@@ -77,5 +84,10 @@ export class ContactsPage {
     if (data.jobTitle !== undefined) {
       await this.jobTitleInput.fill(data.jobTitle);
     }
+  }
+
+  /** Toggle a role chip by its displayed name */
+  async toggleRole(name: string) {
+    await this.roleChip(name).click();
   }
 }

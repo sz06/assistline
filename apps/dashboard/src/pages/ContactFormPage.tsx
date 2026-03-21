@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { api, type Id } from "@repo/api";
 import { Button, Input, Label, PageHeader } from "@repo/ui";
 import { useMutation, useQuery } from "convex/react";
-import { ArrowLeft, Loader2, X } from "lucide-react";
+import { ArrowLeft, Loader2, Shield, X } from "lucide-react";
 import { useEffect } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
@@ -37,6 +37,7 @@ const contactFormSchema = z.object({
   name: z.string(),
   nickname: z.string(),
   otherNames: z.array(otherNameEntrySchema),
+  roles: z.array(z.string()),
   phoneNumbers: z.array(phoneEntrySchema),
   emails: z.array(emailEntrySchema),
   company: z.string(),
@@ -69,6 +70,7 @@ export function ContactFormPage() {
     isEditing && contactId ? { contactId } : "skip",
   );
 
+  const allRoles = useQuery(api.roles.list);
   const createContact = useMutation(api.contacts.create);
   const updateContact = useMutation(api.contacts.update);
 
@@ -86,6 +88,7 @@ export function ContactFormPage() {
       name: "",
       nickname: "",
       otherNames: [],
+      roles: [],
       phoneNumbers: [],
       emails: [],
       company: "",
@@ -116,6 +119,7 @@ export function ContactFormPage() {
 
   // otherNames is string[] — useFieldArray needs objects, so manage manually
   const otherNames = watch("otherNames");
+  const selectedRoles = watch("roles");
 
   // When editing and data loads, populate the form once
   useEffect(() => {
@@ -124,6 +128,7 @@ export function ContactFormPage() {
         name: contact.name ?? "",
         nickname: contact.nickname ?? "",
         otherNames: contact.otherNames ?? [],
+        roles: (contact.roles ?? []).map(String),
         phoneNumbers: contact.phoneNumbers ?? [],
         emails: contact.emails ?? [],
         company: contact.company ?? "",
@@ -140,6 +145,7 @@ export function ContactFormPage() {
       name: data.name || undefined,
       nickname: data.nickname || undefined,
       otherNames: data.otherNames.length > 0 ? data.otherNames : undefined,
+      roles: data.roles.length > 0 ? (data.roles as Id<"roles">[]) : undefined,
       phoneNumbers:
         data.phoneNumbers.length > 0 ? data.phoneNumbers : undefined,
       emails: data.emails.length > 0 ? data.emails : undefined,
@@ -303,6 +309,46 @@ export function ContactFormPage() {
                 ? errors.otherNames.message
                 : "Please fix other names errors"}
             </p>
+          )}
+        </div>
+
+        {/* ── Roles ── */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Shield className="h-4 w-4 text-gray-400" />
+            <Label>Roles</Label>
+          </div>
+          {allRoles === undefined ? (
+            <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+          ) : allRoles.length === 0 ? (
+            <p className="text-sm text-gray-500 italic">No roles defined</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {allRoles.map((role) => {
+                const isActive = selectedRoles.includes(String(role._id));
+                return (
+                  <button
+                    key={role._id}
+                    type="button"
+                    onClick={() => {
+                      const id = String(role._id);
+                      const next = isActive
+                        ? selectedRoles.filter((r) => r !== id)
+                        : [...selectedRoles, id];
+                      setValue("roles", next);
+                    }}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
+                      isActive
+                        ? "bg-blue-500 text-white border-blue-500 shadow-sm"
+                        : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600"
+                    }`}
+                    data-testid={`role-chip-${role.name.toLowerCase().replace(/\s+/g, "-")}`}
+                  >
+                    {role.name}
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
 

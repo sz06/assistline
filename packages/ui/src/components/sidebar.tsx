@@ -30,12 +30,12 @@ export function Sidebar({
   const sidebarContent = (
     <aside
       className={cn(
-        "flex h-screen w-64 flex-col border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900",
+        "flex h-screen w-48 flex-col border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900",
         className,
       )}
     >
       {header && (
-        <div className="flex h-16 items-center border-b border-gray-200 px-6 dark:border-gray-700">
+        <div className="flex h-16 items-center border-b border-gray-200 px-4 dark:border-gray-700">
           {header}
         </div>
       )}

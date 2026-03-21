@@ -36,6 +36,7 @@ const contactFields = {
   birthday: v.optional(v.string()),
   notes: v.optional(v.string()),
   addresses: v.optional(v.array(addressValidator)),
+  roles: v.optional(v.array(v.id("roles"))),
 };
 
 // ---------------------------------------------------------------------------

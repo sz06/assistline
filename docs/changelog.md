@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.18.1] - 2026-03-21
+
+### Changed
+- **Narrower Sidebar** (`packages/ui`): Reduced sidebar width from `w-64` (256px) to `w-48` (192px) and tightened header padding from `px-6` to `px-4`. The longest nav label ("Conversations") fits comfortably at the new width.
+
+### Added
+- **Roles on Contact Form** (`packages/api`, `apps/dashboard`): The contact add/edit page now includes a "Roles" section with toggle chips for every system-defined role. Role IDs are stored on the contact document and persist across edits. Backend `contactFields` validator updated to accept `roles`.
+
 ## [2.18.0] - 2026-03-21
 
 ### Added

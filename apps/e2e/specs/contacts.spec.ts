@@ -16,7 +16,7 @@ test.describe("Contacts Page", () => {
     await expect(contactsPage.addContactButton).toBeVisible();
   });
 
-  test("can create a new contact", async () => {
+  test("can create a new contact with a role", async () => {
     // Click Add Contact and wait for navigation
     await Promise.all([
       contactsPage.page.waitForURL("**/contacts/add"),
@@ -29,6 +29,10 @@ test.describe("Contacts Page", () => {
       company: "TestCorp",
       jobTitle: "Designer",
     });
+
+    // Toggle a role ("Family" should exist from seed data)
+    await contactsPage.toggleRole("Family");
+    await expect(contactsPage.roleChip("Family")).toHaveClass(/bg-blue-500/);
 
     // Save the contact and wait for navigation back
     await Promise.all([
@@ -43,6 +47,13 @@ test.describe("Contacts Page", () => {
     await expect(
       contactsPage.page.getByText("Designer · TestCorp").first(),
     ).toBeVisible();
+
+    // Re-open the contact and verify role is still active
+    await Promise.all([
+      contactsPage.page.waitForURL("**/contacts/*/update"),
+      contactsPage.clickRow("Alice Smith"),
+    ]);
+    await expect(contactsPage.roleChip("Family")).toHaveClass(/bg-blue-500/);
   });
 
   test("can edit an existing contact", async ({ page }) => {
