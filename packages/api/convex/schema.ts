@@ -12,9 +12,9 @@ export default defineSchema({
   })
     .index("by_isDefault", ["isDefault"])
     .index("by_type", ["type"]),
-  settings: defineTable({
+  config: defineTable({
     key: v.string(),
-    value: v.any(), // JSON config values
+    value: v.string(),
   }).index("by_key", ["key"]),
   contacts: defineTable({
     name: v.optional(v.string()),
@@ -185,7 +185,6 @@ export default defineSchema({
   roles: defineTable({
     name: v.string(),
     description: v.optional(v.string()),
-    color: v.optional(v.string()), // e.g. tailwind class "bg-red-100 text-red-700"
   }).index("by_name", ["name"]),
   auditLogs: defineTable({
     action: v.string(), // e.g. "contact.create", "conversation.toggleAI"

@@ -5,6 +5,7 @@ import { ArtifactsPage } from "./pages/ArtifactsPage";
 import { AuditLogsPage } from "./pages/AuditLogsPage";
 import { ChannelFormPage } from "./pages/ChannelFormPage";
 import { ChannelsPage } from "./pages/ChannelsPage";
+import { ConfigPage } from "./pages/ConfigPage";
 import { ContactFormPage } from "./pages/ContactFormPage";
 import { ContactsPage } from "./pages/ContactsPage";
 import { ConversationsPage } from "./pages/ConversationsPage";
@@ -12,9 +13,6 @@ import { ProviderFormPage } from "./pages/ProviderFormPage";
 import { ProvidersPage } from "./pages/ProvidersPage";
 import { RolesPage } from "./pages/RolesPage";
 import { SimulatorPage } from "./pages/SimulatorPage";
-
-// Temporary Stubs
-const ConfigPage = () => <div className="p-6">Configuration Placeholder</div>;
 
 export default function App() {
   return (

@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.17.0] - 2026-03-20
+
+### Fixed
+- **Agent turn-order error** (`packages/api`): The Chatter agent crashed with "function call turn comes immediately after a user turn" when processing outgoing messages. Root cause: outgoing messages were saved as `role: "assistant"` in the agent thread, creating back-to-back assistant turns. Now all conversation messages are saved as `role: "user"` with sender labels (e.g. `[Contact]`, `[User (you)]`) since they're context for the agent, not its own output.
+
+### Changed
+- **`settings` → `config` table** (`packages/api`): Renamed the `settings` Convex table to `config` and changed `value` from `v.any()` to `v.string()` for type safety. All references updated across `matrixActions.ts`, `init.ts`, and the listener.
+- **Flattened `config.json`** (`packages/api`): Nested config values (e.g. `historicalFetchSize.conversations`) are now stored as dot-separated flat keys with string values.
+- **Renamed `seedConfig` → `seedData`** (`packages/api`): The seed mutation name now reflects that it seeds both config entries and roles.
+
+### Added
+- **Config Page** (`apps/dashboard`): Table-based config editor at `/config` replacing the stub. Displays all config key-value pairs with inline editing and per-row save buttons.
+- **`config.list` query** (`packages/api`): New query to fetch all config entries for the dashboard.
+- **`getConfigNumber` helper** (`packages/api`): Reusable function for reading numeric config values from the `config` table with a typed fallback.
+- **Config-driven fetch sizes** (`packages/api`): Conversation list and message fetch limits now read from `historicalFetchSize.conversations` and `historicalFetchSize.messagesPerConversation` config keys instead of using hardcoded values.
+
+### Removed
+- **`settings.ts`** (`packages/api`): Replaced by `config.ts`.
+
+## [2.16.2] - 2026-03-20
+
+### Added
+- **Agent Time Awareness** (`packages/api`): The Chatter agent's system prompt now includes the current date and time (ISO 8601). This lets the agent understand relative time expressions ("tomorrow", "next week") and adjust tone based on time of day.
+
+## [2.16.1] - 2026-03-20
+
+### Fixed
+- **Auto Post Reply / Auto Perform Actions not working** (`packages/api`): The Chatter agent's `suggestReply` tool always stored suggestions as a card for manual approval, even when `autoSend` was enabled. Now it reads the conversation's `autoSend` flag and sends the reply directly via Matrix when enabled. Same fix applied to `suggestActions` / `autoAct` — actions are executed immediately when the flag is on. Added `internalSendMessage` (messages) and `internalExecuteSuggestedAction` (conversations/mutations) for agent-side execution that avoids infinite loops.
+
+### Changed
+- **Removed `color` from roles** (`packages/api`): Dropped the optional `color` field from the `roles` schema, CRUD mutations, and seed data. Role styling will be handled in the UI layer instead.
+- **Split `messages.ts` into `messages/`** (`packages/api`): Refactored the monolithic `messages.ts` into `messages/queries.ts`, `messages/mutations.ts`, and `messages/helpers.ts`. Extracted the shared outbound-message logic (`insertOutboundMessage` helper) used by both `sendMessage` and `internalSendMessage`. Updated all references across the listener, dashboard, and agent tools to use submodule paths (e.g. `api.messages.mutations.insertMessage`).
+
+### Added
+- **"Self" role** (`packages/api`): Added a "Self" role to `roles.json` for personal artifacts and private notes that should only be accessible to the user.
+
+## [2.16.0] - 2026-03-20
+
+### Added
+- **Default Roles Seed** (`packages/api`): New `roles.json` with 7 default roles (Family, Friend, Colleague, Client, Vendor, VIP, Blocked). The `seedData` mutation in `init.ts` now seeds these roles into the `roles` table alongside config entries, skipping any that already exist.
+- **Chatter `listRoles` Tool** (`packages/api`): New read-only tool that returns all system-defined roles. The Chatter agent now calls `listRoles` on its first turn so it knows which roles exist before suggesting `assignRole` actions. Added `listInternal` internalQuery to `roles.ts`.
+- **Role-Aware Prompt** (`packages/api`): Updated Chatter's system prompt with a dedicated ROLES section explaining what roles are, when to call `listRoles`, and a constraint that the agent must only assign roles that actually exist.
+
 ## [2.15.0] - 2026-03-20
 
 ### Added

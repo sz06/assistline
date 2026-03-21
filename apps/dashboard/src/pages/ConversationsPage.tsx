@@ -308,7 +308,7 @@ function ChatPanel({
   onBack: () => void;
 }) {
   const data = useQuery(api.conversations.queries.getWithMessages, { id });
-  const sendMessage = useMutation(api.messages.sendMessage);
+  const sendMessage = useMutation(api.messages.mutations.sendMessage);
   const updateAISettings = useMutation(
     api.conversations.mutations.updateAISettings,
   );

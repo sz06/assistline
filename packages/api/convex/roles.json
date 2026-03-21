@@ -1,0 +1,34 @@
+[
+  {
+    "name": "Self",
+    "description": "The user themselves — used for personal artifacts and private notes"
+  },
+  {
+    "name": "Family",
+    "description": "Close family members"
+  },
+  {
+    "name": "Friend",
+    "description": "Personal friends"
+  },
+  {
+    "name": "Colleague",
+    "description": "Work colleagues"
+  },
+  {
+    "name": "Client",
+    "description": "Business clients"
+  },
+  {
+    "name": "Vendor",
+    "description": "Service providers & vendors"
+  },
+  {
+    "name": "VIP",
+    "description": "High-priority contacts"
+  },
+  {
+    "name": "Blocked",
+    "description": "Blocked or muted contacts"
+  }
+]

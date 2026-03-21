@@ -1,5 +1,6 @@
+import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
-import type { QueryCtx } from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { extractWhatsAppPhoneNumber } from "../utils/matrix";
 
 /**
@@ -122,4 +123,92 @@ export async function buildConversationWithMessages(
   );
 
   return { ...conv, contactDetails, messages: resolvedMessages };
+}
+
+// ---------------------------------------------------------------------------
+// Suggested-action dispatch (shared between manual approve & autoAct)
+// ---------------------------------------------------------------------------
+
+const CONTACT_PATCH_KEYS = [
+  "name",
+  "nickname",
+  "company",
+  "jobTitle",
+  "birthday",
+  "notes",
+  "emails",
+] as const;
+
+/**
+ * Execute a single agent-suggested action (updateContact, createArtifact,
+ * or assignRole). Shared by both the public `executeSuggestedAction`
+ * mutation and the internal `internalExecuteSuggestedAction` mutation.
+ */
+export async function executeActionDispatch(
+  ctx: MutationCtx,
+  actionJson: string,
+  source: "auto" | "manual",
+  autoAct?: boolean,
+) {
+  const action = JSON.parse(actionJson) as Record<string, unknown>;
+  const actionType = action.type as string;
+
+  if (actionType === "updateContact" && action.contactId) {
+    const contactId = action.contactId as Id<"contacts">;
+    const contact = await ctx.db.get(contactId);
+    if (contact) {
+      const patch: Record<string, unknown> = {};
+      for (const key of CONTACT_PATCH_KEYS) {
+        if (action[key] !== undefined) patch[key] = action[key];
+      }
+      if (Object.keys(patch).length > 0) {
+        await ctx.db.patch(contact._id, patch);
+      }
+      await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+        action: "contact.update",
+        source,
+        entity: "contacts",
+        entityId: contact._id,
+        details: JSON.stringify({
+          via: "agent",
+          ...(autoAct ? { autoAct: true } : {}),
+          fields: Object.keys(patch),
+        }),
+        timestamp: Date.now(),
+      });
+    }
+  } else if (actionType === "createArtifact") {
+    const id = await ctx.db.insert("artifacts", {
+      value: action.value as string,
+      description: action.description as string,
+      accessibleToRoles: [],
+      expiresAt: action.expiresAt as number | undefined,
+      updatedAt: Date.now(),
+    });
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "artifact.create",
+      source,
+      entity: "artifacts",
+      entityId: id,
+      details: JSON.stringify({
+        description: action.description,
+        via: "agent",
+        ...(autoAct ? { autoAct: true } : {}),
+      }),
+      timestamp: Date.now(),
+    });
+  } else if (actionType === "assignRole" && action.contactId) {
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "contact.assignRole",
+      source,
+      entity: "contacts",
+      entityId: action.contactId as string,
+      details: JSON.stringify({
+        roleName: action.roleName,
+        via: "agent",
+        ...(autoAct ? { autoAct: true } : {}),
+      }),
+      timestamp: Date.now(),
+    });
+  }
 }

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { internalQuery, query } from "../_generated/server";
+import { getConfigNumber } from "../config";
 import {
   buildConversationWithMessages,
   resolveOtherParticipantContact,
@@ -12,6 +13,14 @@ export const list = query({
     channelId: v.optional(v.id("channels")),
   },
   handler: async (ctx, args) => {
+    // Read default conversation fetch size from config table
+    const defaultLimit = await getConfigNumber(
+      ctx,
+      "historicalFetchSize.conversations",
+      20,
+    );
+    const limit = args.limit ?? defaultLimit;
+
     // Fetch recently updated conversations, optionally filtered by channel
     const conversations = args.channelId
       ? await ctx.db
@@ -20,12 +29,12 @@ export const list = query({
             q.eq("channelId", args.channelId as Id<"channels">),
           )
           .order("desc")
-          .take(args.limit ?? 20)
+          .take(limit)
       : await ctx.db
           .query("conversations")
           .withIndex("by_updatedAt")
           .order("desc")
-          .take(args.limit ?? 20);
+          .take(limit);
 
     // Map contacts to conversations if possible
     const withDetails = await Promise.all(
@@ -68,7 +77,16 @@ export const getWithMessages = query({
     messageLimit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    return buildConversationWithMessages(ctx, args.id, args.messageLimit ?? 20);
+    const defaultMsgLimit = await getConfigNumber(
+      ctx,
+      "historicalFetchSize.messagesPerConversation",
+      50,
+    );
+    return buildConversationWithMessages(
+      ctx,
+      args.id,
+      args.messageLimit ?? defaultMsgLimit,
+    );
   },
 });
 
@@ -86,7 +104,16 @@ export const getWithMessagesInternal = internalQuery({
     messageLimit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    return buildConversationWithMessages(ctx, args.id, args.messageLimit ?? 30);
+    const defaultMsgLimit = await getConfigNumber(
+      ctx,
+      "historicalFetchSize.messagesPerConversation",
+      50,
+    );
+    return buildConversationWithMessages(
+      ctx,
+      args.id,
+      args.messageLimit ?? defaultMsgLimit,
+    );
   },
 });
 

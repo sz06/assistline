@@ -1,9 +1,4 @@
 {
-  "historicalFetchSize": {
-    "conversations": 20,
-    "messagesPerConversation": 20
-  },
-  "defaultAiProvider": "ollama",
-  "agentPersonality": "You are a helpful unified inbox assistant. You synthesize context, summarize messages, and help draft polite responses.",
-  "bridgeSyncIntervalMs": 30000
+  "historicalFetchSize.conversations": "20",
+  "historicalFetchSize.messagesPerConversation": "50"
 }

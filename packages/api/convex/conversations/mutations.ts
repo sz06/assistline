@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { api, internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import { internalMutation, mutation } from "../_generated/server";
+import { executeActionDispatch } from "./helpers";
 
 export const toggleAI = mutation({
   args: {
@@ -70,67 +72,7 @@ export const executeSuggestedAction = mutation({
     source: v.union(v.literal("auto"), v.literal("manual")),
   },
   handler: async (ctx, args) => {
-    const action = JSON.parse(args.actionJson) as Record<string, unknown>;
-    const actionType = action.type as string;
-
-    // Dispatch by action type
-    if (actionType === "updateContact" && action.contactId) {
-      const contactId =
-        action.contactId as import("../_generated/dataModel").Id<"contacts">;
-      const contact = await ctx.db.get(contactId);
-      if (contact) {
-        const patch: Record<string, unknown> = {};
-        if (action.name !== undefined) patch.name = action.name;
-        if (action.nickname !== undefined) patch.nickname = action.nickname;
-        if (action.company !== undefined) patch.company = action.company;
-        if (action.jobTitle !== undefined) patch.jobTitle = action.jobTitle;
-        if (action.birthday !== undefined) patch.birthday = action.birthday;
-        if (action.notes !== undefined) patch.notes = action.notes;
-        if (action.emails !== undefined) patch.emails = action.emails;
-        if (Object.keys(patch).length > 0) {
-          await ctx.db.patch(contact._id, patch);
-        }
-        await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
-          action: "contact.update",
-          source: args.source,
-          entity: "contacts",
-          entityId: contact._id,
-          details: JSON.stringify({
-            via: "agent",
-            fields: Object.keys(patch),
-          }),
-          timestamp: Date.now(),
-        });
-      }
-    } else if (actionType === "createArtifact") {
-      const id = await ctx.db.insert("artifacts", {
-        value: action.value as string,
-        description: action.description as string,
-        accessibleToRoles: [],
-        expiresAt: action.expiresAt as number | undefined,
-        updatedAt: Date.now(),
-      });
-      await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
-        action: "artifact.create",
-        source: args.source,
-        entity: "artifacts",
-        entityId: id,
-        details: JSON.stringify({
-          description: action.description,
-          via: "agent",
-        }),
-        timestamp: Date.now(),
-      });
-    } else if (actionType === "assignRole" && action.contactId) {
-      await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
-        action: "contact.assignRole",
-        source: args.source,
-        entity: "contacts",
-        entityId: action.contactId as string,
-        details: JSON.stringify({ roleName: action.roleName, via: "agent" }),
-        timestamp: Date.now(),
-      });
-    }
+    await executeActionDispatch(ctx, args.actionJson, args.source);
 
     // Remove the executed action from the list
     const conv = await ctx.db.get(args.conversationId);
@@ -311,5 +253,19 @@ export const incrementTokenUsage = internalMutation({
       aiTokensIn: (conv.aiTokensIn ?? 0) + args.inputTokens,
       aiTokensOut: (conv.aiTokensOut ?? 0) + args.outputTokens,
     });
+  },
+});
+
+/**
+ * Internal version of executeSuggestedAction — used by the Chatter agent
+ * when autoAct is enabled. Executes actions immediately without storing them.
+ */
+export const internalExecuteSuggestedAction = internalMutation({
+  args: {
+    conversationId: v.id("conversations"),
+    actionJson: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await executeActionDispatch(ctx, args.actionJson, "auto", true);
   },
 });

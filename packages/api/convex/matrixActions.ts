@@ -7,7 +7,7 @@ import { action, internalAction, internalMutation } from "./_generated/server";
  * to WhatsApp. This makes messages appear as "read" (blue checkmarks) on
  * the sender's phone when the user views them in the dashboard.
  *
- * The action reads the bot access token from the `settings` table (persisted
+ * The action reads the bot access token from the `config` table (persisted
  * by the listener on startup) and calls the Matrix receipt API.
  */
 export const sendReadReceipt = action({
@@ -16,22 +16,22 @@ export const sendReadReceipt = action({
     eventId: v.string(),
   },
   handler: async (ctx, args) => {
-    // Read connection details from settings (stored by listener on startup)
+    // Read connection details from config (stored by listener on startup)
     const homeserver = (await ctx.runQuery(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      "settings:get" as any,
+      "config:get" as any,
       { key: "matrix_homeserver_url" },
     )) as string | null;
 
     const token = (await ctx.runQuery(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      "settings:get" as any,
+      "config:get" as any,
       { key: "matrix_bot_access_token" },
     )) as string | null;
 
     if (!homeserver || !token) {
       console.warn(
-        "[readReceipt] Missing Matrix settings — skipping read receipt",
+        "[readReceipt] Missing Matrix config — skipping read receipt",
       );
       return;
     }
@@ -139,25 +139,25 @@ export const sendMatrixMessage = internalAction({
     content: v.string(),
   },
   handler: async (ctx, args) => {
-    // ── Step 1: Load Matrix connection details from the settings table ──
+    // ── Step 1: Load Matrix connection details from the config table ──
     // The listener persists these on startup (see listener/src/index.ts ~line 697).
     // - matrix_homeserver_url: e.g. "http://dendrite:8008" (Docker-internal URL)
     // - matrix_bot_access_token: the bot's current access token for auth
     const homeserver = (await ctx.runQuery(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      "settings:get" as any,
+      "config:get" as any,
       { key: "matrix_homeserver_url" },
     )) as string | null;
 
     const token = (await ctx.runQuery(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      "settings:get" as any,
+      "config:get" as any,
       { key: "matrix_bot_access_token" },
     )) as string | null;
 
     if (!homeserver || !token) {
       console.error(
-        "[sendMessage] Missing Matrix settings — cannot send message. " +
+        "[sendMessage] Missing Matrix config — cannot send message. " +
           "Make sure the listener has started at least once to persist credentials.",
       );
       return;

@@ -1,8 +1,15 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 
 export const list = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("roles").order("asc").collect();
+  },
+});
+
+export const listInternal = internalQuery({
   args: {},
   handler: async (ctx) => {
     return await ctx.db.query("roles").order("asc").collect();
@@ -13,7 +20,6 @@ export const create = mutation({
   args: {
     name: v.string(),
     description: v.optional(v.string()),
-    color: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Avoid exact duplicate names
@@ -44,7 +50,6 @@ export const update = mutation({
     id: v.id("roles"),
     name: v.string(),
     description: v.optional(v.string()),
-    color: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -59,7 +64,6 @@ export const update = mutation({
     await ctx.db.patch(args.id, {
       name: args.name,
       description: args.description,
-      color: args.color,
     });
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "role.update",

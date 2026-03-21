@@ -33,6 +33,22 @@ export const getContactProfile = createTool<
 });
 
 /**
+ * List all available roles in the system.
+ */
+export const listRoles = createTool<
+  Record<string, never>,
+  unknown,
+  ToolCtx<DataModel>
+>({
+  description:
+    "List all roles defined in the system. Returns each role's id, name, and description. Call this before suggesting assignRole actions to ensure the role exists.",
+  inputSchema: z.object({}),
+  execute: async (ctx): Promise<unknown> => {
+    return ctx.runQuery(internal.roles.listInternal, {});
+  },
+});
+
+/**
  * Retrieve the full conversation history for context.
  */
 export const getConversationHistory = createTool<
@@ -47,7 +63,7 @@ export const getConversationHistory = createTool<
     limit: z.number().optional().describe("Max messages to return, default 20"),
   }),
   execute: async (ctx, { conversationId, limit }): Promise<unknown> => {
-    return ctx.runQuery(internal.messages.getConversationHistoryQuery, {
+    return ctx.runQuery(internal.messages.queries.getConversationHistoryQuery, {
       conversationId: conversationId as Id<"conversations">,
       limit: limit ?? 20,
     });
@@ -111,10 +127,32 @@ export const suggestReply = createTool<
     ctx,
     { conversationId, reply, extractedFacts },
   ): Promise<string> => {
-    await ctx.runMutation(internal.conversations.mutations.patchConversation, {
-      conversationId: conversationId as Id<"conversations">,
-      patch: { suggestedReply: reply },
-    });
+    // Check if autoSend is enabled on this conversation
+    const conv = await ctx.runQuery(
+      internal.conversations.queries.getByIdInternal,
+      { id: conversationId as Id<"conversations"> },
+    );
+
+    if (conv?.autoSend) {
+      // Auto-send: deliver the reply directly via Matrix
+      await ctx.runMutation(internal.messages.mutations.internalSendMessage, {
+        conversationId: conversationId as Id<"conversations">,
+        content: reply,
+      });
+      console.log(
+        `[Chatter] Auto-sent reply for conversation ${conversationId}`,
+      );
+    } else {
+      // Manual mode: store as a suggested reply card for user approval
+      await ctx.runMutation(
+        internal.conversations.mutations.patchConversation,
+        {
+          conversationId: conversationId as Id<"conversations">,
+          patch: { suggestedReply: reply },
+        },
+      );
+    }
+
     if (extractedFacts && Object.keys(extractedFacts).length > 0) {
       console.log(
         "[Chatter] Extracted facts (for Artifact Manager):",
@@ -143,6 +181,30 @@ export const suggestActions = createTool<
       .describe("Array of mutation actions to suggest."),
   }),
   execute: async (ctx, { conversationId, actions }): Promise<string> => {
+    // Check if autoAct is enabled on this conversation
+    const conv = await ctx.runQuery(
+      internal.conversations.queries.getByIdInternal,
+      { id: conversationId as Id<"conversations"> },
+    );
+
+    if (conv?.autoAct) {
+      // Auto-act: execute each action immediately
+      for (const action of actions) {
+        await ctx.runMutation(
+          internal.conversations.mutations.internalExecuteSuggestedAction,
+          {
+            conversationId: conversationId as Id<"conversations">,
+            actionJson: JSON.stringify(action),
+          },
+        );
+      }
+      console.log(
+        `[Chatter] Auto-executed ${actions.length} action(s) for conversation ${conversationId}`,
+      );
+      return `Auto-executed ${actions.length} action(s)`;
+    }
+
+    // Manual mode: store as suggested actions for user approval
     await ctx.runMutation(internal.conversations.mutations.patchConversation, {
       conversationId: conversationId as Id<"conversations">,
       patch: {

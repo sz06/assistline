@@ -11,6 +11,7 @@ import {
   getArtifacts,
   getContactProfile,
   getConversationHistory,
+  listRoles,
   noReplyNeeded,
   suggestActions,
   suggestReply,
@@ -31,11 +32,12 @@ function createChatterAgent(
     name: "Chatter",
     // biome-ignore lint/suspicious/noExplicitAny: AI SDK LanguageModel ↔ agent component type bridge
     languageModel: model as any,
-    instructions: buildChatterSystemPrompt(),
+    instructions: buildChatterSystemPrompt(new Date().toISOString()),
     tools: {
       getContactProfile,
       getConversationHistory,
       getArtifacts,
+      listRoles,
       suggestReply,
       suggestActions,
       noReplyNeeded,
@@ -119,17 +121,21 @@ export const processMessage = internalAction({
       );
     }
 
-    // 5. Sync the latest message into the agent thread
-    const role = args.messageDirection === "in" ? "user" : "assistant";
-    const agentName =
-      args.messageDirection === "in" ? (args.senderName ?? "Contact") : "User";
+    // 5. Sync the latest message into the agent thread.
+    // All conversation messages are saved as "user" role because from the
+    // LLM's perspective, the agent is the assistant — incoming and outgoing
+    // chat messages are both *context* provided to the agent.
+    const senderLabel =
+      args.messageDirection === "in"
+        ? `[${args.senderName ?? "Contact"}]`
+        : "[User (you)]";
 
     await saveMessage(ctx, components.agent, {
       threadId,
-      agentName,
+      agentName: senderLabel,
       message: {
-        role,
-        content: args.messageText,
+        role: "user",
+        content: `${senderLabel}: ${args.messageText}`,
       },
     });
 

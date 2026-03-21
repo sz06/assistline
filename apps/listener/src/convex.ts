@@ -15,12 +15,14 @@ export const api = anyApi as unknown as {
     getByType: typeof anyApi.channels.getByType;
   };
   messages: {
-    insertMessage: typeof anyApi.messages.insertMessage;
-    syncConversationMeta: typeof anyApi.messages.syncConversationMeta;
-    addReaction: typeof anyApi.messages.addReaction;
-    removeReaction: typeof anyApi.messages.removeReaction;
-    redactMessage: typeof anyApi.messages.redactMessage;
-    editMessage: typeof anyApi.messages.editMessage;
+    mutations: {
+      insertMessage: typeof anyApi.messages.mutations.insertMessage;
+      syncConversationMeta: typeof anyApi.messages.mutations.syncConversationMeta;
+      addReaction: typeof anyApi.messages.mutations.addReaction;
+      removeReaction: typeof anyApi.messages.mutations.removeReaction;
+      redactMessage: typeof anyApi.messages.mutations.redactMessage;
+      editMessage: typeof anyApi.messages.mutations.editMessage;
+    };
   };
   conversations: {
     mutations: {
@@ -28,7 +30,7 @@ export const api = anyApi as unknown as {
       setTyping: typeof anyApi.conversations.mutations.setTyping;
     };
   };
-  settings: {
-    set: typeof anyApi.settings.set;
+  config: {
+    set: typeof anyApi.config.set;
   };
 };

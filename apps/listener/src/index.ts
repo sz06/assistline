@@ -435,7 +435,7 @@ async function syncRoomMetadata(roomId: string): Promise<{
     }
 
     // Sync conversation metadata directly (no separate groups table)
-    await convex.mutation(api.messages.syncConversationMeta, {
+    await convex.mutation(api.messages.mutations.syncConversationMeta, {
       matrixRoomId: roomId,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- anyApi is untyped
       channelId: channelId as any,
@@ -561,7 +561,7 @@ async function handleTimelineEvent(
       const targetEventId = relatesTo?.event_id;
       const reactionKey = relatesTo?.key;
       if (targetEventId && reactionKey) {
-        await convex.mutation(api.messages.addReaction, {
+        await convex.mutation(api.messages.mutations.addReaction, {
           eventId: targetEventId,
           reactionKey,
           sender: event.sender,
@@ -577,7 +577,7 @@ async function handleTimelineEvent(
     if (event.type === "m.room.redaction") {
       const redactedEventId = event.redacts;
       if (redactedEventId) {
-        await convex.mutation(api.messages.redactMessage, {
+        await convex.mutation(api.messages.mutations.redactMessage, {
           eventId: redactedEventId,
         });
         console.log(
@@ -597,7 +597,7 @@ async function handleTimelineEvent(
         (event.content["m.new_content"] as { body?: string } | undefined)
           ?.body ?? event.content.body;
       if (newBody) {
-        await convex.mutation(api.messages.editMessage, {
+        await convex.mutation(api.messages.mutations.editMessage, {
           eventId: relatesTo.event_id,
           newText: newBody,
           editTimestamp: event.origin_server_ts,
@@ -640,28 +640,31 @@ async function handleTimelineEvent(
         : undefined;
     const attachmentSize = event.content.info?.size;
 
-    const messageId = await convex.mutation(api.messages.insertMessage, {
-      matrixRoomId: roomId,
-      eventId: event.event_id,
-      sender: event.sender,
-      text: body,
-      direction,
-      timestamp: event.origin_server_ts,
-      type: messageType,
-      replyToEventId,
-      attachmentUrl,
-      attachmentMimeType,
-      attachmentFileName,
-      attachmentSize,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- anyApi is untyped
-      channelId: (roomMeta?.channelId ?? "") as any,
-      memberCount: roomMeta?.memberCount ?? 1,
-      participants: roomMeta?.participants ?? [],
-      topic: roomMeta?.topic,
-      roomName: roomMeta?.roomName,
-      senderName: senderProfile?.displayName,
-      senderAvatarUrl: senderProfile?.avatarUrl,
-    });
+    const messageId = await convex.mutation(
+      api.messages.mutations.insertMessage,
+      {
+        matrixRoomId: roomId,
+        eventId: event.event_id,
+        sender: event.sender,
+        text: body,
+        direction,
+        timestamp: event.origin_server_ts,
+        type: messageType,
+        replyToEventId,
+        attachmentUrl,
+        attachmentMimeType,
+        attachmentFileName,
+        attachmentSize,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- anyApi is untyped
+        channelId: (roomMeta?.channelId ?? "") as any,
+        memberCount: roomMeta?.memberCount ?? 1,
+        participants: roomMeta?.participants ?? [],
+        topic: roomMeta?.topic,
+        roomName: roomMeta?.roomName,
+        senderName: senderProfile?.displayName,
+        senderAvatarUrl: senderProfile?.avatarUrl,
+      },
+    );
 
     const isGroup = (roomMeta?.memberCount ?? 0) > 1;
     const typeLabel =
@@ -691,18 +694,18 @@ async function main(): Promise<void> {
   // Build the channel cache so we can resolve platform → channelId
   await refreshChannelCache();
 
-  // Persist Matrix credentials in Convex settings so the Convex action
+  // Persist Matrix credentials in Convex config so the Convex action
   // (sendReadReceipt) can call the Matrix API without the listener
   try {
-    await convex.mutation(api.settings.set, {
+    await convex.mutation(api.config.set, {
       key: "matrix_homeserver_url",
       value: MATRIX_HOMESERVER_URL,
     });
-    await convex.mutation(api.settings.set, {
+    await convex.mutation(api.config.set, {
       key: "matrix_bot_access_token",
       value: currentAccessToken,
     });
-    console.log("[listener] ✓ Matrix credentials persisted to Convex settings");
+    console.log("[listener] ✓ Matrix credentials persisted to Convex config");
   } catch (err) {
     console.warn(
       "[listener] ⚠ Failed to persist Matrix credentials:",

@@ -27,7 +27,7 @@ type SimulatorFormData = z.infer<typeof simulatorFormSchema>;
 export function SimulatorPage() {
   const conversations = useQuery(api.conversations.queries.list, {});
   const channels = useQuery(api.channels.list);
-  const insertMessage = useMutation(api.messages.insertMessage);
+  const insertMessage = useMutation(api.messages.mutations.insertMessage);
 
   const [status, setStatus] = useState<
     "idle" | "loading" | "success" | "error"
