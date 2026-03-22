@@ -8,6 +8,7 @@ export default defineSchema({
     name: v.optional(v.string()), // User-friendly label, e.g. "Work OpenAI", "Personal GPT"
     model: v.optional(v.string()), // "gpt-4o", "claude-3.5-sonnet", etc.
     apiKey: v.optional(v.string()), // Optional for local models
+    baseUrl: v.optional(v.string()), // Custom endpoint URL (e.g. Ollama, CLIProxyAPI)
     isDefault: v.boolean(),
   })
     .index("by_isDefault", ["isDefault"])

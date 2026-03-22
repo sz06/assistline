@@ -63,6 +63,7 @@ export const create = mutation({
     name: v.optional(v.string()),
     model: v.optional(v.string()),
     apiKey: v.optional(v.string()),
+    baseUrl: v.optional(v.string()),
     isDefault: v.boolean(),
   },
   handler: async (ctx, args) => {
@@ -84,6 +85,7 @@ export const create = mutation({
       name: args.name,
       model: args.model,
       apiKey: args.apiKey,
+      baseUrl: args.baseUrl,
       isDefault: args.isDefault,
     });
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
@@ -111,6 +113,7 @@ export const update = mutation({
     name: v.optional(v.string()),
     model: v.optional(v.string()),
     apiKey: v.optional(v.string()),
+    baseUrl: v.optional(v.string()),
     isDefault: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
@@ -137,6 +140,7 @@ export const update = mutation({
     if (args.name !== undefined) patch.name = args.name;
     if (args.model !== undefined) patch.model = args.model;
     if (args.apiKey !== undefined) patch.apiKey = args.apiKey;
+    if (args.baseUrl !== undefined) patch.baseUrl = args.baseUrl;
     if (args.isDefault !== undefined) patch.isDefault = args.isDefault;
 
     await ctx.db.patch(args.id, patch);

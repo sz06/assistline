@@ -32,6 +32,7 @@ export const embedText = internalAction({
       {
         provider: embeddingProvider.provider,
         apiKey: embeddingProvider.apiKey,
+        baseUrl: embeddingProvider.baseUrl,
       },
       embeddingProvider.model,
     );

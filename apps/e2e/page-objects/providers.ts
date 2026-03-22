@@ -21,6 +21,10 @@ export class ProvidersPage {
     return this.page.getByTestId("provider-api-key-input");
   }
 
+  get baseUrlInput() {
+    return this.page.getByTestId("provider-base-url-input");
+  }
+
   // ── Helpers ──────────────────────────────────────
 
   /** Returns all visible provider cards */

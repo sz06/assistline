@@ -33,7 +33,9 @@ interface ProviderMeta {
   color: string;
   textColor: string;
   requiresApiKey: boolean;
+  requiresBaseUrl: boolean;
   placeholder: string;
+  baseUrlPlaceholder: string;
   supportsEmbedding: boolean;
 }
 
@@ -45,7 +47,9 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     color: "bg-emerald-100 dark:bg-emerald-900/30",
     textColor: "text-emerald-600 dark:text-emerald-400",
     requiresApiKey: true,
+    requiresBaseUrl: false,
     placeholder: "sk-…",
+    baseUrlPlaceholder: "",
     supportsEmbedding: true,
   },
   anthropic: {
@@ -55,7 +59,9 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     color: "bg-orange-100 dark:bg-orange-900/30",
     textColor: "text-orange-600 dark:text-orange-400",
     requiresApiKey: true,
+    requiresBaseUrl: false,
     placeholder: "sk-ant-…",
+    baseUrlPlaceholder: "",
     supportsEmbedding: false,
   },
   google: {
@@ -65,7 +71,9 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     color: "bg-blue-100 dark:bg-blue-900/30",
     textColor: "text-blue-600 dark:text-blue-400",
     requiresApiKey: true,
+    requiresBaseUrl: false,
     placeholder: "AIza…",
+    baseUrlPlaceholder: "",
     supportsEmbedding: true,
   },
   ollama: {
@@ -75,7 +83,9 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     color: "bg-violet-100 dark:bg-violet-900/30",
     textColor: "text-violet-600 dark:text-violet-400",
     requiresApiKey: false,
+    requiresBaseUrl: true,
     placeholder: "",
+    baseUrlPlaceholder: "http://localhost:11434/v1",
     supportsEmbedding: true,
   },
   groq: {
@@ -85,7 +95,21 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     color: "bg-rose-100 dark:bg-rose-900/30",
     textColor: "text-rose-600 dark:text-rose-400",
     requiresApiKey: true,
+    requiresBaseUrl: false,
     placeholder: "gsk_…",
+    baseUrlPlaceholder: "",
+    supportsEmbedding: false,
+  },
+  cliproxyapi: {
+    label: "CLIProxyAPI",
+    description: "Free Gemini, GPT, Claude via CLI proxy",
+    icon: <Cpu className="h-5 w-5" />,
+    color: "bg-teal-100 dark:bg-teal-900/30",
+    textColor: "text-teal-600 dark:text-teal-400",
+    requiresApiKey: false,
+    requiresBaseUrl: true,
+    placeholder: "",
+    baseUrlPlaceholder: "http://host.docker.internal:8787/v1",
     supportsEmbedding: false,
   },
 };
@@ -99,7 +123,9 @@ function getMeta(provider: string): ProviderMeta {
       color: "bg-gray-100 dark:bg-gray-800",
       textColor: "text-gray-600 dark:text-gray-400",
       requiresApiKey: true,
+      requiresBaseUrl: false,
       placeholder: "API key…",
+      baseUrlPlaceholder: "",
       supportsEmbedding: false,
     }
   );
@@ -116,8 +142,9 @@ const providerFormSchema = z
     provider: z.string().min(1, "Please select a provider"),
     type: z.enum(["language", "embedding"]),
     name: z.string(),
-    model: z.string().min(1, "Please select a model"),
+    model: z.string(),
     apiKey: z.string(),
+    baseUrl: z.string(),
   })
   .refine(
     (data) => {
@@ -125,6 +152,13 @@ const providerFormSchema = z
       return !meta.requiresApiKey || data.apiKey.trim().length > 0;
     },
     { message: "API key is required for this provider", path: ["apiKey"] },
+  )
+  .refine(
+    (data) => {
+      const meta = getMeta(data.provider);
+      return !meta.requiresBaseUrl || data.baseUrl.trim().length > 0;
+    },
+    { message: "Base URL is required for this provider", path: ["baseUrl"] },
   );
 
 type ProviderFormData = z.infer<typeof providerFormSchema>;
@@ -194,7 +228,11 @@ function parseModelError(raw: string): string {
   return "Failed to fetch models. Please verify your API key and try again.";
 }
 
-function useProviderModels(provider: string | null, apiKey: string) {
+function useProviderModels(
+  provider: string | null,
+  apiKey: string,
+  baseUrl: string,
+) {
   const listModels = useAction(api.ai.models.listModels);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -209,6 +247,11 @@ function useProviderModels(provider: string | null, apiKey: string) {
       setError(null);
       return;
     }
+    if (meta.requiresBaseUrl && !baseUrl.trim()) {
+      setModels([]);
+      setError(null);
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -217,6 +260,7 @@ function useProviderModels(provider: string | null, apiKey: string) {
       const result = await listModels({
         provider,
         apiKey: apiKey.trim() || undefined,
+        baseUrl: baseUrl.trim() || undefined,
       });
       setModels(result);
     } catch (err) {
@@ -226,20 +270,21 @@ function useProviderModels(provider: string | null, apiKey: string) {
     } finally {
       setLoading(false);
     }
-  }, [provider, apiKey, listModels]);
+  }, [provider, apiKey, baseUrl, listModels]);
 
   useEffect(() => {
     if (!provider) return;
 
     const meta = getMeta(provider);
     if (meta.requiresApiKey && !apiKey.trim()) return;
+    if (meta.requiresBaseUrl && !baseUrl.trim()) return;
 
     const timer = setTimeout(() => {
       fetchModels();
     }, 600);
 
     return () => clearTimeout(timer);
-  }, [provider, apiKey, fetchModels]);
+  }, [provider, apiKey, baseUrl, fetchModels]);
 
   return { models, loading, error, refetch: fetchModels };
 }
@@ -322,17 +367,20 @@ function ModelAutocomplete({
 function ModelSelector({
   provider,
   apiKey,
+  baseUrl,
   selectedModel,
   onModelChange,
 }: {
   provider: string;
   apiKey: string;
+  baseUrl: string;
   selectedModel: string;
   onModelChange: (modelId: string) => void;
 }) {
   const { models, loading, error, refetch } = useProviderModels(
     provider,
     apiKey,
+    baseUrl,
   );
 
   const meta = getMeta(provider);
@@ -349,6 +397,17 @@ function ModelSelector({
         <Label htmlFor="model-select">Model</Label>
         <p className="mt-1.5 text-sm text-gray-400 dark:text-gray-500 italic">
           Enter your API key to load available models…
+        </p>
+      </div>
+    );
+  }
+
+  if (meta.requiresBaseUrl && !baseUrl.trim()) {
+    return (
+      <div>
+        <Label htmlFor="model-select">Model</Label>
+        <p className="mt-1.5 text-sm text-gray-400 dark:text-gray-500 italic">
+          Enter the base URL to load available models…
         </p>
       </div>
     );
@@ -446,6 +505,7 @@ export function ProviderFormPage() {
       name: "",
       model: "",
       apiKey: "",
+      baseUrl: "",
     },
   });
 
@@ -455,6 +515,7 @@ export function ProviderFormPage() {
   const selectedProvider = watch("provider");
   const selectedType = watch("type");
   const apiKeyValue = watch("apiKey");
+  const baseUrlValue = watch("baseUrl");
   const selectedModel = watch("model");
 
   const meta = selectedProvider ? getMeta(selectedProvider) : null;
@@ -474,6 +535,7 @@ export function ProviderFormPage() {
         name: provider.name ?? "",
         model: provider.model ?? "",
         apiKey: provider.apiKey ?? "",
+        baseUrl: provider.baseUrl ?? "",
       });
     }
   }, [isEditing, provider, reset]);
@@ -486,9 +548,11 @@ export function ProviderFormPage() {
   };
 
   const selectProvider = (key: string) => {
+    const m = getMeta(key);
     setValue("provider", key);
     setValue("model", "");
     setValue("apiKey", "");
+    setValue("baseUrl", m.baseUrlPlaceholder);
     setValue("name", "");
   };
 
@@ -497,23 +561,27 @@ export function ProviderFormPage() {
       await updateProvider({
         id: providerId,
         name: data.name || undefined,
-        model: data.model,
+        model: data.model || undefined,
         apiKey: data.apiKey || undefined,
+        baseUrl: data.baseUrl || undefined,
       });
+      navigate("/providers");
     } else {
       // Determine which providers of this type already exist
       const sameTypeCount =
         allProviders?.filter((p) => p.type === data.type).length ?? 0;
-      await createProvider({
+      const newId = await createProvider({
         provider: data.provider,
         type: data.type,
         name: data.name || undefined,
-        model: data.model,
+        model: data.model || undefined,
         apiKey: data.apiKey || undefined,
+        baseUrl: data.baseUrl || undefined,
         isDefault: sameTypeCount === 0,
       });
+      // Redirect to the update page so the user can select a model
+      navigate(`/providers/${newId}/update`);
     }
-    navigate("/providers");
   };
 
   // If editing but still loading data, show spinner
@@ -754,11 +822,33 @@ export function ProviderFormPage() {
           </p>
         )}
 
-        {/* ── Model Selector ── */}
-        {selectedProvider && (
+        {/* ── Base URL ── */}
+        {meta?.requiresBaseUrl && selectedProvider && (
+          <div>
+            <Label htmlFor="pf-base-url">Base URL</Label>
+            <Input
+              id="pf-base-url"
+              {...register("baseUrl")}
+              className="mt-1.5 max-w-lg"
+              data-testid="provider-base-url-input"
+            />
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+              The API endpoint URL including /v1.
+            </p>
+            {errors.baseUrl && (
+              <p className="text-xs text-red-500 mt-1">
+                {errors.baseUrl.message}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ── Model Selector (Edit mode only) ── */}
+        {isEditing && selectedProvider && (
           <ModelSelector
             provider={selectedProvider}
             apiKey={apiKeyValue}
+            baseUrl={baseUrlValue}
             selectedModel={selectedModel}
             onModelChange={(modelId) => setValue("model", modelId)}
           />

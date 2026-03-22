@@ -23,6 +23,7 @@ export const SUPPORTED_PROVIDERS = [
   "google",
   "groq",
   "ollama",
+  "cliproxyapi",
 ] as const;
 
 export type SupportedProvider = (typeof SUPPORTED_PROVIDERS)[number];
@@ -34,6 +35,7 @@ export type SupportedProvider = (typeof SUPPORTED_PROVIDERS)[number];
 interface ProviderConfig {
   provider: string;
   apiKey?: string;
+  baseUrl?: string;
 }
 
 /**
@@ -63,9 +65,22 @@ export function resolveLanguageModel(
 
     case "ollama":
       // Ollama exposes an OpenAI-compatible API locally
+      if (!config.baseUrl) {
+        throw new Error("Ollama requires a base URL");
+      }
       return createOpenAI({
         apiKey: "ollama", // dummy key, ollama doesn't require one
-        baseURL: "http://localhost:11434/v1",
+        baseURL: config.baseUrl,
+      })(modelId);
+
+    case "cliproxyapi":
+      // CLIProxyAPI exposes an OpenAI-compatible API
+      if (!config.baseUrl) {
+        throw new Error("CLIProxyAPI requires a base URL");
+      }
+      return createOpenAI({
+        apiKey: "cliproxyapi", // dummy key, CLIProxyAPI doesn't require one
+        baseURL: config.baseUrl,
       })(modelId);
 
     default:

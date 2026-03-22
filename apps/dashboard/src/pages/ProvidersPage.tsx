@@ -71,6 +71,14 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
     textColor: "text-rose-600 dark:text-rose-400",
     requiresApiKey: true,
   },
+  cliproxyapi: {
+    label: "CLIProxyAPI",
+    description: "Free Gemini, GPT, Claude via CLI proxy",
+    icon: <Cpu className="h-5 w-5" />,
+    color: "bg-teal-100 dark:bg-teal-900/30",
+    textColor: "text-teal-600 dark:text-teal-400",
+    requiresApiKey: false,
+  },
 };
 
 /** Fallback metadata for unknown providers */

@@ -89,6 +89,7 @@ export const processMessage = internalAction({
       {
         provider: defaultProvider.provider,
         apiKey: defaultProvider.apiKey,
+        baseUrl: defaultProvider.baseUrl,
       },
       defaultProvider.model,
     );

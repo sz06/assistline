@@ -51,9 +51,7 @@ export function ConversationDrawer({
       <Drawer.Portal>
         <Drawer.Backdrop className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm transition-opacity" />
         <Drawer.Viewport className="fixed inset-0 z-50 flex justify-end">
-          <Drawer.Popup
-            className="h-full w-80 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 shadow-xl flex flex-col ml-auto"
-          >
+          <Drawer.Popup className="h-full w-80 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 shadow-xl flex flex-col ml-auto">
             <Drawer.Content className="flex flex-col h-full overflow-hidden">
               {/* ── Header ──────────────────────────────── */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-800 shrink-0">

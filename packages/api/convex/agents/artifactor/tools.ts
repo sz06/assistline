@@ -22,6 +22,7 @@ async function getEmbeddingModel(ctx: ToolCtx<DataModel>) {
     {
       provider: embeddingProvider.provider,
       apiKey: embeddingProvider.apiKey,
+      baseUrl: embeddingProvider.baseUrl,
     },
     embeddingProvider.model,
   );

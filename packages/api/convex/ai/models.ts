@@ -154,9 +154,11 @@ async function fetchGroqModels(apiKey: string): Promise<ModelInfo[]> {
 // Ollama (local, OpenAI-compatible)
 // ---------------------------------------------------------------------------
 
-async function fetchOllamaModels(): Promise<ModelInfo[]> {
+async function fetchOllamaModels(baseUrl: string): Promise<ModelInfo[]> {
   try {
-    const res = await fetch("http://localhost:11434/api/tags");
+    // Strip trailing /v1 if present — Ollama's native API doesn't use it
+    const cleanBase = baseUrl.replace(/\/v1\/?$/, "");
+    const res = await fetch(`${cleanBase}/api/tags`);
     if (!res.ok) {
       throw new Error(`Ollama /api/tags failed: ${res.status}`);
     }
@@ -172,6 +174,33 @@ async function fetchOllamaModels(): Promise<ModelInfo[]> {
     // Ollama might not be running — return empty list, not an error
     return [];
   }
+}
+
+// ---------------------------------------------------------------------------
+// CLIProxyAPI (OpenAI-compatible)
+// ---------------------------------------------------------------------------
+
+async function fetchCliProxyApiModels(baseUrl: string): Promise<ModelInfo[]> {
+  // CLIProxyAPI exposes an OpenAI-compatible /v1/models endpoint
+  const cleanBase = baseUrl.replace(/\/+$/, "");
+  const url = cleanBase.endsWith("/v1")
+    ? `${cleanBase}/models`
+    : `${cleanBase}/v1/models`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(
+      `CLIProxyAPI /models failed: ${res.status} ${await res.text()}`,
+    );
+  }
+  const json = (await res.json()) as { data: OpenAIModel[] };
+
+  return json.data
+    .map((m) => ({
+      id: m.id,
+      name: formatModelName(m.id),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // ---------------------------------------------------------------------------
@@ -193,9 +222,10 @@ export const listModels = action({
   args: {
     provider: v.string(),
     apiKey: v.optional(v.string()),
+    baseUrl: v.optional(v.string()),
   },
   handler: async (_ctx, args): Promise<ModelInfo[]> => {
-    const { provider, apiKey } = args;
+    const { provider, apiKey, baseUrl } = args;
 
     switch (provider) {
       case "openai": {
@@ -215,7 +245,12 @@ export const listModels = action({
         return fetchGroqModels(apiKey);
       }
       case "ollama": {
-        return fetchOllamaModels();
+        if (!baseUrl) throw new Error("Ollama requires a base URL");
+        return fetchOllamaModels(baseUrl);
+      }
+      case "cliproxyapi": {
+        if (!baseUrl) throw new Error("CLIProxyAPI requires a base URL");
+        return fetchCliProxyApiModels(baseUrl);
       }
       default:
         throw new Error(`Unknown provider: ${provider}`);

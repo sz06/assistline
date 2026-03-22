@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.20.0] - 2026-03-21
+
+### Added
+- **CLIProxyAPI Provider** (`packages/api`, `apps/dashboard`): CLIProxyAPI is now a first-class AI provider. It's an OpenAI-compatible proxy for free Gemini CLI, Claude Code, and ChatGPT Codex models. No API key required — only a base URL. Added to provider metadata, engine resolution, and dynamic model listing.
+- **Base URL Field** (`packages/api`, `apps/dashboard`): AI providers now support an optional `baseUrl` field for custom API endpoints. Shown for `ollama` and `cliproxyapi` providers. Both require a base URL to be set.
+- **CLIProxyAPI Setup Guide** (`docs`): New `cliproxyapi-setup.md` with Docker setup instructions, Google OAuth authentication, model listing, and Assistline configuration.
+
+### Changed
+- **Provider Add Flow** (`apps/dashboard`): After adding a new provider, users are now redirected to the update page (`/providers/{id}/update`) to select a model. The model selector has been removed from the add page, splitting "setup credentials" from "pick a model" into two steps.
+- **Ollama Base URL** (`packages/api`): Ollama no longer uses a hardcoded `localhost:11434` URL. The base URL must be explicitly configured, matching CLIProxyAPI's behavior.
+
 ## [2.19.2] - 2026-03-21
 
 ### Added
