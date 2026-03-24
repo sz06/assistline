@@ -13,6 +13,7 @@ import { ProviderFormPage } from "./pages/ProviderFormPage";
 import { ProvidersPage } from "./pages/ProvidersPage";
 import { RolesPage } from "./pages/RolesPage";
 import { SimulatorPage } from "./pages/SimulatorPage";
+import { WikiPage } from "./pages/wiki/WikiPage";
 
 export default function App() {
   return (
@@ -44,6 +45,10 @@ export default function App() {
         <Route path="config" element={<ConfigPage />} />
         <Route path="audit-logs" element={<AuditLogsPage />} />
         <Route path="simulator" element={<SimulatorPage />} />
+        <Route path="wiki">
+          <Route index element={<WikiPage />} />
+          <Route path=":slug" element={<WikiPage />} />
+        </Route>
       </Route>
     </Routes>
   );

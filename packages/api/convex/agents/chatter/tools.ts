@@ -7,68 +7,9 @@ import type { DataModel, Id } from "../../_generated/dataModel";
 import { ChatterMutationSchema } from "./schema";
 
 // ── Read-Only Tools ──────────────────────────────────────────────────────────
-
-/**
- * Look up a contact's full profile by their Matrix ID.
- */
-export const getContactProfile = createTool<
-  { matrixId: string },
-  unknown,
-  ToolCtx<DataModel>
->({
-  description:
-    "Look up a contact's full profile (name, phone, email, company, roles, notes) by their Matrix ID.",
-  inputSchema: z.object({
-    matrixId: z
-      .string()
-      .describe("The Matrix user ID, e.g. @whatsapp_1234:localhost"),
-  }),
-  execute: async (ctx, { matrixId }): Promise<unknown> => {
-    const contact = await ctx.runQuery(
-      internal.contacts.getContactProfileQuery,
-      { matrixId },
-    );
-    return contact ?? { error: "Contact not found" };
-  },
-});
-
-/**
- * List all available roles in the system.
- */
-export const listRoles = createTool<
-  Record<string, never>,
-  unknown,
-  ToolCtx<DataModel>
->({
-  description:
-    "List all roles defined in the system. Returns each role's id, name, and description. Call this before suggesting assignRole actions to ensure the role exists.",
-  inputSchema: z.object({}),
-  execute: async (ctx): Promise<unknown> => {
-    return ctx.runQuery(internal.roles.listInternal, {});
-  },
-});
-
-/**
- * Retrieve the full conversation history for context.
- */
-export const getConversationHistory = createTool<
-  { conversationId: string; limit?: number },
-  unknown,
-  ToolCtx<DataModel>
->({
-  description:
-    "Retrieve recent messages from a conversation. Returns messages with sender, direction, text, and timestamp.",
-  inputSchema: z.object({
-    conversationId: z.string().describe("The Convex conversation ID"),
-    limit: z.number().optional().describe("Max messages to return, default 20"),
-  }),
-  execute: async (ctx, { conversationId, limit }): Promise<unknown> => {
-    return ctx.runQuery(internal.messages.queries.getConversationHistoryQuery, {
-      conversationId: conversationId as Id<"conversations">,
-      limit: limit ?? 20,
-    });
-  },
-});
+// Note: getContactProfile and listRoles have been removed.
+// Participant profiles and available roles are now injected directly into the
+// agent prompt at invocation time, eliminating unnecessary tool-call roundtrips.
 
 /**
  * Search the user's artifacts filtered by participant roles.
@@ -92,41 +33,42 @@ export const getArtifacts = createTool<
   },
 });
 
-// ── Response Tools (write directly to the conversation) ──────────────────────
-
 /**
  * Tool the LLM calls to suggest a reply for the user.
- * Writes the suggestion directly to the conversation.
+ * If reply is null/absent, clears any stale suggested reply.
  */
 export const suggestReply = createTool<
   {
     conversationId: string;
-    reply: string;
-    extractedFacts?: Record<string, string>;
+    reply?: string;
   },
   string,
   ToolCtx<DataModel>
 >({
   description:
-    "Suggest a draft reply written as if the user is typing it. Include any extracted facts about the user.",
+    "Suggest a draft reply written as if the user is typing it. If no reply is appropriate, omit the reply field to clear any stale suggestion.",
   inputSchema: z.object({
     conversationId: z.string().describe("The Convex conversation ID"),
     reply: z
       .string()
-      .describe(
-        "The draft reply text, written in the user's voice (first person).",
-      ),
-    extractedFacts: z
-      .record(z.string(), z.string())
       .optional()
       .describe(
-        "Key facts about the USER extracted from conversation (e.g. addresses, preferences).",
+        "The draft reply text, written in the user's voice (first person). Omit if no reply is needed.",
       ),
   }),
-  execute: async (
-    ctx,
-    { conversationId, reply, extractedFacts },
-  ): Promise<string> => {
+  execute: async (ctx, { conversationId, reply }): Promise<string> => {
+    if (!reply) {
+      // No reply — clear any stale suggestion
+      await ctx.runMutation(
+        internal.conversations.mutations.patchConversation,
+        {
+          conversationId: conversationId as Id<"conversations">,
+          patch: { suggestedReply: undefined },
+        },
+      );
+      return "No reply needed — cleared stale suggestion.";
+    }
+
     // Check if autoSend is enabled on this conversation
     const conv = await ctx.runQuery(
       internal.conversations.queries.getByIdInternal,
@@ -150,14 +92,6 @@ export const suggestReply = createTool<
           conversationId: conversationId as Id<"conversations">,
           patch: { suggestedReply: reply },
         },
-      );
-    }
-
-    if (extractedFacts && Object.keys(extractedFacts).length > 0) {
-      await ctx.scheduler.runAfter(
-        0,
-        internal.agents.artifactor.agent.processFacts,
-        { facts: extractedFacts },
       );
     }
     return reply;
@@ -217,37 +151,32 @@ export const suggestActions = createTool<
 });
 
 /**
- * Tool the LLM calls when no reply is needed.
- * Clears any pending suggestion and logs extracted facts.
+ * Forward observed facts about the user to the Artifactor agent.
+ * Chatter notices facts in conversation; Artifactor decides what to do with them.
  */
-export const noReplyNeeded = createTool<
-  { conversationId: string; extractedFacts?: Record<string, string> },
+export const forwardFacts = createTool<
+  { facts: Record<string, string> },
   string,
   ToolCtx<DataModel>
 >({
   description:
-    "Call this when no reply is needed (e.g. last message was outgoing, or just a reaction). Provide any extracted facts about the user.",
+    "Forward facts about the USER observed in the conversation to the Artifactor agent. These are things the user reveals about themselves — preferences, addresses, dates, relationships, professional info. Use descriptive keys.",
   inputSchema: z.object({
-    conversationId: z.string().describe("The Convex conversation ID"),
-    extractedFacts: z
+    facts: z
       .record(z.string(), z.string())
-      .optional()
       .describe(
-        "Key facts about the USER extracted from conversation, if any.",
+        'Key-value pairs of user facts, e.g. { "home_address": "123 Main St, Toronto" }',
       ),
   }),
-  execute: async (ctx, { conversationId, extractedFacts }): Promise<string> => {
-    await ctx.runMutation(internal.conversations.mutations.patchConversation, {
-      conversationId: conversationId as Id<"conversations">,
-      patch: { suggestedReply: undefined },
-    });
-    if (extractedFacts && Object.keys(extractedFacts).length > 0) {
-      await ctx.scheduler.runAfter(
-        0,
-        internal.agents.artifactor.agent.processFacts,
-        { facts: extractedFacts },
-      );
+  execute: async (ctx, { facts }): Promise<string> => {
+    if (Object.keys(facts).length === 0) {
+      return "No facts to forward.";
     }
-    return "Acknowledged — no reply needed.";
+    await ctx.scheduler.runAfter(
+      0,
+      internal.agents.artifactor.agent.processFacts,
+      { facts },
+    );
+    return `Forwarded ${Object.keys(facts).length} fact(s) to Artifactor.`;
   },
 });

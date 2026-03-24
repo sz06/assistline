@@ -232,8 +232,10 @@ function useProviderModels(
   provider: string | null,
   apiKey: string,
   baseUrl: string,
+  type: string,
 ) {
-  const listModels = useAction(api.ai.models.listModels);
+  const listLanguageModels = useAction(api.ai.models.listLanguageModels);
+  const listEmbeddingModels = useAction(api.ai.models.listEmbeddingModels);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -256,8 +258,11 @@ function useProviderModels(
     setLoading(true);
     setError(null);
 
+    const listFn =
+      type === "embedding" ? listEmbeddingModels : listLanguageModels;
+
     try {
-      const result = await listModels({
+      const result = await listFn({
         provider,
         apiKey: apiKey.trim() || undefined,
         baseUrl: baseUrl.trim() || undefined,
@@ -270,7 +275,14 @@ function useProviderModels(
     } finally {
       setLoading(false);
     }
-  }, [provider, apiKey, baseUrl, listModels]);
+  }, [
+    provider,
+    apiKey,
+    baseUrl,
+    type,
+    listLanguageModels,
+    listEmbeddingModels,
+  ]);
 
   useEffect(() => {
     if (!provider) return;
@@ -368,12 +380,14 @@ function ModelSelector({
   provider,
   apiKey,
   baseUrl,
+  type,
   selectedModel,
   onModelChange,
 }: {
   provider: string;
   apiKey: string;
   baseUrl: string;
+  type: string;
   selectedModel: string;
   onModelChange: (modelId: string) => void;
 }) {
@@ -381,6 +395,7 @@ function ModelSelector({
     provider,
     apiKey,
     baseUrl,
+    type,
   );
 
   const meta = getMeta(provider);
@@ -849,6 +864,7 @@ export function ProviderFormPage() {
             provider={selectedProvider}
             apiKey={apiKeyValue}
             baseUrl={baseUrlValue}
+            type={selectedType}
             selectedModel={selectedModel}
             onModelChange={(modelId) => setValue("model", modelId)}
           />

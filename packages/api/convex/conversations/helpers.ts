@@ -175,7 +175,7 @@ export async function executeActionDispatch(
         if (action[key] !== undefined) patch[key] = action[key];
       }
       if (Object.keys(patch).length > 0) {
-        await ctx.db.patch(contact._id, patch);
+        await ctx.db.patch(contact._id, { ...patch, lastUpdateAt: Date.now() });
       }
       await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
         action: "contact.update",
@@ -193,7 +193,6 @@ export async function executeActionDispatch(
   } else if (actionType === "createArtifact") {
     const id = await ctx.db.insert("artifacts", {
       value: action.value as string,
-      description: action.description as string,
       accessibleToRoles: [],
       expiresAt: action.expiresAt as number | undefined,
       updatedAt: Date.now(),
@@ -204,13 +203,31 @@ export async function executeActionDispatch(
       entity: "artifacts",
       entityId: id,
       details: JSON.stringify({
-        description: action.description,
+        value: action.value,
         via: "agent",
         ...(autoAct ? { autoAct: true } : {}),
       }),
       timestamp: Date.now(),
     });
   } else if (actionType === "assignRole" && action.contactId) {
+    const contactId = action.contactId as Id<"contacts">;
+    const contact = await ctx.db.get(contactId);
+    const roleName = action.roleName as string;
+    const role = await ctx.db
+      .query("roles")
+      .withIndex("by_name", (q) => q.eq("name", roleName))
+      .unique();
+
+    if (contact && role) {
+      const currentRoles = contact.roles ?? [];
+      if (!currentRoles.includes(role._id)) {
+        await ctx.db.patch(contactId, {
+          roles: [...currentRoles, role._id],
+          lastUpdateAt: Date.now(),
+        });
+      }
+    }
+
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "contact.assignRole",
       source,

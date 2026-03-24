@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.20.6] - 2026-03-23
+
+### Added
+- **Wiki Page** (`apps/dashboard`): New `/wiki` section in the dashboard that renders markdown documentation pages with a sidebar for navigation. Uses `react-markdown` + `remark-gfm` for rendering with full light/dark mode prose styling. First page: CLIProxyAPI Setup Guide.
+
+## [2.20.4] - 2026-03-23
+
+- **Removed `description` from artifacts** (`packages/api`, `apps/dashboard`): Dropped the separate `description` field from the `artifacts` table. Artifacts now store a single self-descriptive `value` (e.g. "User's home address: 123 Main St") that serves as both storage and embedding source — matching how ChatGPT, Claude, and Gemini handle memory. Updated Artifactor/Chatter agent tools, prompts, mutations, and the dashboard form/list pages.
+- **Artifactor uses AI SDK directly** (`packages/api`): Replaced `@convex-dev/agent` thread-based approach with AI SDK `generateText` + `tool()`. Tools close over `ActionCtx` directly — no throwaway threads are created, eliminating wasted storage. Deleted `agents/artifactor/tools.ts`; tools are now inline in `agent.ts`.
+
+## [2.20.3] - 2026-03-23
+
+### Added
+- **Embedding Model Support for Ollama** (`packages/api`): `resolveEmbeddingModel` in `ai/engine.ts` now handles the `ollama` provider via its OpenAI-compatible embedding endpoint. Users can configure Ollama as a default embedding provider in the dashboard.
+- **Google Embedding Model Listing** (`packages/api`, `apps/dashboard`): Split the single `listModels` action into `listLanguageModels` and `listEmbeddingModels`. Each action returns only the models relevant to its type — e.g. OpenAI language excludes `text-embedding-*`, Google embedding filters for `embedContent`, and providers that don't support embeddings (Anthropic, Groq, CLIProxyAPI) are excluded from `listEmbeddingModels`. The dashboard now calls the correct action based on the provider type.
+
+## [2.20.2] - 2026-03-23
+
+### Added
+- **`lastUpdateAt` on Contacts** (`packages/api`, `apps/dashboard`): New system-managed timestamp on the `contacts` table that records when a contact was last created or modified. Set automatically in `contacts.create`, `contacts.update`, and the listener's auto-create/update flow in `messages/mutations.ts`.
+- **Configurable Table Columns** (`apps/dashboard`): The contacts table now has a column visibility picker (⚙ icon next to search). Users can toggle any column on or off; preferences are persisted in `localStorage`. Default visible columns: Name, Phone, Email, Added, Updated. Available columns: Name (locked), Company, Phone, Email, Roles, Added, Updated.
+- **Roles Column** (`apps/dashboard`): New "Roles" column on the contacts table that resolves role IDs to names and displays them as blue pill badges.
+
+## [2.20.1] - 2026-03-21
+
+### Changed
+- **Chatter Agent Context Refactor** (`packages/api`): Complete rewrite of how the Chatter agent receives and manages context. Messages in the agent thread now use contactId (Convex `_id`) instead of matrixId, preventing the "ID wasn't valid base32" error when approving suggested actions.
+  - **Thread bootstrapping**: When AI is first enabled, the thread is seeded with the last 20 messages from the conversation, each resolved to contactId.
+  - **Thread catch-up**: Existing threads sync only new messages since `lastAgentSyncTimestamp`.
+  - **Thread pruning**: Threads are hard-capped at 20 messages via `agent.deleteMessages` after every sync.
+  - **`getContactProfile`** now accepts `contactId` instead of `matrixId`.
+  - **Removed `getConversationHistory`** tool — redundant since messages are in the thread.
+  - **Updated system prompt**: New message format `[in] [contact:<id>]:` / `[out] [user]:`, explicit instruction to use contactId from thread messages.
+  - **`resolveContactIds`** internal query: batch-resolves matrixIds → contactIds via `contactIdentities`.
+  - **`lastAgentSyncTimestamp`** added to conversations schema for catch-up logic.
+  - **Removed `getContactProfile` and `listRoles` tools**: Participant profiles and available roles are now pre-loaded and injected directly into the agent prompt, eliminating tool-call loops.
+  - **`suggestReply`** now has an optional `reply` field — omit to clear stale suggestions (replaces `noReplyNeeded`).
+  - **Removed `noReplyNeeded`** tool — its functionality is merged into `suggestReply`.
+  - **Added `forwardFacts`** tool: explicitly forwards observed user facts to the Artifactor agent (previously a hidden side-effect in `suggestReply`).
+
 ## [2.20.0] - 2026-03-21
 
 ### Added

@@ -17,8 +17,11 @@ const UpdateContactAction = z.object({
 /** Action: create a new artifact. */
 const CreateArtifactAction = z.object({
   type: z.literal("createArtifact"),
-  value: z.string().describe("The artifact value"),
-  description: z.string().describe("Human-readable description for search"),
+  value: z
+    .string()
+    .describe(
+      'The self-descriptive artifact value, e.g. "User\'s home address: 123 Main St"',
+    ),
   expiresAt: z
     .number()
     .optional()

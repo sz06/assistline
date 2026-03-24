@@ -9,7 +9,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { z } from "zod";
 
 const artifactFormSchema = z.object({
-  description: z.string().min(1, "Description is required"),
   value: z.string().min(1, "Value is required"),
   accessibleToRoles: z.array(z.string()).optional(),
   expiresAt: z.string().optional(),
@@ -40,7 +39,6 @@ export function ArtifactFormPage() {
   } = useForm<ArtifactFormData>({
     resolver: zodResolver(artifactFormSchema),
     defaultValues: {
-      description: "",
       value: "",
       accessibleToRoles: [],
       expiresAt: "",
@@ -49,13 +47,21 @@ export function ArtifactFormPage() {
 
   useEffect(() => {
     if (isEditing && artifact) {
+      let localDatetime = "";
+      if (artifact.expiresAt) {
+        const d = new Date(artifact.expiresAt);
+        // Format as YYYY-MM-DDTHH:mm for datetime-local input (user's local TZ)
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        const hours = String(d.getHours()).padStart(2, "0");
+        const minutes = String(d.getMinutes()).padStart(2, "0");
+        localDatetime = `${year}-${month}-${day}T${hours}:${minutes}`;
+      }
       reset({
-        description: artifact.description,
         value: artifact.value,
         accessibleToRoles: artifact.accessibleToRoles as string[],
-        expiresAt: artifact.expiresAt
-          ? new Date(artifact.expiresAt).toISOString().split("T")[0]
-          : "",
+        expiresAt: localDatetime,
       });
     }
   }, [isEditing, artifact, reset]);
@@ -69,14 +75,12 @@ export function ArtifactFormPage() {
     if (isEditing && artifactId) {
       await updateArtifact({
         id: artifactId,
-        description: data.description,
         value: data.value,
         accessibleToRoles: roleIds,
         expiresAt,
       });
     } else {
       await createArtifact({
-        description: data.description,
         value: data.value,
         accessibleToRoles: roleIds,
         expiresAt,
@@ -134,34 +138,17 @@ export function ArtifactFormPage() {
         className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6 space-y-6 max-w-3xl"
       >
         <div>
-          <Label htmlFor="af-desc">Description</Label>
-          <Input
-            id="af-desc"
-            {...register("description")}
-            placeholder="e.g. The user's spouse's name"
-            className="mt-1.5"
-          />
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
-            A concise description of the memory. Used for semantic search.
-          </p>
-          {errors.description && (
-            <p className="text-xs text-red-500 mt-1">
-              {errors.description.message}
-            </p>
-          )}
-        </div>
-
-        <div>
-          <Label htmlFor="af-val">Value / Content</Label>
+          <Label htmlFor="af-val">Memory</Label>
           <textarea
             id="af-val"
             {...register("value")}
-            placeholder="e.g. Sarah"
+            placeholder="e.g. User&#39;s spouse name: Sarah"
             rows={4}
             className="mt-1.5 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px] resize-y"
           />
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
-            The actual data or text content for this memory.
+            Write a self-descriptive fact. This is used for both storage and
+            semantic search.
           </p>
           {errors.value && (
             <p className="text-xs text-red-500 mt-1">{errors.value.message}</p>
@@ -172,13 +159,13 @@ export function ArtifactFormPage() {
           <Label htmlFor="af-expires">Expires At (Optional)</Label>
           <Input
             id="af-expires"
-            type="date"
+            type="datetime-local"
             {...register("expiresAt")}
             className="mt-1.5"
           />
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
             If set, this memory will be automatically deleted after the
-            specified date.
+            specified date and time. Displayed in your local timezone.
           </p>
         </div>
 

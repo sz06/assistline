@@ -10,7 +10,6 @@ import {
 export const create = mutation({
   args: {
     value: v.string(),
-    description: v.string(),
     accessibleToRoles: v.array(v.id("roles")),
     expiresAt: v.optional(v.number()),
     source: v.optional(
@@ -21,7 +20,6 @@ export const create = mutation({
     const { source, ...fields } = args;
     const id = await ctx.db.insert("artifacts", {
       value: fields.value,
-      description: fields.description,
       accessibleToRoles: fields.accessibleToRoles,
       expiresAt: fields.expiresAt,
       updatedAt: Date.now(),
@@ -32,7 +30,7 @@ export const create = mutation({
       source: source ?? "user",
       entity: "artifacts",
       entityId: id,
-      details: JSON.stringify({ description: args.description }),
+      details: JSON.stringify({ value: args.value }),
       timestamp: Date.now(),
     });
     return id;
@@ -43,7 +41,6 @@ export const update = mutation({
   args: {
     id: v.id("artifacts"),
     value: v.optional(v.string()),
-    description: v.optional(v.string()),
     accessibleToRoles: v.optional(v.array(v.id("roles"))),
     expiresAt: v.optional(v.number()),
     source: v.optional(
@@ -63,7 +60,7 @@ export const update = mutation({
       entity: "artifacts",
       entityId: id,
       details: JSON.stringify({
-        description: patch.description,
+        value: patch.value,
       }),
       timestamp: Date.now(),
     });
@@ -100,7 +97,7 @@ export const remove = mutation({
       source: args.source ?? "user",
       entity: "artifacts",
       entityId: args.id,
-      details: JSON.stringify({ description: existing?.description }),
+      details: JSON.stringify({ value: existing?.value }),
       timestamp: Date.now(),
     });
   },
@@ -123,7 +120,7 @@ export const cleanupExpired = internalMutation({
         source: "system",
         entity: "artifacts",
         entityId: artifact._id,
-        details: JSON.stringify({ description: artifact.description }),
+        details: JSON.stringify({ value: artifact.value }),
         timestamp: now,
       });
       count++;
@@ -175,9 +172,7 @@ export const getArtifactsQuery = internalQuery({
 
     return allArtifacts
       .filter((a) => {
-        const matchesQuery =
-          a.value.toLowerCase().includes(queryLower) ||
-          a.description.toLowerCase().includes(queryLower);
+        const matchesQuery = a.value.toLowerCase().includes(queryLower);
         if (!matchesQuery) return false;
 
         if (a.accessibleToRoles && a.accessibleToRoles.length > 0) {
@@ -220,7 +215,6 @@ export const fetchByIds = internalQuery({
 export const internalCreate = internalMutation({
   args: {
     value: v.string(),
-    description: v.string(),
     accessibleToRoles: v.array(v.id("roles")),
     embedding: v.optional(v.array(v.float64())),
     expiresAt: v.optional(v.number()),
@@ -228,7 +222,6 @@ export const internalCreate = internalMutation({
   handler: async (ctx, args) => {
     const id = await ctx.db.insert("artifacts", {
       value: args.value,
-      description: args.description,
       accessibleToRoles: args.accessibleToRoles,
       embedding: args.embedding,
       expiresAt: args.expiresAt,
@@ -241,7 +234,7 @@ export const internalCreate = internalMutation({
       entity: "artifacts",
       entityId: id,
       details: JSON.stringify({
-        description: args.description,
+        value: args.value,
         via: "artifactor",
       }),
       timestamp: Date.now(),
@@ -251,14 +244,13 @@ export const internalCreate = internalMutation({
 });
 
 /**
- * Update an artifact's value, description, and/or embedding.
+ * Update an artifact's value and/or embedding.
  * Used by the Artifactor agent to update existing facts.
  */
 export const internalUpdate = internalMutation({
   args: {
     id: v.id("artifacts"),
     value: v.optional(v.string()),
-    description: v.optional(v.string()),
     embedding: v.optional(v.array(v.float64())),
   },
   handler: async (ctx, args) => {
@@ -274,7 +266,7 @@ export const internalUpdate = internalMutation({
       entity: "artifacts",
       entityId: id,
       details: JSON.stringify({
-        description: patch.description,
+        value: patch.value,
         via: "artifactor",
       }),
       timestamp: Date.now(),

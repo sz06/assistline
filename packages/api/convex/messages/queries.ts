@@ -29,24 +29,31 @@ export const listMessages = query({
 // Internal queries for Chatter agent tools
 // ---------------------------------------------------------------------------
 
-/** Return the N most recent messages in a conversation. */
+/** Return the N most recent messages in a conversation, optionally after a given timestamp. */
 export const getConversationHistoryQuery = internalQuery({
   args: {
     conversationId: v.id("conversations"),
     limit: v.optional(v.number()),
+    sinceTimestamp: v.optional(v.number()),
   },
-  handler: async (ctx, { conversationId, limit }) => {
-    const messages = await ctx.db
+  handler: async (ctx, { conversationId, limit, sinceTimestamp }) => {
+    const query = ctx.db
       .query("messages")
-      .filter((q) => q.eq(q.field("conversationId"), conversationId))
-      .order("desc")
-      .take(limit ?? 20);
+      .withIndex("by_conversationId_timestamp", (q) => {
+        const base = q.eq("conversationId", conversationId);
+        return sinceTimestamp ? base.gt("timestamp", sinceTimestamp) : base;
+      })
+      .order("desc");
+
+    const maxResults = limit ?? 20;
+    const messages = await query.take(maxResults);
 
     return messages.reverse().map((m) => ({
+      _id: m._id,
       sender: m.sender,
       direction: m.direction,
       text: m.text ?? "",
-      timestamp: m._creationTime,
+      timestamp: m.timestamp,
       isRedacted: m.isRedacted,
     }));
   },

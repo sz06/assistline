@@ -1,5 +1,6 @@
 import { Sidebar } from "@repo/ui";
 import {
+  BookOpen,
   Cpu,
   Database,
   Menu,
@@ -53,6 +54,11 @@ const navLinks = [
     label: "Simulator",
     href: "/simulator",
     icon: <Terminal className="h-5 w-5" />,
+  },
+  {
+    label: "Wiki",
+    href: "/wiki",
+    icon: <BookOpen className="h-5 w-5" />,
   },
 ];
 

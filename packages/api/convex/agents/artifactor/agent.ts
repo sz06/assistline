@@ -1,45 +1,196 @@
 "use node";
 
-import { Agent, createThread } from "@convex-dev/agent";
+import { generateText, tool, embed } from "ai";
 import { v } from "convex/values";
-import { components, internal } from "../../_generated/api";
+import { z } from "zod";
+import { internal } from "../../_generated/api";
+import type { Id } from "../../_generated/dataModel";
+import type { ActionCtx } from "../../_generated/server";
 import { internalAction } from "../../_generated/server";
-import { resolveLanguageModel } from "../../ai/engine";
+import { resolveEmbeddingModel, resolveLanguageModel } from "../../ai/engine";
 import { buildArtifactorSystemPrompt } from "./prompt";
-import {
-  createArtifact,
-  done,
-  searchArtifacts,
-  skipArtifact,
-  updateArtifact,
-} from "./tools";
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+async function getEmbeddingModel(ctx: ActionCtx) {
+  const providers = await ctx.runQuery(internal.aiProviders.listInternal, {});
+  const embeddingProvider = providers.find(
+    (p: { isDefault: boolean; type: string }) =>
+      p.isDefault && p.type === "embedding",
+  );
+  if (!embeddingProvider?.model) return null;
+  return resolveEmbeddingModel(
+    {
+      provider: embeddingProvider.provider,
+      apiKey: embeddingProvider.apiKey,
+      baseUrl: embeddingProvider.baseUrl,
+    },
+    embeddingProvider.model,
+  );
+}
+
+async function embedText(
+  ctx: ActionCtx,
+  text: string,
+): Promise<number[] | null> {
+  const model = await getEmbeddingModel(ctx);
+  if (!model) return null;
+  const { embedding } = await embed({ model, value: text });
+  return embedding;
+}
+
+async function getUserRoleId(ctx: ActionCtx): Promise<Id<"roles"> | null> {
+  const roles = await ctx.runQuery(internal.roles.listInternal, {});
+  const userRole = (roles as Array<{ _id: Id<"roles">; name: string }>).find(
+    (r) => r.name === "User",
+  );
+  return userRole?._id ?? null;
+}
 
 /**
- * Create the Artifactor agent dynamically — resolves the language model
- * at runtime from the user's configured AI providers.
+ * Pre-search: for each fact, find semantically similar existing artifacts.
+ * Returns a map of fact key → search results.
  */
-function createArtifactorAgent(model: ReturnType<typeof resolveLanguageModel>) {
-  return new Agent(components.agent, {
-    name: "Artifactor",
-    // biome-ignore lint/suspicious/noExplicitAny: AI SDK LanguageModel ↔ agent component type bridge
-    languageModel: model as any,
-    instructions: buildArtifactorSystemPrompt(),
-    tools: {
-      searchArtifacts,
-      createArtifact,
-      updateArtifact,
-      skipArtifact,
-      done,
-    },
-    maxSteps: 12, // generous — up to ~3 facts × (search + create/update) + done
-  });
+async function preSearchFacts(
+  ctx: ActionCtx,
+  facts: [string, string][],
+): Promise<Map<string, { id: string; value: string; score: number }[]>> {
+  const results = new Map<
+    string,
+    { id: string; value: string; score: number }[]
+  >();
+
+  for (const [key, value] of facts) {
+    const searchText = `${key}: ${value}`;
+    const queryEmbedding = await embedText(ctx, searchText);
+
+    if (!queryEmbedding) {
+      results.set(key, []);
+      continue;
+    }
+
+    const searchResults = await ctx.vectorSearch("artifacts", "by_embedding", {
+      vector: queryEmbedding,
+      limit: 3,
+    });
+
+    if (searchResults.length === 0) {
+      results.set(key, []);
+      continue;
+    }
+
+    const docs = await ctx.runQuery(internal.artifacts.fetchByIds, {
+      ids: searchResults.map((r) => r._id),
+    });
+
+    results.set(
+      key,
+      docs.map((doc) => {
+        const scoreEntry = searchResults.find(
+          (r) => r._id.toString() === doc._id.toString(),
+        );
+        return {
+          id: doc._id.toString(),
+          value: doc.value,
+          score: scoreEntry?._score ?? 0,
+        };
+      }),
+    );
+  }
+
+  return results;
 }
+
+// ---------------------------------------------------------------------------
+// Tool schemas
+// ---------------------------------------------------------------------------
+
+const createSchema = z.object({
+  value: z
+    .string()
+    .describe(
+      'The self-descriptive fact to store, e.g. "User\'s home address: 123 Main St"',
+    ),
+});
+
+const updateSchema = z.object({
+  id: z.string().describe("The Convex ID of the existing artifact to update"),
+  value: z.string().describe("The new value for the artifact"),
+});
+
+const skipSchema = z.object({
+  id: z
+    .string()
+    .describe("The Convex ID of the existing artifact being skipped"),
+  reason: z.string().describe("Brief reason for skipping"),
+});
+
+// ---------------------------------------------------------------------------
+// Build AI SDK tools (closed over ActionCtx)
+// ---------------------------------------------------------------------------
+
+function buildTools(ctx: ActionCtx) {
+  return {
+    createArtifact: tool({
+      description:
+        "Create a new artifact. Use when no existing artifact matches this fact.",
+      inputSchema: createSchema,
+      execute: async ({ value }) => {
+        const valueEmbedding = await embedText(ctx, value);
+        const userRoleId = await getUserRoleId(ctx);
+        const accessibleToRoles = userRoleId ? [userRoleId] : [];
+
+        const id = await ctx.runMutation(internal.artifacts.internalCreate, {
+          value,
+          accessibleToRoles,
+          embedding: valueEmbedding ?? undefined,
+        });
+
+        console.log(`[Artifactor] Created artifact: "${value}"`);
+        return `Created artifact ${id}`;
+      },
+    }),
+
+    updateArtifact: tool({
+      description: "Update an existing artifact whose value has changed.",
+      inputSchema: updateSchema,
+      execute: async ({ id, value }) => {
+        const emb = await embedText(ctx, value);
+
+        await ctx.runMutation(internal.artifacts.internalUpdate, {
+          id: id as Id<"artifacts">,
+          value,
+          embedding: emb ?? undefined,
+        });
+
+        console.log(`[Artifactor] Updated artifact ${id}: "${value}"`);
+        return `Updated artifact ${id}`;
+      },
+    }),
+
+    skipArtifact: tool({
+      description:
+        "Skip a fact — the existing artifact already has the same value.",
+      inputSchema: skipSchema,
+      execute: async ({ id, reason }) => {
+        console.log(`[Artifactor] Skipped artifact ${id}: ${reason}`);
+        return `Skipped ${id}`;
+      },
+    }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
 
 /**
  * Process extracted facts from Chatter.
  *
- * Each fact is a key-value pair (e.g. { "home_address": "123 Main St" }).
- * Artifactor will search for existing artifacts, then create or update as needed.
+ * Pre-searches for existing similar artifacts, then asks the LLM
+ * to create/update/skip in a single tool-calling step.
  */
 export const processFacts = internalAction({
   args: {
@@ -80,24 +231,34 @@ export const processFacts = internalAction({
       defaultProvider.model,
     );
 
-    // 3. Create the agent
-    const artifactor = createArtifactorAgent(model);
+    // 3. Pre-search for existing similar artifacts
+    const searchResults = await preSearchFacts(
+      ctx,
+      factEntries as [string, string][],
+    );
 
-    // 4. Create a one-off thread (no persistence needed)
-    const threadId = await createThread(ctx, components.agent, {
-      title: "Artifactor fact processing",
-    });
+    // 4. Build the prompt with facts + search results
+    const factsWithMatches = factEntries
+      .map(([key, value]) => {
+        const matches = searchResults.get(key) ?? [];
+        const matchesBlock =
+          matches.length > 0
+            ? `  Existing matches:\n${matches.map((m) => `    - [id=${m.id}, score=${m.score.toFixed(3)}] "${m.value}"`).join("\n")}`
+            : "  No existing matches found.";
+        return `- **${key}**: ${value}\n${matchesBlock}`;
+      })
+      .join("\n\n");
 
-    // 5. Build the prompt with the facts
-    const factsList = factEntries
-      .map(([key, value]) => `- **${key}**: ${value}`)
-      .join("\n");
+    const prompt = `Process the following facts about the user. For each fact, I've already searched for similar existing artifacts. Based on the matches, call createArtifact (new), updateArtifact (value changed), or skipArtifact (unchanged).\n\n${factsWithMatches}`;
 
-    const prompt = `Process the following extracted facts about the user. For each fact, search for existing artifacts, then create or update as appropriate.\n\n${factsList}`;
-
-    // 6. Run the agent
+    // 5. Single-step LLM call — tools are create/update/skip only
     try {
-      await artifactor.generateText(ctx, { threadId }, { prompt });
+      await generateText({
+        model,
+        system: buildArtifactorSystemPrompt(),
+        prompt,
+        tools: buildTools(ctx),
+      });
       console.log("[Artifactor] Finished processing facts.");
     } catch (error: unknown) {
       const errorMessage =

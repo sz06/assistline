@@ -1,17 +1,9 @@
 import { v } from "convex/values";
 import { api, internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
+import type { MutationCtx } from "../_generated/server";
 import { internalMutation, mutation } from "../_generated/server";
 import { executeActionDispatch } from "./helpers";
-
-export const toggleAI = mutation({
-  args: {
-    conversationId: v.id("conversations"),
-    aiEnabled: v.boolean(),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.patch(args.conversationId, { aiEnabled: args.aiEnabled });
-  },
-});
 
 /** Update one or more AI settings on a conversation. */
 export const updateAISettings = mutation({
@@ -29,8 +21,54 @@ export const updateAISettings = mutation({
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch(args.conversationId, patch);
     }
+
+    // When AI is toggled ON, immediately trigger the agent
+    if (args.aiEnabled === true) {
+      await triggerAgentOnEnable(ctx, args.conversationId);
+    }
   },
 });
+
+/**
+ * Helper: schedule processMessage immediately when AI is first enabled.
+ * Fetches the most recent message to determine direction and sender.
+ */
+async function triggerAgentOnEnable(
+  ctx: MutationCtx,
+  conversationId: Id<"conversations">,
+) {
+  // Fetch the most recent message in the conversation
+  const lastMessage = await ctx.db
+    .query("messages")
+    .withIndex("by_conversationId_timestamp", (q) =>
+      q.eq("conversationId", conversationId),
+    )
+    .order("desc")
+    .first();
+
+  if (!lastMessage) return; // No messages yet — agent will trigger on first message
+
+  // Resolve sender contactId
+  let senderContactId = "user";
+  if (lastMessage.direction === "in") {
+    const identity = await ctx.db
+      .query("contactIdentities")
+      .withIndex("by_matrixId", (q) => q.eq("matrixId", lastMessage.sender))
+      .first();
+    senderContactId = identity ? String(identity.contactId) : "unknown";
+  }
+
+  await ctx.scheduler.runAfter(
+    0,
+    internal.agents.chatter.agent.processMessage,
+    {
+      conversationId,
+      senderContactId,
+      messageText: lastMessage.text ?? "",
+      messageDirection: lastMessage.direction,
+    },
+  );
+}
 
 export const dismissSuggestedReply = mutation({
   args: {
@@ -221,6 +259,7 @@ export const patchConversation = internalMutation({
       suggestedReply: v.optional(v.string()),
       suggestedActions: v.optional(v.array(v.string())),
       agentThreadId: v.optional(v.string()),
+      lastAgentSyncTimestamp: v.optional(v.number()),
       status: v.optional(
         v.union(
           v.literal("idle"),

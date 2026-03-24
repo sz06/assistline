@@ -104,7 +104,16 @@ export function resolveEmbeddingModel(
     case "google":
       return createGoogleGenerativeAI({
         apiKey: apiKey ?? "",
-      }).textEmbeddingModel(modelId);
+      }).embeddingModel(modelId);
+
+    case "ollama":
+      if (!config.baseUrl) {
+        throw new Error("Ollama requires a base URL");
+      }
+      return createOpenAI({
+        apiKey: "ollama",
+        baseURL: config.baseUrl,
+      }).embedding(modelId);
 
     default:
       throw new Error(

@@ -160,8 +160,7 @@ export default defineSchema({
     .index("by_conversationId_timestamp", ["conversationId", "timestamp"])
     .index("by_eventId", ["eventId"]),
   artifacts: defineTable({
-    value: v.string(), // The artifact value
-    description: v.string(), // Textual description for semantic search
+    value: v.string(), // The artifact content (self-descriptive fact, e.g. "User's home address: 123 Main St")
     embedding: v.optional(v.array(v.float64())), // Embedding vector for semantic search
     accessibleToRoles: v.array(v.id("roles")), // Roles allowed to access it
     expiresAt: v.optional(v.number()),

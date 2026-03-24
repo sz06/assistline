@@ -95,6 +95,7 @@ export const insertMessage = mutation({
         avatarUrl: args.senderAvatarUrl,
         phoneNumbers: phone ? [{ label: "Mobile", value: phone }] : undefined,
         otherNames: otherName ? [otherName] : undefined,
+        lastUpdateAt: Date.now(),
       });
       await ctx.db.insert("contactIdentities", {
         contactId,
@@ -126,6 +127,7 @@ export const insertMessage = mutation({
         }
 
         if (Object.keys(patch).length > 0) {
+          patch.lastUpdateAt = Date.now();
           await ctx.db.patch(existingIdentity.contactId, patch);
         }
       }
@@ -185,14 +187,22 @@ export const insertMessage = mutation({
     // Trigger Chatter agent if AI is enabled on this conversation
     const convRecord = conversation ?? (await ctx.db.get(conversationId));
     if (convRecord?.aiEnabled) {
+      // Resolve sender's contactId from the identity we know exists at this point
+      const senderIdentity = await ctx.db
+        .query("contactIdentities")
+        .withIndex("by_matrixId", (q) => q.eq("matrixId", args.sender))
+        .first();
+
       await ctx.scheduler.runAfter(
         0,
         internal.agents.chatter.agent.processMessage,
         {
           conversationId,
+          senderContactId: senderIdentity
+            ? String(senderIdentity.contactId)
+            : "unknown",
           messageText: args.text ?? "",
           messageDirection: args.direction,
-          senderName: args.senderName,
         },
       );
     }
@@ -293,6 +303,7 @@ export const sendMessage = mutation({
         internal.agents.chatter.agent.processMessage,
         {
           conversationId: args.conversationId,
+          senderContactId: "user",
           messageText: args.content,
           messageDirection: "out",
         },

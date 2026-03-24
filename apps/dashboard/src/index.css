@@ -25,3 +25,186 @@ body {
   background-color: var(--color-background, #ffffff);
   color: var(--color-foreground, #0f172a);
 }
+
+/* ── Wiki prose styles ────────────────────────────────────── */
+
+.wiki-prose {
+  font-size: 0.9375rem;
+  line-height: 1.75;
+  color: #374151;
+}
+.dark .wiki-prose {
+  color: #d1d5db;
+}
+
+/* Headings */
+.wiki-prose h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  color: #111827;
+}
+.dark .wiki-prose h1 {
+  border-bottom-color: #374151;
+  color: #f3f4f6;
+}
+.wiki-prose h2 {
+  font-size: 1.375rem;
+  font-weight: 600;
+  margin: 2rem 0 0.75rem;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid #f3f4f6;
+  color: #111827;
+}
+.dark .wiki-prose h2 {
+  border-bottom-color: #1f2937;
+  color: #f3f4f6;
+}
+.wiki-prose h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem;
+  color: #111827;
+}
+.dark .wiki-prose h3 {
+  color: #f3f4f6;
+}
+
+/* Paragraphs & links */
+.wiki-prose p {
+  margin: 0.75rem 0;
+}
+.wiki-prose a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.dark .wiki-prose a {
+  color: #60a5fa;
+}
+.wiki-prose a:hover {
+  color: #1d4ed8;
+}
+.dark .wiki-prose a:hover {
+  color: #93bbfd;
+}
+
+/* Inline code */
+.wiki-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  background: #f3f4f6;
+  color: #be185d;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+}
+.dark .wiki-prose code {
+  background: #1f2937;
+  color: #f472b6;
+}
+
+/* Code blocks */
+.wiki-prose pre {
+  margin: 1rem 0;
+  padding: 1rem;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: #1e293b;
+  border: 1px solid #334155;
+}
+.wiki-prose pre code {
+  background: transparent;
+  color: #e2e8f0;
+  padding: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+/* Tables */
+.wiki-prose table {
+  width: 100%;
+  margin: 1rem 0;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.wiki-prose th {
+  text-align: left;
+  padding: 0.625rem 0.75rem;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+  background: #f9fafb;
+  border-bottom: 2px solid #e5e7eb;
+}
+.dark .wiki-prose th {
+  color: #9ca3af;
+  background: rgba(17, 24, 39, 0.5);
+  border-bottom-color: #374151;
+}
+.wiki-prose td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+.dark .wiki-prose td {
+  border-bottom-color: #1f2937;
+}
+
+/* Blockquotes */
+.wiki-prose blockquote {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid #3b82f6;
+  background: #eff6ff;
+  border-radius: 0 0.375rem 0.375rem 0;
+  color: #1e40af;
+}
+.dark .wiki-prose blockquote {
+  background: rgba(30, 58, 138, 0.15);
+  border-left-color: #60a5fa;
+  color: #93c5fd;
+}
+.wiki-prose blockquote p {
+  margin: 0.25rem 0;
+}
+
+/* Lists */
+.wiki-prose ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+  margin: 0.75rem 0;
+}
+.wiki-prose ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+  margin: 0.75rem 0;
+}
+.wiki-prose li {
+  margin: 0.25rem 0;
+}
+.wiki-prose li > ul,
+.wiki-prose li > ol {
+  margin: 0.25rem 0;
+}
+
+/* Horizontal rules */
+.wiki-prose hr {
+  margin: 2rem 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+.dark .wiki-prose hr {
+  border-top-color: #374151;
+}
+
+/* Strong / bold */
+.wiki-prose strong {
+  font-weight: 600;
+  color: #111827;
+}
+.dark .wiki-prose strong {
+  color: #f3f4f6;
+}

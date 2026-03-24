@@ -108,7 +108,7 @@ async function fetchAnthropicModels(apiKey: string): Promise<ModelInfo[]> {
 // Google Generative AI (Gemini)
 // ---------------------------------------------------------------------------
 
-async function fetchGoogleModels(apiKey: string): Promise<ModelInfo[]> {
+async function fetchGoogleAllModels(apiKey: string): Promise<GoogleModel[]> {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
   );
@@ -118,9 +118,29 @@ async function fetchGoogleModels(apiKey: string): Promise<ModelInfo[]> {
     );
   }
   const json = (await res.json()) as { models: GoogleModel[] };
+  return json.models;
+}
 
-  return json.models
+async function fetchGoogleModels(apiKey: string): Promise<ModelInfo[]> {
+  const models = await fetchGoogleAllModels(apiKey);
+
+  return models
     .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
+    .map((m) => ({
+      id: m.name.replace("models/", ""),
+      name: m.displayName || formatModelName(m.name.replace("models/", "")),
+      description: m.description,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function fetchGoogleEmbeddingModels(
+  apiKey: string,
+): Promise<ModelInfo[]> {
+  const models = await fetchGoogleAllModels(apiKey);
+
+  return models
+    .filter((m) => m.supportedGenerationMethods?.includes("embedContent"))
     .map((m) => ({
       id: m.name.replace("models/", ""),
       name: m.displayName || formatModelName(m.name.replace("models/", "")),
@@ -215,10 +235,35 @@ function formatModelName(id: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Convex Action — fetch models for a given provider
+// OpenAI — embedding models
 // ---------------------------------------------------------------------------
 
-export const listModels = action({
+async function fetchOpenAIEmbeddingModels(
+  apiKey: string,
+): Promise<ModelInfo[]> {
+  const res = await fetch("https://api.openai.com/v1/models", {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (!res.ok) {
+    throw new Error(`OpenAI /models failed: ${res.status} ${await res.text()}`);
+  }
+  const json = (await res.json()) as { data: OpenAIModel[] };
+
+  return json.data
+    .filter((m) => m.id.toLowerCase().startsWith("text-embedding-"))
+    .map((m) => ({
+      id: m.id,
+      name: formatModelName(m.id),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// ---------------------------------------------------------------------------
+// Convex Actions — separate endpoints for language and embedding models
+// ---------------------------------------------------------------------------
+
+/** Fetch language models available for a given provider. */
+export const listLanguageModels = action({
   args: {
     provider: v.string(),
     apiKey: v.optional(v.string()),
@@ -254,6 +299,37 @@ export const listModels = action({
       }
       default:
         throw new Error(`Unknown provider: ${provider}`);
+    }
+  },
+});
+
+/** Fetch embedding models available for a given provider. */
+export const listEmbeddingModels = action({
+  args: {
+    provider: v.string(),
+    apiKey: v.optional(v.string()),
+    baseUrl: v.optional(v.string()),
+  },
+  handler: async (_ctx, args): Promise<ModelInfo[]> => {
+    const { provider, apiKey, baseUrl } = args;
+
+    switch (provider) {
+      case "openai": {
+        if (!apiKey) throw new Error("OpenAI requires an API key");
+        return fetchOpenAIEmbeddingModels(apiKey);
+      }
+      case "google": {
+        if (!apiKey) throw new Error("Google AI requires an API key");
+        return fetchGoogleEmbeddingModels(apiKey);
+      }
+      case "ollama": {
+        if (!baseUrl) throw new Error("Ollama requires a base URL");
+        return fetchOllamaModels(baseUrl);
+      }
+      default:
+        throw new Error(
+          `Embedding models not supported for provider: ${provider}`,
+        );
     }
   },
 });

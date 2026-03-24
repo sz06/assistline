@@ -10,8 +10,8 @@
 
 import type * as agents_artifactor_agent from "../agents/artifactor/agent.js";
 import type * as agents_artifactor_prompt from "../agents/artifactor/prompt.js";
-import type * as agents_artifactor_tools from "../agents/artifactor/tools.js";
 import type * as agents_chatter_agent from "../agents/chatter/agent.js";
+import type * as agents_chatter_helpers from "../agents/chatter/helpers.js";
 import type * as agents_chatter_prompt from "../agents/chatter/prompt.js";
 import type * as agents_chatter_tools from "../agents/chatter/tools.js";
 import type * as ai_embeddings from "../ai/embeddings.js";
@@ -46,8 +46,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   "agents/artifactor/agent": typeof agents_artifactor_agent;
   "agents/artifactor/prompt": typeof agents_artifactor_prompt;
-  "agents/artifactor/tools": typeof agents_artifactor_tools;
   "agents/chatter/agent": typeof agents_chatter_agent;
+  "agents/chatter/helpers": typeof agents_chatter_helpers;
   "agents/chatter/prompt": typeof agents_chatter_prompt;
   "agents/chatter/tools": typeof agents_chatter_tools;
   "ai/embeddings": typeof ai_embeddings;
