@@ -2,7 +2,7 @@ import { Drawer } from "@base-ui/react/drawer";
 import { Switch } from "@base-ui/react/switch";
 import { Bot, MoreVertical, Send, Sparkles, Trash2, X } from "lucide-react";
 import * as React from "react";
-import { cn } from "../lib/utils";
+import { cn } from "@repo/ui";
 
 export interface ConversationDrawerProps {
   /** Whether the AI agent is enabled for this conversation */

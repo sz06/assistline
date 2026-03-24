@@ -1,5 +1,6 @@
 import { api, type Id } from "@repo/api";
-import { Button, ConfirmDialog, ConversationDrawer, Input } from "@repo/ui";
+import { Button, ConfirmDialog, Input } from "@repo/ui";
+import { ConversationDrawer } from "../components/conversation-drawer/conversation-drawer";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import {
   ArrowLeft,

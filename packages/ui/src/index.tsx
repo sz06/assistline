@@ -13,8 +13,6 @@ export {
   CardTitle,
 } from "./components/card";
 export { ConfirmDialog } from "./components/confirm-dialog";
-export type { ConversationDrawerProps } from "./components/conversation-drawer";
-export { ConversationDrawer } from "./components/conversation-drawer";
 export type { Column } from "./components/data-table";
 // Presentational composites
 export { DataTable } from "./components/data-table";
