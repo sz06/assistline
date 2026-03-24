@@ -101,7 +101,10 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const { source, ...fields } = args;
-    const id = await ctx.db.insert("contacts", fields);
+    const id = await ctx.db.insert("contacts", {
+      ...fields,
+      lastUpdateAt: Date.now(),
+    });
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "contact.create",
       source: source ?? "user",
@@ -127,7 +130,7 @@ export const update = mutation({
     const { id, source, ...fields } = args;
     const existing = await ctx.db.get(id);
     if (!existing) throw new Error("Contact not found");
-    await ctx.db.patch(id, fields);
+    await ctx.db.patch(id, { ...fields, lastUpdateAt: Date.now() });
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "contact.update",
       source: source ?? "user",
@@ -173,17 +176,11 @@ export const remove = mutation({
 // Internal queries for Chatter agent tools
 // ---------------------------------------------------------------------------
 
-/** Look up a contact by their Matrix sender ID (via contactIdentities join). */
+/** Look up a contact's full profile by their Convex document ID. */
 export const getContactProfileQuery = internalQuery({
-  args: { matrixId: v.string() },
-  handler: async (ctx, { matrixId }) => {
-    const identity = await ctx.db
-      .query("contactIdentities")
-      .withIndex("by_matrixId", (q) => q.eq("matrixId", matrixId))
-      .first();
-    if (!identity) return null;
-
-    const contact = await ctx.db.get(identity.contactId);
+  args: { contactId: v.id("contacts") },
+  handler: async (ctx, { contactId }) => {
+    const contact = await ctx.db.get(contactId);
     if (!contact) return null;
 
     const roleNames: string[] = [];
@@ -207,5 +204,28 @@ export const getContactProfileQuery = internalQuery({
       notes: contact.notes,
       roles: roleNames,
     };
+  },
+});
+
+/**
+ * Resolve an array of Matrix IDs to their corresponding contact IDs.
+ * Returns a record of matrixId → contactId (as string).
+ * Unknown senders are omitted from the result.
+ */
+export const resolveContactIds = internalQuery({
+  args: { matrixIds: v.array(v.string()) },
+  handler: async (ctx, { matrixIds }) => {
+    const result: Record<string, string> = {};
+    for (const matrixId of matrixIds) {
+      if (result[matrixId]) continue;
+      const identity = await ctx.db
+        .query("contactIdentities")
+        .withIndex("by_matrixId", (q) => q.eq("matrixId", matrixId))
+        .first();
+      if (identity) {
+        result[matrixId] = String(identity.contactId);
+      }
+    }
+    return result;
   },
 });

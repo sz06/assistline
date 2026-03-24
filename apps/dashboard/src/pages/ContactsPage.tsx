@@ -12,16 +12,27 @@ import {
   Phone,
   Plus,
   Search,
+  Settings2,
   Users,
+  X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type SortField = "name" | "company" | "created";
+type ColumnKey =
+  | "name"
+  | "company"
+  | "phone"
+  | "email"
+  | "roles"
+  | "created"
+  | "updated";
+
+type SortField = "name" | "company" | "created" | "updated";
 type SortDir = "asc" | "desc";
 
 interface PhoneEntry {
@@ -46,6 +57,74 @@ interface Contact {
   jobTitle?: string;
   birthday?: string;
   notes?: string;
+  lastUpdateAt?: number;
+  roles?: Id<"roles">[];
+}
+
+// ---------------------------------------------------------------------------
+// Column Definitions
+// ---------------------------------------------------------------------------
+
+interface ColumnDef {
+  key: ColumnKey;
+  label: string;
+  /** Sortable columns map to a SortField; non-sortable ones are undefined */
+  sortField?: SortField;
+  defaultVisible: boolean;
+  /** Name column can never be hidden */
+  locked?: boolean;
+}
+
+const COLUMN_DEFS: ColumnDef[] = [
+  {
+    key: "name",
+    label: "Name",
+    sortField: "name",
+    defaultVisible: true,
+    locked: true,
+  },
+  {
+    key: "company",
+    label: "Company",
+    sortField: "company",
+    defaultVisible: false,
+  },
+  { key: "phone", label: "Phone", defaultVisible: true },
+  { key: "email", label: "Email", defaultVisible: true },
+  { key: "roles", label: "Roles", defaultVisible: false },
+  {
+    key: "created",
+    label: "Added",
+    sortField: "created",
+    defaultVisible: true,
+  },
+  {
+    key: "updated",
+    label: "Updated",
+    sortField: "updated",
+    defaultVisible: true,
+  },
+];
+
+const STORAGE_KEY = "contacts-columns";
+
+function loadVisibleColumns(): Set<ColumnKey> {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored) as ColumnKey[];
+      const set = new Set<ColumnKey>(parsed);
+      set.add("name"); // always include name
+      return set;
+    }
+  } catch {
+    // fall through to defaults
+  }
+  return new Set(COLUMN_DEFS.filter((c) => c.defaultVisible).map((c) => c.key));
+}
+
+function saveVisibleColumns(cols: Set<ColumnKey>) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify([...cols]));
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +187,7 @@ function formatDate(ts: number): string {
 
 export function ContactsPage() {
   const contacts = useQuery(api.contacts.list);
+  const allRoles = useQuery(api.roles.list);
   const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
@@ -115,6 +195,39 @@ export function ContactsPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(10);
+  const [visibleCols, setVisibleCols] =
+    useState<Set<ColumnKey>>(loadVisibleColumns);
+  const [colMenuOpen, setColMenuOpen] = useState(false);
+
+  // Build role ID → name map
+  const roleMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (allRoles) {
+      for (const role of allRoles) {
+        map[String(role._id)] = role.name;
+      }
+    }
+    return map;
+  }, [allRoles]);
+
+  const isColVisible = useCallback(
+    (key: ColumnKey) => visibleCols.has(key),
+    [visibleCols],
+  );
+
+  const toggleColumn = (key: ColumnKey) => {
+    setVisibleCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      next.add("name"); // safety: never remove name
+      saveVisibleColumns(next);
+      return next;
+    });
+  };
 
   // Toggle sort on column click
   const handleSort = (field: SortField) => {
@@ -193,6 +306,11 @@ export function ContactsPage() {
         case "created":
           cmp = a._creationTime - b._creationTime;
           break;
+        case "updated":
+          cmp =
+            (a.lastUpdateAt ?? a._creationTime) -
+            (b.lastUpdateAt ?? b._creationTime);
+          break;
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
@@ -233,16 +351,24 @@ export function ContactsPage() {
           </Button>
         </div>
 
-        {/* ── Search Bar ────────────────────────────────────── */}
+        {/* ── Toolbar: Search + Column Config ─────────────── */}
         {contacts && contacts.length > 0 && (
-          <div className="relative mt-2 mb-6 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              value={search}
-              onChange={(e) => handleSearch(e.target.value)}
-              placeholder="Search by name, company, phone, email…"
-              className="pl-10"
-              data-testid="contacts-search"
+          <div className="flex items-center gap-2 mt-2 mb-6">
+            <div className="relative max-w-md flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                value={search}
+                onChange={(e) => handleSearch(e.target.value)}
+                placeholder="Search by name, company, phone, email…"
+                className="pl-10"
+                data-testid="contacts-search"
+              />
+            </div>
+            <ColumnConfigDropdown
+              visibleCols={visibleCols}
+              onToggle={toggleColumn}
+              open={colMenuOpen}
+              onOpenChange={setColMenuOpen}
             />
           </div>
         )}
@@ -273,6 +399,7 @@ export function ContactsPage() {
                 >
                   <thead>
                     <tr className="bg-gray-50 dark:bg-gray-900/60 border-b border-gray-200 dark:border-gray-800">
+                      {/* Name — always visible */}
                       <SortableHeader
                         label="Name"
                         field="name"
@@ -280,28 +407,48 @@ export function ContactsPage() {
                         dir={sortDir}
                         onSort={handleSort}
                       />
-                      <SortableHeader
-                        label="Company"
-                        field="company"
-                        activeField={sortField}
-                        dir={sortDir}
-                        onSort={handleSort}
-                        className="hidden sm:table-cell"
-                      />
-                      <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden md:table-cell">
-                        Phone
-                      </th>
-                      <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden lg:table-cell">
-                        Email
-                      </th>
-                      <SortableHeader
-                        label="Added"
-                        field="created"
-                        activeField={sortField}
-                        dir={sortDir}
-                        onSort={handleSort}
-                        className="hidden xl:table-cell"
-                      />
+                      {isColVisible("company") && (
+                        <SortableHeader
+                          label="Company"
+                          field="company"
+                          activeField={sortField}
+                          dir={sortDir}
+                          onSort={handleSort}
+                        />
+                      )}
+                      {isColVisible("phone") && (
+                        <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Phone
+                        </th>
+                      )}
+                      {isColVisible("email") && (
+                        <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Email
+                        </th>
+                      )}
+                      {isColVisible("roles") && (
+                        <th className="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          Roles
+                        </th>
+                      )}
+                      {isColVisible("created") && (
+                        <SortableHeader
+                          label="Added"
+                          field="created"
+                          activeField={sortField}
+                          dir={sortDir}
+                          onSort={handleSort}
+                        />
+                      )}
+                      {isColVisible("updated") && (
+                        <SortableHeader
+                          label="Updated"
+                          field="updated"
+                          activeField={sortField}
+                          dir={sortDir}
+                          onSort={handleSort}
+                        />
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -309,6 +456,8 @@ export function ContactsPage() {
                       <ContactRow
                         key={contact._id}
                         contact={contact}
+                        roleMap={roleMap}
+                        visibleCols={visibleCols}
                         onEdit={() =>
                           navigate(`/contacts/${contact._id}/update`)
                         }
@@ -374,6 +523,95 @@ export function ContactsPage() {
 }
 
 // ---------------------------------------------------------------------------
+// Column Config Dropdown
+// ---------------------------------------------------------------------------
+
+function ColumnConfigDropdown({
+  visibleCols,
+  onToggle,
+  open,
+  onOpenChange,
+}: {
+  visibleCols: Set<ColumnKey>;
+  onToggle: (key: ColumnKey) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onOpenChange(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open, onOpenChange]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => onOpenChange(!open)}
+        className="p-2 rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500 dark:text-gray-400"
+        data-testid="column-config-btn"
+        title="Configure columns"
+      >
+        <Settings2 className="h-4 w-4" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-52 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg p-1">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-800">
+            <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              Columns
+            </span>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {COLUMN_DEFS.map((col) => {
+            const checked = visibleCols.has(col.key);
+            const disabled = col.locked;
+            return (
+              <label
+                key={col.key}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                  disabled
+                    ? "opacity-50 cursor-not-allowed"
+                    : "hover:bg-gray-50 dark:hover:bg-gray-800/60"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={() => {
+                    if (!disabled) onToggle(col.key);
+                  }}
+                  className="h-3.5 w-3.5 rounded border-gray-300 dark:border-gray-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                  data-testid={`col-toggle-${col.key}`}
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  {col.label}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Sortable Header
 // ---------------------------------------------------------------------------
 
@@ -422,9 +660,13 @@ function SortableHeader({
 
 function ContactRow({
   contact,
+  roleMap,
+  visibleCols,
   onEdit,
 }: {
   contact: Contact;
+  roleMap: Record<string, string>;
+  visibleCols: Set<ColumnKey>;
   onEdit: () => void;
 }) {
   const name = displayName(contact.name, contact.nickname, contact.otherNames);
@@ -436,6 +678,9 @@ function ContactRow({
   const gradient = pickGradient(name);
   const primaryPhone = contact.phoneNumbers?.[0]?.value;
   const primaryEmail = contact.emails?.[0]?.value;
+  const roleNames = (contact.roles ?? [])
+    .map((id) => roleMap[String(id)])
+    .filter(Boolean);
 
   return (
     <tr
@@ -443,7 +688,7 @@ function ContactRow({
       data-testid={`contact-row-${contact._id}`}
       className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/60 cursor-pointer transition-colors group"
     >
-      {/* Name + Avatar */}
+      {/* Name + Avatar — always visible */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
           <div
@@ -470,42 +715,79 @@ function ContactRow({
       </td>
 
       {/* Company */}
-      <td className="px-4 py-3 hidden sm:table-cell">
-        <span className="text-sm text-gray-600 dark:text-gray-300 truncate block max-w-[180px]">
-          {contact.company || "—"}
-        </span>
-      </td>
+      {visibleCols.has("company") && (
+        <td className="px-4 py-3">
+          <span className="text-sm text-gray-600 dark:text-gray-300 truncate block max-w-[180px]">
+            {contact.company || "—"}
+          </span>
+        </td>
+      )}
 
       {/* Phone */}
-      <td className="px-4 py-3 hidden md:table-cell">
-        {primaryPhone ? (
-          <span className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300">
-            <Phone className="h-3.5 w-3.5 text-gray-400" />
-            {primaryPhone}
-          </span>
-        ) : (
-          <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
-        )}
-      </td>
+      {visibleCols.has("phone") && (
+        <td className="px-4 py-3">
+          {primaryPhone ? (
+            <span className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300">
+              <Phone className="h-3.5 w-3.5 text-gray-400" />
+              {primaryPhone}
+            </span>
+          ) : (
+            <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
+          )}
+        </td>
+      )}
 
       {/* Email */}
-      <td className="px-4 py-3 hidden lg:table-cell">
-        {primaryEmail ? (
-          <span className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 truncate max-w-[200px]">
-            <Mail className="h-3.5 w-3.5 text-gray-400" />
-            {primaryEmail}
-          </span>
-        ) : (
-          <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
-        )}
-      </td>
+      {visibleCols.has("email") && (
+        <td className="px-4 py-3">
+          {primaryEmail ? (
+            <span className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 truncate max-w-[200px]">
+              <Mail className="h-3.5 w-3.5 text-gray-400" />
+              {primaryEmail}
+            </span>
+          ) : (
+            <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
+          )}
+        </td>
+      )}
+
+      {/* Roles */}
+      {visibleCols.has("roles") && (
+        <td className="px-4 py-3">
+          {roleNames.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {roleNames.map((rn) => (
+                <span
+                  key={rn}
+                  className="inline-block rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 text-xs font-medium"
+                >
+                  {rn}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
+          )}
+        </td>
+      )}
 
       {/* Added date */}
-      <td className="px-4 py-3 hidden xl:table-cell">
-        <span className="text-sm text-gray-500 dark:text-gray-400">
-          {formatDate(contact._creationTime)}
-        </span>
-      </td>
+      {visibleCols.has("created") && (
+        <td className="px-4 py-3">
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            {formatDate(contact._creationTime)}
+          </span>
+        </td>
+      )}
+
+      {/* Updated date */}
+      {visibleCols.has("updated") && (
+        <td className="px-4 py-3">
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            {contact.lastUpdateAt ? formatDate(contact.lastUpdateAt) : "—"}
+          </span>
+        </td>
+      )}
     </tr>
   );
 }

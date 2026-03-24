@@ -55,6 +55,7 @@ export default defineSchema({
         }),
       ),
     ),
+    lastUpdateAt: v.optional(v.number()), // Timestamp of last modification
   }),
   contactIdentities: defineTable({
     contactId: v.id("contacts"),
@@ -95,6 +96,7 @@ export default defineSchema({
     suggestedActions: v.optional(v.array(v.string())), // Pending JSON agent actions
     aiTokensIn: v.optional(v.number()), // Cumulative LLM input tokens
     aiTokensOut: v.optional(v.number()), // Cumulative LLM output tokens
+    lastAgentSyncTimestamp: v.optional(v.number()), // Timestamp of last message synced into agent thread
   })
     .index("by_matrixRoomId", ["matrixRoomId"])
     .index("by_updatedAt", ["updatedAt"])
