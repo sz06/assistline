@@ -60,7 +60,7 @@ async function triggerAgentOnEnable(
 
   await ctx.scheduler.runAfter(
     0,
-    internal.agents.chatter.agent.processMessage,
+    internal.agents.dispatcher.agent.processMessage,
     {
       conversationId,
       senderContactId,

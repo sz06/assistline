@@ -4,7 +4,7 @@ import { createTool, type ToolCtx } from "@convex-dev/agent";
 import { z } from "zod";
 import { internal } from "../../_generated/api";
 import type { DataModel, Id } from "../../_generated/dataModel";
-import { ChatterMutationSchema } from "./schema";
+import { DispatcherMutationSchema } from "./schema";
 
 // ── Read-Only Tools ──────────────────────────────────────────────────────────
 // Note: getContactProfile and listRoles have been removed.
@@ -82,7 +82,7 @@ export const suggestReply = createTool<
         content: reply,
       });
       console.log(
-        `[Chatter] Auto-sent reply for conversation ${conversationId}`,
+        `[Dispatcher] Auto-sent reply for conversation ${conversationId}`,
       );
     } else {
       // Manual mode: store as a suggested reply card for user approval
@@ -112,7 +112,7 @@ export const suggestActions = createTool<
   inputSchema: z.object({
     conversationId: z.string().describe("The Convex conversation ID"),
     actions: z
-      .array(ChatterMutationSchema)
+      .array(DispatcherMutationSchema)
       .describe("Array of mutation actions to suggest."),
   }),
   execute: async (ctx, { conversationId, actions }): Promise<string> => {
@@ -134,7 +134,7 @@ export const suggestActions = createTool<
         );
       }
       console.log(
-        `[Chatter] Auto-executed ${actions.length} action(s) for conversation ${conversationId}`,
+        `[Dispatcher] Auto-executed ${actions.length} action(s) for conversation ${conversationId}`,
       );
       return `Auto-executed ${actions.length} action(s)`;
     }
@@ -152,7 +152,7 @@ export const suggestActions = createTool<
 
 /**
  * Forward observed facts about the user to the Artifactor agent.
- * Chatter notices facts in conversation; Artifactor decides what to do with them.
+ * Dispatcher notices facts in conversation; Artifactor decides what to do with them.
  */
 export const forwardFacts = createTool<
   { facts: Record<string, string> },

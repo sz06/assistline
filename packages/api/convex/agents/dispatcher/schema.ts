@@ -35,11 +35,11 @@ const AssignRoleAction = z.object({
   roleName: z.string().describe("Name of the role to assign, e.g. 'spouse'"),
 });
 
-/** Discriminated union of all mutation actions Chatter can suggest. */
-export const ChatterMutationSchema = z.discriminatedUnion("type", [
+/** Discriminated union of all mutation actions Dispatcher can suggest. */
+export const DispatcherMutationSchema = z.discriminatedUnion("type", [
   UpdateContactAction,
   CreateArtifactAction,
   AssignRoleAction,
 ]);
 
-export type ChatterMutationAction = z.infer<typeof ChatterMutationSchema>;
+export type DispatcherMutationAction = z.infer<typeof DispatcherMutationSchema>;

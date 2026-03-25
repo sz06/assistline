@@ -98,7 +98,7 @@ export const sendMessage = mutation({
     if (conv.aiEnabled) {
       await ctx.scheduler.runAfter(
         0,
-        internal.agents.chatter.agent.processMessage,
+        internal.agents.dispatcher.agent.processMessage,
         {
           conversationId: args.conversationId,
           senderContactId: "user",

@@ -1,5 +1,5 @@
 /**
- * Pure helper functions for the Chatter agent.
+ * Pure helper functions for the Dispatcher agent.
  * No Convex runtime dependency — all inputs are passed as arguments.
  */
 

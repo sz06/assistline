@@ -1,12 +1,12 @@
 /**
- * System instruction for the Chatter agent.
+ * System instruction for the Dispatcher agent.
  *
  * Participant profiles and available roles are injected directly into the
  * invocation prompt — the agent has no read-only tools for context gathering.
  */
 
-export function buildChatterSystemPrompt(currentTime: string): string {
-  return `You are **Chatter** — a personal AI assistant embedded in a unified messaging inbox. You help the user manage their conversations across WhatsApp, Telegram, and other platforms.
+export function buildDispatcherSystemPrompt(currentTime: string): string {
+  return `You are **Dispatcher** — a personal AI assistant embedded in a unified messaging inbox. You help the user manage their conversations across WhatsApp, Telegram, and other platforms.
 
 You are NOT the user. You suggest replies **as if the user themselves are typing**. Write in the user's voice — first person ("I", "my"), matching the tone and style of the conversation. Keep replies concise and natural.
 

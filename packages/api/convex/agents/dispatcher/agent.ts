@@ -6,7 +6,7 @@ import { components, internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { internalAction } from "../../_generated/server";
 import { resolveLanguageModel } from "../../ai/engine";
-import { buildChatterSystemPrompt } from "./prompt";
+import { buildDispatcherSystemPrompt } from "./prompt";
 import {
   forwardFacts,
   getArtifacts,
@@ -18,21 +18,21 @@ import {
 const MAX_THREAD_MESSAGES = 20;
 
 /**
- * Create the Chatter agent dynamically — we resolve the language model at
+ * Create the Dispatcher agent dynamically — we resolve the language model at
  * runtime from the user's configured AI providers.
  *
  * The conversationId is captured in the closure so the usageHandler can
  * attribute token usage to the correct conversation.
  */
-function createChatterAgent(
+function createDispatcherAgent(
   model: ReturnType<typeof resolveLanguageModel>,
   conversationId: Id<"conversations">,
 ) {
   return new Agent(components.agent, {
-    name: "Chatter",
+    name: "Dispatcher",
     // biome-ignore lint/suspicious/noExplicitAny: AI SDK LanguageModel ↔ agent component type bridge
     languageModel: model as any,
-    instructions: buildChatterSystemPrompt(new Date().toISOString()),
+    instructions: buildDispatcherSystemPrompt(new Date().toISOString()),
     tools: {
       getArtifacts,
       suggestReply,
@@ -60,7 +60,7 @@ import {
 } from "./helpers";
 
 /**
- * Main Chatter agent entry point.
+ * Main Dispatcher agent entry point.
  * Called after each message when a conversation has aiEnabled = true.
  *
  * Flow:
@@ -86,7 +86,7 @@ export const processMessage = internalAction({
     );
     if (!defaultProvider?.model) {
       console.warn(
-        "[Chatter] No default language provider configured. Skipping.",
+        "[Dispatcher] No default language provider configured. Skipping.",
       );
       return;
     }
@@ -102,7 +102,7 @@ export const processMessage = internalAction({
     );
 
     // 3. Create the agent with the resolved model
-    const chatter = createChatterAgent(model, args.conversationId);
+    const dispatcher = createDispatcherAgent(model, args.conversationId);
 
     // 4. Get the conversation
     const conversation = await ctx.runQuery(
@@ -110,7 +110,7 @@ export const processMessage = internalAction({
       { id: args.conversationId },
     );
     if (!conversation) {
-      console.error("[Chatter] Conversation not found:", args.conversationId);
+      console.error("[Dispatcher] Conversation not found:", args.conversationId);
       return;
     }
 
@@ -144,7 +144,7 @@ export const processMessage = internalAction({
       if (block) {
         await saveMessage(ctx, components.agent, {
           threadId,
-          agentName: "Chatter",
+          agentName: "Dispatcher",
           message: { role: "user", content: block.content },
         });
 
@@ -200,7 +200,7 @@ export const processMessage = internalAction({
       if (block) {
         await saveMessage(ctx, components.agent, {
           threadId,
-          agentName: "Chatter",
+          agentName: "Dispatcher",
           message: { role: "user", content: block.content },
         });
 
@@ -216,7 +216,7 @@ export const processMessage = internalAction({
 
     // ── Prune: keep only the last MAX_THREAD_MESSAGES in the thread ─────
     try {
-      const threadMessages = await chatter.listMessages(ctx, {
+      const threadMessages = await dispatcher.listMessages(ctx, {
         threadId,
         paginationOpts: { numItems: 200, cursor: null },
         excludeToolMessages: true,
@@ -233,14 +233,14 @@ export const processMessage = internalAction({
           userMessages.length - MAX_THREAD_MESSAGES,
         );
         const messageIds = toDelete.map((m) => m._id);
-        await chatter.deleteMessages(ctx, { messageIds });
+        await dispatcher.deleteMessages(ctx, { messageIds });
         console.log(
-          `[Chatter] Pruned ${messageIds.length} old messages from thread`,
+          `[Dispatcher] Pruned ${messageIds.length} old messages from thread`,
         );
       }
     } catch (pruneError: unknown) {
       console.warn(
-        "[Chatter] Pruning failed (non-fatal):",
+        "[Dispatcher] Pruning failed (non-fatal):",
         pruneError instanceof Error ? pruneError.message : String(pruneError),
       );
     }
@@ -281,7 +281,7 @@ export const processMessage = internalAction({
 
     // ── Run the agent ────────────────────────────────────────────────────
     try {
-      await chatter.generateText(
+      await dispatcher.generateText(
         ctx,
         { threadId },
         { prompt },
@@ -294,7 +294,7 @@ export const processMessage = internalAction({
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      console.error("[Chatter] Agent error:", errorMessage);
+      console.error("[Dispatcher] Agent error:", errorMessage);
     }
   },
 });
