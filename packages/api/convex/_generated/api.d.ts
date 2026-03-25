@@ -28,6 +28,7 @@ import type * as conversations_helpers from "../conversations/helpers.js";
 import type * as conversations_mutations from "../conversations/mutations.js";
 import type * as conversations_queries from "../conversations/queries.js";
 import type * as crons from "../crons.js";
+import type * as ingest from "../ingest.js";
 import type * as init from "../init.js";
 import type * as matrixActions from "../matrixActions.js";
 import type * as messages_helpers from "../messages/helpers.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   "conversations/mutations": typeof conversations_mutations;
   "conversations/queries": typeof conversations_queries;
   crons: typeof crons;
+  ingest: typeof ingest;
   init: typeof init;
   matrixActions: typeof matrixActions;
   "messages/helpers": typeof messages_helpers;

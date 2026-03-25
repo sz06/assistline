@@ -161,27 +161,6 @@ export const deleteConversation = mutation({
 // Read receipts
 // ---------------------------------------------------------------------------
 
-export const markRead = mutation({
-  args: {
-    matrixRoomId: v.string(),
-    lastReadEventId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const conv = await ctx.db
-      .query("conversations")
-      .withIndex("by_matrixRoomId", (q) =>
-        q.eq("matrixRoomId", args.matrixRoomId),
-      )
-      .first();
-    if (!conv) return;
-
-    await ctx.db.patch(conv._id, {
-      unreadCount: 0,
-      lastReadEventId: args.lastReadEventId,
-    });
-  },
-});
-
 /** Mark a conversation as read by its Convex ID (called from the dashboard).
  *  Also sends a read receipt to Matrix so WhatsApp marks messages as read. */
 export const markAsRead = mutation({
@@ -221,10 +200,72 @@ export const markAsRead = mutation({
 });
 
 // ---------------------------------------------------------------------------
-// Typing indicators
+// Internal: Sync conversation metadata (called by ingest module)
 // ---------------------------------------------------------------------------
 
-export const setTyping = mutation({
+export const syncConversationMeta = internalMutation({
+  args: {
+    matrixRoomId: v.string(),
+    channelId: v.id("channels"),
+    memberCount: v.number(),
+    participants: v.array(v.string()),
+    topic: v.optional(v.string()),
+    name: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const conversation = await ctx.db
+      .query("conversations")
+      .withIndex("by_matrixRoomId", (q) =>
+        q.eq("matrixRoomId", args.matrixRoomId),
+      )
+      .first();
+
+    if (!conversation) return null;
+
+    await ctx.db.patch(conversation._id, {
+      channelId: args.channelId,
+      memberCount: args.memberCount,
+      participants: args.participants,
+      topic: args.topic ?? conversation.topic,
+      name: args.name ?? conversation.name,
+      avatarUrl: args.avatarUrl ?? conversation.avatarUrl,
+    });
+
+    return conversation._id;
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Internal: Read receipts (called by ingest module for ephemeral events)
+// ---------------------------------------------------------------------------
+
+export const markRead = internalMutation({
+  args: {
+    matrixRoomId: v.string(),
+    lastReadEventId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const conv = await ctx.db
+      .query("conversations")
+      .withIndex("by_matrixRoomId", (q) =>
+        q.eq("matrixRoomId", args.matrixRoomId),
+      )
+      .first();
+    if (!conv) return;
+
+    await ctx.db.patch(conv._id, {
+      unreadCount: 0,
+      lastReadEventId: args.lastReadEventId,
+    });
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Internal: Typing indicators (called by ingest module for ephemeral events)
+// ---------------------------------------------------------------------------
+
+export const setTyping = internalMutation({
   args: {
     matrixRoomId: v.string(),
     typingUsers: v.array(v.string()),

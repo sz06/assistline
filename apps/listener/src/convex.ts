@@ -7,31 +7,22 @@
 //
 // At runtime, function references are just string paths, so this works
 // identically to the typed API from @repo/api.
+//
+// With admin auth, the listener can call internalMutation/internalAction
+// functions in addition to public ones.
 
 import { anyApi } from "convex/server";
 
 export const api = anyApi as unknown as {
   channels: {
     getByType: typeof anyApi.channels.getByType;
-    setBridgeDisconnected: typeof anyApi.channels.setBridgeDisconnected;
-  };
-  messages: {
-    mutations: {
-      insertMessage: typeof anyApi.messages.mutations.insertMessage;
-      syncConversationMeta: typeof anyApi.messages.mutations.syncConversationMeta;
-      addReaction: typeof anyApi.messages.mutations.addReaction;
-      removeReaction: typeof anyApi.messages.mutations.removeReaction;
-      redactMessage: typeof anyApi.messages.mutations.redactMessage;
-      editMessage: typeof anyApi.messages.mutations.editMessage;
-    };
-  };
-  conversations: {
-    mutations: {
-      markRead: typeof anyApi.conversations.mutations.markRead;
-      setTyping: typeof anyApi.conversations.mutations.setTyping;
-    };
   };
   config: {
     set: typeof anyApi.config.set;
+  };
+  ingest: {
+    handleMatrixEvent: typeof anyApi.ingest.handleMatrixEvent;
+    handleEphemeralEvent: typeof anyApi.ingest.handleEphemeralEvent;
+    handleConversationMeta: typeof anyApi.ingest.handleConversationMeta;
   };
 };

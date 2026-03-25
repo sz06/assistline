@@ -39,6 +39,27 @@ function loadAccessToken(): string {
   return requireEnv("MATRIX_BOT_ACCESS_TOKEN");
 }
 
+/**
+ * Load the Convex admin key from the shared volume (written by assistline-init).
+ * Falls back to env var for manual/dev setups.
+ */
+function loadAdminKey(): string {
+  const keyFile = process.env.CONVEX_ADMIN_KEY_FILE ?? "/shared-convex/convex-admin-key";
+  if (existsSync(keyFile)) {
+    const key = readFileSync(keyFile, "utf-8").trim();
+    if (key) {
+      console.log(`[listener] Admin key loaded from ${keyFile}`);
+      return key;
+    }
+  }
+  // Fallback to env var
+  const envKey = process.env.CONVEX_ADMIN_KEY;
+  if (envKey) return envKey;
+  throw new Error(
+    "Missing Convex admin key. Ensure the convex-shared volume is mounted or set CONVEX_ADMIN_KEY.",
+  );
+}
+
 const MATRIX_HOMESERVER_URL = requireEnv("MATRIX_HOMESERVER_URL");
 const CONVEX_URL = requireEnv("CONVEX_URL");
 
@@ -59,10 +80,16 @@ const SYNC_TOKEN_PATH = process.env.SYNC_TOKEN_PATH ?? "./data/sync-token.json";
 const SYNC_TIMEOUT_MS = 30_000;
 
 // ---------------------------------------------------------------------------
-// Convex client
+// Convex client (admin-authed)
 // ---------------------------------------------------------------------------
 
 const convex = new ConvexHttpClient(CONVEX_URL);
+const adminKey = loadAdminKey();
+// setAdminAuth exists at runtime but is marked @internal in Convex's type declarations.
+// It enables calling internalMutation/internalAction/internalQuery via the HTTP client.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(convex as any).setAdminAuth(adminKey);
+console.log("[listener] ✓ Admin auth configured");
 
 // ---------------------------------------------------------------------------
 // Channel resolution — map platform type to Convex channel ID
@@ -164,28 +191,7 @@ interface MatrixEvent {
   sender: string;
   origin_server_ts: number;
   redacts?: string; // For m.room.redaction events
-  content: {
-    msgtype?: string;
-    body?: string;
-    membership?: string;
-    url?: string; // mxc:// URL for media
-    info?: {
-      mimetype?: string;
-      size?: number;
-      [key: string]: unknown;
-    };
-    "m.relates_to"?: {
-      rel_type?: string; // "m.annotation" for reactions, "m.replace" for edits
-      event_id?: string; // Target event
-      key?: string; // Reaction emoji
-      "m.in_reply_to"?: { event_id?: string }; // Reply target
-    };
-    "m.new_content"?: {
-      body?: string;
-      [key: string]: unknown;
-    };
-    [key: string]: unknown;
-  };
+  content: Record<string, unknown>;
 }
 
 interface SyncResponse {
@@ -434,8 +440,8 @@ async function syncRoomMetadata(roomId: string): Promise<{
       );
     }
 
-    // Sync conversation metadata directly (no separate groups table)
-    await convex.mutation(api.messages.mutations.syncConversationMeta, {
+    // Sync conversation metadata via Convex ingest module
+    await convex.mutation(api.ingest.handleConversationMeta, {
       matrixRoomId: roomId,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- anyApi is untyped
       channelId: channelId as any,
@@ -531,10 +537,10 @@ async function sync(since?: string): Promise<SyncResponse> {
 }
 
 // ---------------------------------------------------------------------------
-// Event handler
+// Event forwarding — thin relay to Convex ingest module
 // ---------------------------------------------------------------------------
 
-async function handleTimelineEvent(
+async function forwardTimelineEvent(
   roomId: string,
   event: MatrixEvent,
   roomMeta?: {
@@ -554,170 +560,49 @@ async function handleTimelineEvent(
       ? "out"
       : "in";
 
+  const senderProfile = roomMeta?.membersProfile?.[event.sender];
+
   try {
-    // ── Reactions ──
-    if (event.type === "m.reaction") {
-      const relatesTo = event.content["m.relates_to"];
-      const targetEventId = relatesTo?.event_id;
-      const reactionKey = relatesTo?.key;
-      if (targetEventId && reactionKey) {
-        await convex.mutation(api.messages.mutations.addReaction, {
-          eventId: targetEventId,
-          reactionKey,
-          sender: event.sender,
-        });
-        console.log(
-          `[listener] 😀 Reaction ${reactionKey} on ${targetEventId} by ${event.sender}`,
-        );
-      }
-      return;
-    }
-
-    // ── Redactions (message deletions) ──
-    if (event.type === "m.room.redaction") {
-      const redactedEventId = event.redacts;
-      if (redactedEventId) {
-        await convex.mutation(api.messages.mutations.redactMessage, {
-          eventId: redactedEventId,
-        });
-        console.log(
-          `[listener] 🗑 Redacted ${redactedEventId} by ${event.sender}`,
-        );
-      }
-      return;
-    }
-
-    // ── From here: m.room.message ──
-    if (event.type !== "m.room.message") return;
-
-    // ── Bridge status notices ──
-    // The mautrix bridge bots send m.notice messages with status updates.
-    // Detect disconnect events (BAD_CREDENTIALS, wa-logged-out, etc.) and
-    // update the channel status accordingly.
-    if (event.content.msgtype === "m.notice") {
-      const body = (event.content.body ?? "").toLowerCase();
-
-      // Identify if the sender is a bridge bot and resolve platform type
-      let bridgePlatform: "whatsapp" | "telegram" | undefined;
-      for (const [prefix, platformType] of Object.entries(BRIDGE_BOT_PREFIXES)) {
-        if (event.sender.startsWith(prefix)) {
-          bridgePlatform = platformType;
-          break;
-        }
-      }
-
-      if (bridgePlatform) {
-        const channelId = channelIdByType.get(bridgePlatform);
-
-        if (channelId) {
-          // Disconnect patterns
-          const isDisconnect =
-            body.includes("bad_credentials") ||
-            body.includes("logged out") ||
-            body.includes("unknown_error");
-
-          if (isDisconnect) {
-            const errorMsg =
-              event.content.body ?? "Bridge reported disconnection";
-            console.log(
-              `[listener] ⚠ Bridge disconnect detected for ${bridgePlatform}: ${errorMsg}`,
-            );
-            await convex.mutation(api.channels.setBridgeDisconnected, {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any -- anyApi is untyped
-              id: channelId as any,
-              error: errorMsg,
-            });
-            // Still ingest the notice as a message below
-          }
-        }
-      }
-    }
-
-    // ── Message edits ──
-    const relatesTo = event.content["m.relates_to"];
-    if (relatesTo?.rel_type === "m.replace" && relatesTo.event_id) {
-      const newBody =
-        (event.content["m.new_content"] as { body?: string } | undefined)
-          ?.body ?? event.content.body;
-      if (newBody) {
-        await convex.mutation(api.messages.mutations.editMessage, {
-          eventId: relatesTo.event_id,
-          newText: newBody,
-          editTimestamp: event.origin_server_ts,
-        });
-        console.log(
-          `[listener] ✏️ Edit on ${relatesTo.event_id} by ${event.sender}`,
-        );
-      }
-      return;
-    }
-
-    // ── Determine message type and extract data ──
-    const msgtype = event.content.msgtype;
-    if (!msgtype) return;
-
-    // Map Matrix msgtypes to our schema types
-    const typeMap: Record<string, string> = {
-      "m.text": "text",
-      "m.image": "image",
-      "m.video": "video",
-      "m.audio": "audio",
-      "m.file": "file",
-      "m.notice": "notice",
-    };
-    const messageType = typeMap[msgtype];
-    if (!messageType) return; // Skip unsupported msgtypes
-
-    const body = event.content.body ?? "";
-    const senderProfile = roomMeta?.membersProfile?.[event.sender];
-
-    // Extract reply target
-    const replyToEventId = relatesTo?.["m.in_reply_to"]?.event_id ?? undefined;
-
-    // Extract attachment metadata for media messages
-    const attachmentUrl = event.content.url as string | undefined;
-    const attachmentMimeType = event.content.info?.mimetype;
-    const attachmentFileName =
-      messageType !== "text" && messageType !== "notice"
-        ? (event.content.body ?? undefined)
-        : undefined;
-    const attachmentSize = event.content.info?.size;
-
-    const messageId = await convex.mutation(
-      api.messages.mutations.insertMessage,
-      {
-        matrixRoomId: roomId,
-        eventId: event.event_id,
-        sender: event.sender,
-        text: body,
-        direction,
-        timestamp: event.origin_server_ts,
-        type: messageType,
-        replyToEventId,
-        attachmentUrl,
-        attachmentMimeType,
-        attachmentFileName,
-        attachmentSize,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- anyApi is untyped
-        channelId: (roomMeta?.channelId ?? "") as any,
-        memberCount: roomMeta?.memberCount ?? 1,
-        participants: roomMeta?.participants ?? [],
-        topic: roomMeta?.topic,
-        roomName: roomMeta?.roomName,
-        senderName: senderProfile?.displayName,
-        senderAvatarUrl: senderProfile?.avatarUrl,
-      },
-    );
-
-    const isGroup = (roomMeta?.memberCount ?? 0) > 1;
-    const typeLabel =
-      messageType !== "text" ? ` [${messageType.toUpperCase()}]` : "";
-    console.log(
-      `[listener] ${direction === "in" ? "⬇" : "⬆"} ${event.sender} → ${roomId}${isGroup ? " [GROUP]" : ""}${typeLabel} | eventId=${event.event_id} | convexId=${messageId}`,
-    );
+    await convex.action(api.ingest.handleMatrixEvent, {
+      type: event.type,
+      eventId: event.event_id,
+      sender: event.sender,
+      originServerTs: event.origin_server_ts,
+      redacts: event.redacts,
+      content: JSON.stringify(event.content),
+      matrixRoomId: roomId,
+      channelId: roomMeta?.channelId ?? "",
+      memberCount: roomMeta?.memberCount ?? 1,
+      participants: roomMeta?.participants ?? [],
+      topic: roomMeta?.topic,
+      roomName: roomMeta?.roomName,
+      senderName: senderProfile?.displayName,
+      senderAvatarUrl: senderProfile?.avatarUrl,
+      direction,
+    });
   } catch (err) {
     console.error(
-      `[listener] Failed to ingest event ${event.event_id}:`,
+      `[listener] Failed to forward event ${event.event_id}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+async function forwardEphemeralEvent(
+  roomId: string,
+  event: MatrixEvent,
+): Promise<void> {
+  try {
+    await convex.mutation(api.ingest.handleEphemeralEvent, {
+      matrixRoomId: roomId,
+      type: event.type,
+      content: JSON.stringify(event.content),
+      botUserId: MATRIX_BOT_USER_ID,
+      userPuppetIds: [...userPuppetIds],
+    });
+  } catch (err) {
+    console.error(
+      `[listener] Ephemeral event error in ${roomId}:`,
       err instanceof Error ? err.message : err,
     );
   }
@@ -789,7 +674,6 @@ async function main(): Promise<void> {
         const roomEntries = Object.entries(response.rooms.join);
 
         if (isInitialSync) {
-          // On initial sync, classify ALL joined rooms (even those without events)
           console.log(
             `[listener] Initial sync: classifying ${roomEntries.length} joined rooms…`,
           );
@@ -804,63 +688,14 @@ async function main(): Promise<void> {
             const roomMeta = await syncRoomMetadata(roomId);
 
             for (const event of events) {
-              await handleTimelineEvent(roomId, event, roomMeta);
+              await forwardTimelineEvent(roomId, event, roomMeta);
             }
           }
 
           // ── Process ephemeral events (receipts, typing) ──
           const ephemeralEvents = room.ephemeral?.events ?? [];
           for (const event of ephemeralEvents) {
-            try {
-              if (event.type === "m.receipt" && event.content) {
-                // Find the latest read event ID from any user
-                for (const [eventId, readers] of Object.entries(
-                  event.content as Record<string, Record<string, unknown>>,
-                )) {
-                  const readReceipts = (readers as Record<string, unknown>)[
-                    "m.read"
-                  ] as Record<string, unknown> | undefined;
-                  if (readReceipts) {
-                    // Check if any of the readers is the self-puppet or bot
-                    for (const userId of Object.keys(readReceipts)) {
-                      if (
-                        userId === MATRIX_BOT_USER_ID ||
-                        userPuppetIds.has(userId)
-                      ) {
-                        await convex.mutation(
-                          api.conversations.mutations.markRead,
-                          {
-                            matrixRoomId: roomId,
-                            lastReadEventId: eventId,
-                          },
-                        );
-                        console.log(
-                          `[listener] ✓ Read receipt: ${roomId} → ${eventId}`,
-                        );
-                      }
-                    }
-                  }
-                }
-              }
-
-              if (event.type === "m.typing" && event.content) {
-                const typingUserIds = (event.content.user_ids ??
-                  []) as string[];
-                // Filter out self and bot from typing list
-                const others = typingUserIds.filter(
-                  (id) => id !== MATRIX_BOT_USER_ID && !userPuppetIds.has(id),
-                );
-                await convex.mutation(api.conversations.mutations.setTyping, {
-                  matrixRoomId: roomId,
-                  typingUsers: others,
-                });
-              }
-            } catch (err) {
-              console.error(
-                `[listener] Ephemeral event error in ${roomId}:`,
-                err instanceof Error ? err.message : err,
-              );
-            }
+            await forwardEphemeralEvent(roomId, event);
           }
         }
 

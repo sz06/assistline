@@ -134,6 +134,7 @@ services:
     volumes:
       - ${ASSISTLINE_DATA:-./assistline-data}/listener:/app/data
       - matrix-shared:/shared
+      - convex-shared:/shared-convex:ro
     networks:
       - assistline-net
     depends_on:

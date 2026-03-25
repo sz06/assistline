@@ -227,7 +227,7 @@ export const internalSetError = internalMutation({
 });
 
 /** Mark a channel as disconnected due to a bridge state change (e.g. BAD_CREDENTIALS). */
-export const setBridgeDisconnected = mutation({
+export const setBridgeDisconnected = internalMutation({
   args: {
     id: v.id("channels"),
     error: v.string(),
