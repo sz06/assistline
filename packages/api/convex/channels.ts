@@ -217,3 +217,27 @@ export const internalSetError = internalMutation({
     });
   },
 });
+
+/** Mark a channel as disconnected due to a bridge state change (e.g. BAD_CREDENTIALS). */
+export const setBridgeDisconnected = mutation({
+  args: {
+    id: v.id("channels"),
+    error: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      status: "error",
+      qrCode: undefined,
+      error: args.error,
+      updatedAt: Date.now(),
+    });
+    await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
+      action: "channel.bridgeDisconnect",
+      source: "system",
+      entity: "channels",
+      entityId: args.id,
+      details: JSON.stringify({ error: args.error }),
+      timestamp: Date.now(),
+    });
+  },
+});

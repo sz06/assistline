@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.20.7] - 2026-03-25
+
+### Fixed
+- **Bridge Disconnect Detection** (`apps/listener`, `packages/api`): When the mautrix-whatsapp bridge reports `BAD_CREDENTIALS` / `wa-logged-out`, the channel status now updates to "error" with the bridge message. Previously the dashboard continued showing "Connected" even after disconnection. The listener now inspects `m.notice` messages from bridge bots for disconnect patterns and calls a new `setBridgeDisconnected` mutation with audit logging.
+
 ## [2.20.6] - 2026-03-23
 
 ### Added

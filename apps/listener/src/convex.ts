@@ -13,6 +13,7 @@ import { anyApi } from "convex/server";
 export const api = anyApi as unknown as {
   channels: {
     getByType: typeof anyApi.channels.getByType;
+    setBridgeDisconnected: typeof anyApi.channels.setBridgeDisconnected;
   };
   messages: {
     mutations: {

@@ -590,6 +590,49 @@ async function handleTimelineEvent(
     // ── From here: m.room.message ──
     if (event.type !== "m.room.message") return;
 
+    // ── Bridge status notices ──
+    // The mautrix bridge bots send m.notice messages with status updates.
+    // Detect disconnect events (BAD_CREDENTIALS, wa-logged-out, etc.) and
+    // update the channel status accordingly.
+    if (event.content.msgtype === "m.notice") {
+      const body = (event.content.body ?? "").toLowerCase();
+
+      // Identify if the sender is a bridge bot and resolve platform type
+      let bridgePlatform: "whatsapp" | "telegram" | undefined;
+      for (const [prefix, platformType] of Object.entries(BRIDGE_BOT_PREFIXES)) {
+        if (event.sender.startsWith(prefix)) {
+          bridgePlatform = platformType;
+          break;
+        }
+      }
+
+      if (bridgePlatform) {
+        const channelId = channelIdByType.get(bridgePlatform);
+
+        if (channelId) {
+          // Disconnect patterns
+          const isDisconnect =
+            body.includes("bad_credentials") ||
+            body.includes("logged out") ||
+            body.includes("unknown_error");
+
+          if (isDisconnect) {
+            const errorMsg =
+              event.content.body ?? "Bridge reported disconnection";
+            console.log(
+              `[listener] ⚠ Bridge disconnect detected for ${bridgePlatform}: ${errorMsg}`,
+            );
+            await convex.mutation(api.channels.setBridgeDisconnected, {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any -- anyApi is untyped
+              id: channelId as any,
+              error: errorMsg,
+            });
+            // Still ingest the notice as a message below
+          }
+        }
+      }
+    }
+
     // ── Message edits ──
     const relatesTo = event.content["m.relates_to"];
     if (relatesTo?.rel_type === "m.replace" && relatesTo.event_id) {
