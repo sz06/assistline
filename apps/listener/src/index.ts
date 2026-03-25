@@ -44,7 +44,8 @@ function loadAccessToken(): string {
  * Falls back to env var for manual/dev setups.
  */
 function loadAdminKey(): string {
-  const keyFile = process.env.CONVEX_ADMIN_KEY_FILE ?? "/shared-convex/convex-admin-key";
+  const keyFile =
+    process.env.CONVEX_ADMIN_KEY_FILE ?? "/shared-convex/convex-admin-key";
   if (existsSync(keyFile)) {
     const key = readFileSync(keyFile, "utf-8").trim();
     if (key) {

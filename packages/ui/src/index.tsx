@@ -45,7 +45,6 @@ export {
   SelectValue,
 } from "./components/select";
 export { Separator } from "./components/separator";
-export { Sidebar } from "./components/sidebar";
 export { Skeleton } from "./components/skeleton";
 export { StatusBadge } from "./components/status-badge";
 export {

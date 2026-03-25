@@ -1,4 +1,3 @@
-import { Sidebar } from "@repo/ui";
 import {
   BookOpen,
   Bot,
@@ -17,54 +16,80 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Sidedrawer } from "../components/side-drawer";
+import { Sidebar } from "../components/sidebar";
 
-const navLinks = [
+const navGroups = [
   {
-    label: "Conversations",
-    href: "/conversations",
-    icon: <MessageSquare className="h-5 w-5" />,
+    title: "General",
+    links: [
+      {
+        label: "Conversations",
+        href: "/conversations",
+        icon: <MessageSquare className="h-5 w-5" />,
+      },
+      {
+        label: "Chat",
+        href: "/chat",
+        icon: <Bot className="h-5 w-5" />,
+      },
+      {
+        label: "Contacts",
+        href: "/contacts",
+        icon: <Users className="h-5 w-5" />,
+      },
+    ],
   },
   {
-    label: "Chat",
-    href: "/chat",
-    icon: <Bot className="h-5 w-5" />,
+    title: "Platform",
+    links: [
+      {
+        label: "Channels",
+        href: "/channels",
+        icon: <Radio className="h-5 w-5" />,
+      },
+      {
+        label: "Artifacts",
+        href: "/artifacts",
+        icon: <Database className="h-5 w-5" />,
+      },
+      { label: "Roles", href: "/roles", icon: <Shield className="h-5 w-5" /> },
+    ],
   },
   {
-    label: "Contacts",
-    href: "/contacts",
-    icon: <Users className="h-5 w-5" />,
+    title: "System & AI",
+    links: [
+      {
+        label: "AI Providers",
+        href: "/providers",
+        icon: <Cpu className="h-5 w-5" />,
+      },
+      {
+        label: "Simulator",
+        href: "/simulator",
+        icon: <Terminal className="h-5 w-5" />,
+      },
+      {
+        label: "Audit Logs",
+        href: "/audit-logs",
+        icon: <ScrollText className="h-5 w-5" />,
+      },
+      {
+        label: "Config",
+        href: "/config",
+        icon: <Settings className="h-5 w-5" />,
+      },
+    ],
   },
   {
-    label: "Channels",
-    href: "/channels",
-    icon: <Radio className="h-5 w-5" />,
-  },
-  {
-    label: "Artifacts",
-    href: "/artifacts",
-    icon: <Database className="h-5 w-5" />,
-  },
-  { label: "Roles", href: "/roles", icon: <Shield className="h-5 w-5" /> },
-  {
-    label: "AI Providers",
-    href: "/providers",
-    icon: <Cpu className="h-5 w-5" />,
-  },
-  {
-    label: "Audit Logs",
-    href: "/audit-logs",
-    icon: <ScrollText className="h-5 w-5" />,
-  },
-  { label: "Config", href: "/config", icon: <Settings className="h-5 w-5" /> },
-  {
-    label: "Simulator",
-    href: "/simulator",
-    icon: <Terminal className="h-5 w-5" />,
-  },
-  {
-    label: "Wiki",
-    href: "/wiki",
-    icon: <BookOpen className="h-5 w-5" />,
+    title: "Help & Resources",
+    links: [
+      {
+        label: "Wiki",
+        href: "/wiki",
+        icon: <BookOpen className="h-5 w-5" />,
+      },
+    ],
   },
 ];
 
@@ -102,9 +127,11 @@ export function DashboardLayout() {
 
   // Update browser tab title based on current route
   useEffect(() => {
-    const activeLink = navLinks.find((link) =>
-      location.pathname.startsWith(link.href),
-    );
+    // Find active link across all groups
+    const activeLink = navGroups
+      .flatMap((g) => g.links)
+      .find((link) => location.pathname.startsWith(link.href));
+
     document.title = activeLink
       ? `${activeLink.label} | Assistline`
       : "Assistline";
@@ -115,23 +142,33 @@ export function DashboardLayout() {
     setSidebarOpen(false);
   }, [location.pathname]);
 
+  const sidebarProps = {
+    groups: navGroups,
+    activePath: location.pathname,
+    onNavigate: (href: string) => navigate(href),
+    onLinkClick: () => setSidebarOpen(false),
+    header: (
+      <div className="flex items-center gap-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white font-bold text-sm">
+          A
+        </div>
+        <span className="font-semibold text-lg">Assistline</span>
+      </div>
+    ),
+  };
+
   return (
     <div className="flex h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">
-      <Sidebar
-        links={navLinks}
-        activePath={location.pathname}
-        onNavigate={(href) => navigate(href)}
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        header={
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white font-bold text-sm">
-              A
-            </div>
-            <span className="font-semibold text-lg">Assistline</span>
-          </div>
-        }
-      />
+      {/* Desktop Sidebar */}
+      <div className="hidden md:flex">
+        <Sidebar {...sidebarProps} />
+      </div>
+
+      {/* Mobile Sidebar Overlay */}
+      <Sidedrawer isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)}>
+        <Sidebar {...sidebarProps} />
+      </Sidedrawer>
+
       <main className="flex-1 flex flex-col overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b border-gray-200 dark:border-gray-800 px-4 md:px-6 h-14 md:h-16 shrink-0">
           {/* Left: hamburger (mobile only) */}

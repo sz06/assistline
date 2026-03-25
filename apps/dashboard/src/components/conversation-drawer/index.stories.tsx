@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { fn } from "storybook/test";
-import { ConversationDrawer } from "./conversation-drawer";
+import { ConversationDrawer } from "./index";
 
 const meta = {
   title: "Components/ConversationDrawer",

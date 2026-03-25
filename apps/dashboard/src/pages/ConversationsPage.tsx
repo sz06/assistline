@@ -1,6 +1,5 @@
 import { api, type Id } from "@repo/api";
 import { Button, ConfirmDialog, Input } from "@repo/ui";
-import { ConversationDrawer } from "../components/conversation-drawer/conversation-drawer";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import {
   ArrowLeft,
@@ -20,6 +19,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { channelColorMap, channelIconMap } from "../components/ChannelIcons";
+import { ConversationDrawer } from "../components/conversation-drawer";
 import { AI_TOGGLE_COLORS } from "../constants";
 
 // Status Badge styles matching our three states

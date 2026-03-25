@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.22.2] - 2026-03-25
+
+### Added
+- **Sidedrawer Component** (`packages/ui`): New generic mobile sliding drawer component that extracts the overlay behavior originally embedded directly inside the Sidebar.
+- **Sidebar Search** (`packages/ui`): Added a realtime search bar at the top of the Sidebar that filters all menu groups and links.
+- **Collapsible Sidebar Groups** (`packages/ui`): The Sidebar now supports grouping links natively via `groups` instead of simple `links`. Groups feature a collapsible chevron UI that auto-expands when searching.
+
+### Changed
+- **Dashboard Layout** (`apps/dashboard`): Refactored the dashboard layout to group the flat navigation list into distinct domain sections (General, Platform, System & AI, Help & Resources). Updated to use the new `Sidedrawer` and `Sidebar` component props.
+
 ## [2.22.1] - 2026-03-25
 
 ### Fixed
