@@ -6,7 +6,8 @@ services:
     image: matrixdotorg/dendrite-monolith:latest
     container_name: dendrite
     restart: unless-stopped
-    # No ports exposed — all consumers (mautrix, listener, init) are on the Docker network
+    ports:
+      - "8008:8008"   # Expose media API so the browser can load QR code images
     volumes:
       - ${ASSISTLINE_DATA:-./assistline-data}/dendrite:/var/dendrite
       - ./dendrite.yaml:/etc/dendrite/dendrite.yaml

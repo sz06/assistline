@@ -15,8 +15,9 @@ import { internalAction } from "./_generated/server";
 // ---------------------------------------------------------------------------
 
 const POLL_INTERVAL_MS = 2000;
+const QR_POLL_INTERVAL_MS = 5000; // Slower polling once QR is displayed (avoids UI flicker)
 const QR_TIMEOUT_POLLS = 30; // 60 seconds to get QR code
-const CONNECTION_TIMEOUT_POLLS = 90; // 3 minutes to scan
+const CONNECTION_TIMEOUT_POLLS = 36; // 3 minutes to scan (at 5s interval)
 
 export const startWhatsAppPairing = internalAction({
   args: { channelId: v.id("channels") },
@@ -92,7 +93,38 @@ export const startWhatsAppPairing = internalAction({
       // Small delay to let the bridge bot join
       await sleep(2000);
 
-      // ── Step 3: Send "login qr" command ────────────────────────
+      // ── Step 3a: Log out of any existing session first ─────────
+      // When re-pairing (e.g. after BAD_CREDENTIALS), the bridge
+      // still holds the old session. Sending logout first clears it.
+      // The bridge requires: !wa logout <loginID> (phone digits)
+      const channel = await ctx.runQuery(internal.channels.internalGet, {
+        id: args.channelId,
+      });
+      const loginId = channel?.phoneNumber?.replace(/\D/g, "");
+
+      if (loginId) {
+        const logoutTxnId = `logout_${Date.now()}`;
+        const logoutRes = await matrixFetch(
+          `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${logoutTxnId}`,
+          {
+            method: "PUT",
+            body: JSON.stringify({
+              msgtype: "m.text",
+              body: `!wa logout ${loginId}`,
+            }),
+          },
+        );
+
+        if (logoutRes.ok) {
+          console.log(
+            `[pairing] ✓ Sent '!wa logout ${loginId}' (clearing old session)`,
+          );
+          // Give the bridge time to process the logout
+          await sleep(3000);
+        }
+      }
+
+      // ── Step 3b: Send "login qr" command ────────────────────────
       const txnId = `pair_${Date.now()}`;
       const sendRes = await matrixFetch(
         `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txnId}`,
@@ -174,7 +206,7 @@ export const startWhatsAppPairing = internalAction({
       console.log("[pairing] Waiting for user to scan QR code…");
 
       for (let i = 0; i < CONNECTION_TIMEOUT_POLLS; i++) {
-        await sleep(POLL_INTERVAL_MS);
+        await sleep(QR_POLL_INTERVAL_MS);
 
         const messagesRes = await matrixFetch(
           `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/messages?dir=b&limit=10`,

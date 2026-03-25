@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 
 // ---------------------------------------------------------------------------
 // Queries
@@ -167,8 +167,16 @@ export const remove = mutation({
 });
 
 // ---------------------------------------------------------------------------
-// Internal Mutations (called from the pairing action)
+// Internal Queries & Mutations (called from the pairing action)
 // ---------------------------------------------------------------------------
+
+/** Get a channel by ID (internal). */
+export const internalGet = internalQuery({
+  args: { id: v.id("channels") },
+  handler: async (ctx, args) => {
+    return ctx.db.get(args.id);
+  },
+});
 
 /** Set QR code data during pairing. */
 export const internalSetQrCode = internalMutation({
