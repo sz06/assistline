@@ -109,7 +109,12 @@ export const cleanupExpired = internalMutation({
     const now = Date.now();
     const expiredArtifacts = await ctx.db
       .query("artifacts")
-      .filter((q) => q.lt(q.field("expiresAt"), now))
+      .filter((q) =>
+        q.and(
+          q.neq(q.field("expiresAt"), undefined),
+          q.lt(q.field("expiresAt"), now),
+        ),
+      )
       .collect();
 
     let count = 0;
@@ -130,45 +135,23 @@ export const cleanupExpired = internalMutation({
 });
 
 // ---------------------------------------------------------------------------
-// Internal queries for Chatter agent tools
+// Internal queries for agent tools
 // ---------------------------------------------------------------------------
 
 /**
- * Search artifacts filtered by participant roles in a conversation.
- * Only artifacts accessible to conversation participant roles are returned.
+ * Search artifacts filtered by role IDs.
+ * Only artifacts accessible to at least one of the provided roles are returned.
  */
-export const getArtifactsQuery = internalQuery({
+export const searchArtifactsQuery = internalQuery({
   args: {
-    conversationId: v.id("conversations"),
+    roleIds: v.array(v.id("roles")),
     query: v.string(),
   },
-  handler: async (ctx, { conversationId, query }) => {
-    const conversation = await ctx.db.get(conversationId);
-    if (!conversation) return [];
-
-    // Gather roles of conversation participants via contactIdentities
-    const participantRoleIds: string[] = [];
-    if (conversation.participants) {
-      for (const pid of conversation.participants) {
-        const identity = await ctx.db
-          .query("contactIdentities")
-          .withIndex("by_matrixId", (q) => q.eq("matrixId", pid))
-          .first();
-        if (identity) {
-          const contact = await ctx.db.get(identity.contactId);
-          if (contact?.roles) {
-            for (const r of contact.roles) {
-              const rStr = r.toString();
-              if (!participantRoleIds.includes(rStr))
-                participantRoleIds.push(rStr);
-            }
-          }
-        }
-      }
-    }
+  handler: async (ctx, { roleIds, query: searchQuery }) => {
+    const roleIdStrings = roleIds.map((r) => r.toString());
 
     const allArtifacts = await ctx.db.query("artifacts").collect();
-    const queryLower = query.toLowerCase();
+    const queryLower = searchQuery.toLowerCase();
 
     return allArtifacts
       .filter((a) => {
@@ -177,7 +160,7 @@ export const getArtifactsQuery = internalQuery({
 
         if (a.accessibleToRoles && a.accessibleToRoles.length > 0) {
           return a.accessibleToRoles.some((r) =>
-            participantRoleIds.includes(r.toString()),
+            roleIdStrings.includes(r.toString()),
           );
         }
         return true;

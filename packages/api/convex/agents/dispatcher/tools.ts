@@ -6,32 +6,10 @@ import { internal } from "../../_generated/api";
 import type { DataModel, Id } from "../../_generated/dataModel";
 import { DispatcherMutationSchema } from "./schema";
 
-// ── Read-Only Tools ──────────────────────────────────────────────────────────
-// Note: getContactProfile and listRoles have been removed.
-// Participant profiles and available roles are now injected directly into the
-// agent prompt at invocation time, eliminating unnecessary tool-call roundtrips.
+// ── Shared Tools (re-exported) ───────────────────────────────────────────────
+export { searchArtifacts, forwardFacts } from "../shared/tools";
 
-/**
- * Search the user's artifacts filtered by participant roles.
- */
-export const getArtifacts = createTool<
-  { conversationId: string; query: string },
-  unknown,
-  ToolCtx<DataModel>
->({
-  description:
-    "Search the user's artifacts filtered by conversation participant roles. Only returns artifacts accessible to all participants.",
-  inputSchema: z.object({
-    conversationId: z.string().describe("The Convex conversation ID"),
-    query: z.string().describe("The search query for artifacts"),
-  }),
-  execute: async (ctx, { conversationId, query }): Promise<unknown> => {
-    return ctx.runQuery(internal.artifacts.getArtifactsQuery, {
-      conversationId: conversationId as Id<"conversations">,
-      query,
-    });
-  },
-});
+// ── Dispatcher-Only Tools ────────────────────────────────────────────────────
 
 /**
  * Tool the LLM calls to suggest a reply for the user.
@@ -147,36 +125,5 @@ export const suggestActions = createTool<
       },
     });
     return `Suggested ${actions.length} action(s)`;
-  },
-});
-
-/**
- * Forward observed facts about the user to the Artifactor agent.
- * Dispatcher notices facts in conversation; Artifactor decides what to do with them.
- */
-export const forwardFacts = createTool<
-  { facts: Record<string, string> },
-  string,
-  ToolCtx<DataModel>
->({
-  description:
-    "Forward facts about the USER observed in the conversation to the Artifactor agent. These are things the user reveals about themselves — preferences, addresses, dates, relationships, professional info. Use descriptive keys.",
-  inputSchema: z.object({
-    facts: z
-      .record(z.string(), z.string())
-      .describe(
-        'Key-value pairs of user facts, e.g. { "home_address": "123 Main St, Toronto" }',
-      ),
-  }),
-  execute: async (ctx, { facts }): Promise<string> => {
-    if (Object.keys(facts).length === 0) {
-      return "No facts to forward.";
-    }
-    await ctx.scheduler.runAfter(
-      0,
-      internal.agents.artifactor.agent.processFacts,
-      { facts },
-    );
-    return `Forwarded ${Object.keys(facts).length} fact(s) to Artifactor.`;
   },
 });

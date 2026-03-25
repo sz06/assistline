@@ -9,7 +9,7 @@ import { resolveLanguageModel } from "../../ai/engine";
 import { buildDispatcherSystemPrompt } from "./prompt";
 import {
   forwardFacts,
-  getArtifacts,
+  searchArtifacts,
   suggestActions,
   suggestReply,
 } from "./tools";
@@ -34,7 +34,7 @@ function createDispatcherAgent(
     languageModel: model as any,
     instructions: buildDispatcherSystemPrompt(new Date().toISOString()),
     tools: {
-      getArtifacts,
+      searchArtifacts,
       suggestReply,
       suggestActions,
       forwardFacts,
@@ -252,18 +252,20 @@ export const processMessage = internalAction({
       matrixIds: participantMatrixIds,
     });
 
-    // Fetch full profiles for each resolved contact
+    // Fetch full profiles for each unique resolved contact concurrently
+    const uniqueContactIds = [...new Set(Object.values(contactMap))] as Id<"contacts">[];
     const profileEntries: Array<{
       contactId: string;
       profile: Record<string, unknown> | null;
-    }> = [];
-    for (const [, contactId] of Object.entries(contactMap)) {
-      const profile = await ctx.runQuery(
-        internal.contacts.getContactProfileQuery,
-        { contactId: contactId as Id<"contacts"> },
-      );
-      profileEntries.push({ contactId, profile });
-    }
+    }> = await Promise.all(
+      uniqueContactIds.map(async (contactId) => {
+        const profile = await ctx.runQuery(
+          internal.contacts.getContactProfileQuery,
+          { contactId },
+        );
+        return { contactId, profile };
+      })
+    );
 
     // Fetch available roles
     const roles = await ctx.runQuery(internal.roles.listInternal, {});

@@ -1,6 +1,7 @@
 import { Sidebar } from "@repo/ui";
 import {
   BookOpen,
+  Bot,
   Cpu,
   Database,
   Menu,
@@ -22,6 +23,11 @@ const navLinks = [
     label: "Conversations",
     href: "/conversations",
     icon: <MessageSquare className="h-5 w-5" />,
+  },
+  {
+    label: "Chat",
+    href: "/chat",
+    icon: <Bot className="h-5 w-5" />,
   },
   {
     label: "Contacts",

@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.22.1] - 2026-03-25
+
+### Fixed
+- **Artifacts Cron** (`packages/api`): Fixed a critical bug in the `cleanupExpired` cron job where permanent artifacts (those without an `expiresAt` field) were being incorrectly evaluated as "expired" by the Convex query and subsequently deleted. The query now explicitly requires `expiresAt` to be structurally defined before performing the comparison.
+
+## [2.22.0] - 2026-03-25
+
+### Added
+- **Chat Interface** (`packages/api`, `apps/dashboard`): New ChatGPT-style chat page at `/chat` for direct conversations with the AI. Sessions use `@convex-dev/agent` threads for persistent context and real-time token-by-token streaming via Convex websockets. The chat page features a session sidebar (create, rename, delete), markdown message rendering with `react-markdown`, auto-scroll, and streaming indicators.
+- **Chatter Agent** (`packages/api`): New user-facing `agents/chatter/` agent with `searchArtifacts` and `forwardFacts` tools. Extracts facts from conversations and forwards them to the Artifactor agent for long-term storage.
+- **Chat Sessions Backend** (`packages/api`): New `chatSessions` table and `chatSessions.ts` module with full CRUD (create, list, get, rename, remove), `sendMessage` (saves to thread + schedules agent), and `listThreadMessages` (streaming-ready via `listUIMessages` + `syncStreams`).
+- **Shared Agent Tools** (`packages/api`): Extracted `searchArtifacts` (role-based filtering) and `forwardFacts` into `agents/shared/tools.ts`, used by both Dispatcher and Chatter agents.
+
+### Changed
+- **Renamed Chatter → Dispatcher** (`packages/api`): The existing background conversation-processing agent is now called "Dispatcher" (`agents/dispatcher/`). Updated all internal references, function names, log prefixes, and cross-codebase references in `ingest.ts`, `conversations/mutations.ts`, `messages/mutations.ts`, and `messages/helpers.ts`.
+- **`searchArtifacts` Tool Signature** (`packages/api`): Now accepts `roleIds: string[]` instead of `conversationId`, making it truly agnostic — each caller resolves roles in its own context.
+- **`searchArtifactsQuery`** (`packages/api`): Renamed from `getArtifactsQuery` and simplified to accept `roleIds` array directly instead of resolving roles from conversation participants.
+
 ## [2.21.0] - 2026-03-25
 
 ### Changed

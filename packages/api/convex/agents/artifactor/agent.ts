@@ -55,19 +55,19 @@ async function getUserRoleId(ctx: ActionCtx): Promise<Id<"roles"> | null> {
  */
 async function preSearchFacts(
   ctx: ActionCtx,
-  facts: [string, string][],
-): Promise<Map<string, { id: string; value: string; score: number }[]>> {
+  facts: string[],
+): Promise<Map<number, { id: string; value: string; score: number }[]>> {
   const results = new Map<
-    string,
+    number,
     { id: string; value: string; score: number }[]
   >();
 
-  for (const [key, value] of facts) {
-    const searchText = `${key}: ${value}`;
-    const queryEmbedding = await embedText(ctx, searchText);
+  for (let i = 0; i < facts.length; i++) {
+    const fact = facts[i];
+    const queryEmbedding = await embedText(ctx, fact);
 
     if (!queryEmbedding) {
-      results.set(key, []);
+      results.set(i, []);
       continue;
     }
 
@@ -77,7 +77,7 @@ async function preSearchFacts(
     });
 
     if (searchResults.length === 0) {
-      results.set(key, []);
+      results.set(i, []);
       continue;
     }
 
@@ -86,7 +86,7 @@ async function preSearchFacts(
     });
 
     results.set(
-      key,
+      i,
       docs.map((doc) => {
         const scoreEntry = searchResults.find(
           (r) => r._id.toString() === doc._id.toString(),
@@ -187,25 +187,25 @@ function buildTools(ctx: ActionCtx) {
 // ---------------------------------------------------------------------------
 
 /**
- * Process extracted facts from Chatter.
+ * Process extracted facts from Dispatcher / Chatter.
  *
  * Pre-searches for existing similar artifacts, then asks the LLM
  * to create/update/skip in a single tool-calling step.
  */
 export const processFacts = internalAction({
   args: {
-    facts: v.record(v.string(), v.string()),
+    facts: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    const factEntries = Object.entries(args.facts);
-    if (factEntries.length === 0) {
+    const { facts } = args;
+    if (facts.length === 0) {
       console.log("[Artifactor] No facts to process.");
       return;
     }
 
     console.log(
-      `[Artifactor] Processing ${factEntries.length} fact(s):`,
-      JSON.stringify(args.facts),
+      `[Artifactor] Processing ${facts.length} fact(s):`,
+      JSON.stringify(facts),
     );
 
     // 1. Load the default language model provider
@@ -232,20 +232,17 @@ export const processFacts = internalAction({
     );
 
     // 3. Pre-search for existing similar artifacts
-    const searchResults = await preSearchFacts(
-      ctx,
-      factEntries as [string, string][],
-    );
+    const searchResults = await preSearchFacts(ctx, facts);
 
     // 4. Build the prompt with facts + search results
-    const factsWithMatches = factEntries
-      .map(([key, value]) => {
-        const matches = searchResults.get(key) ?? [];
+    const factsWithMatches = facts
+      .map((fact, i) => {
+        const matches = searchResults.get(i) ?? [];
         const matchesBlock =
           matches.length > 0
             ? `  Existing matches:\n${matches.map((m) => `    - [id=${m.id}, score=${m.score.toFixed(3)}] "${m.value}"`).join("\n")}`
             : "  No existing matches found.";
-        return `- **${key}**: ${value}\n${matchesBlock}`;
+        return `- ${fact}\n${matchesBlock}`;
       })
       .join("\n\n");
 

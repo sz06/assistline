@@ -65,7 +65,7 @@ export function RolesPage() {
           </Button>
         </div>
 
-        <div className="mt-8 max-w-4xl space-y-4">
+        <div className="mt-8 space-y-4">
           {/* Add form inline */}
           {isAdding && (
             <form

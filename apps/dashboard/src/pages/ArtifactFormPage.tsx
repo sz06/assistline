@@ -135,7 +135,7 @@ export function ArtifactFormPage() {
 
       <form
         onSubmit={handleSubmit(onValid)}
-        className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6 space-y-6 max-w-3xl"
+        className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6 space-y-6"
       >
         <div>
           <Label htmlFor="af-val">Memory</Label>

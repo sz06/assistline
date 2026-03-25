@@ -5,6 +5,7 @@ import { ArtifactsPage } from "./pages/ArtifactsPage";
 import { AuditLogsPage } from "./pages/AuditLogsPage";
 import { ChannelFormPage } from "./pages/ChannelFormPage";
 import { ChannelsPage } from "./pages/ChannelsPage";
+import { ChatPage } from "./pages/ChatPage";
 import { ConfigPage } from "./pages/ConfigPage";
 import { ContactFormPage } from "./pages/ContactFormPage";
 import { ContactsPage } from "./pages/ContactsPage";
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="config" element={<ConfigPage />} />
         <Route path="audit-logs" element={<AuditLogsPage />} />
         <Route path="simulator" element={<SimulatorPage />} />
+        <Route path="chat" element={<ChatPage />} />
         <Route path="wiki">
           <Route index element={<WikiPage />} />
           <Route path=":slug" element={<WikiPage />} />

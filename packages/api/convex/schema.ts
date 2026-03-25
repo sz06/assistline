@@ -199,4 +199,9 @@ export default defineSchema({
     .index("by_timestamp", ["timestamp"])
     .index("by_entity", ["entity", "timestamp"])
     .index("by_action", ["action", "timestamp"]),
+  chatSessions: defineTable({
+    title: v.optional(v.string()), // User-set or auto-generated title
+    threadId: v.string(), // @convex-dev/agent thread ID
+    updatedAt: v.number(),
+  }).index("by_updatedAt", ["updatedAt"]),
 });
