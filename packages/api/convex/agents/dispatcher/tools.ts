@@ -4,10 +4,10 @@ import { createTool, type ToolCtx } from "@convex-dev/agent";
 import { z } from "zod";
 import { internal } from "../../_generated/api";
 import type { DataModel, Id } from "../../_generated/dataModel";
-import { DispatcherMutationSchema } from "./schema";
+import { CONTACT_FIELD_KEYS } from "../../contacts";
 
 // ── Shared Tools (re-exported) ───────────────────────────────────────────────
-export { searchArtifacts, forwardFacts } from "../shared/tools";
+export { createForwardFactsTool } from "../shared/tools";
 
 // ── Dispatcher-Only Tools ────────────────────────────────────────────────────
 
@@ -15,115 +15,134 @@ export { searchArtifacts, forwardFacts } from "../shared/tools";
  * Tool the LLM calls to suggest a reply for the user.
  * If reply is null/absent, clears any stale suggested reply.
  */
-export const suggestReply = createTool<
-  {
-    conversationId: string;
-    reply?: string;
-  },
+export function createSuggestReplyTool({
+  conversationId,
+}: {
+  conversationId: Id<"conversations">;
+}) {
+  return createTool<{ reply?: string }, string, ToolCtx<DataModel>>({
+    description:
+      "Suggest a draft reply written as if the user is typing it. If no reply is appropriate, omit the reply field to clear any stale suggestion.",
+    inputSchema: z.object({
+      reply: z
+        .string()
+        .optional()
+        .describe(
+          "The draft reply text, written in the user's voice (first person). Omit if no reply is needed.",
+        ),
+    }),
+    execute: async (ctx, { reply }): Promise<string> => {
+      if (!reply) {
+        // No reply — clear any stale suggestion
+        await ctx.runMutation(
+          internal.conversations.mutations.patchConversation,
+          {
+            conversationId,
+            patch: { suggestedReply: undefined },
+          },
+        );
+        return "No reply needed — cleared stale suggestion.";
+      }
+
+      // Check if autoSend is enabled on this conversation
+      const conv = await ctx.runQuery(
+        internal.conversations.queries.getByIdInternal,
+        { id: conversationId },
+      );
+
+      if (conv?.autoSend) {
+        // Auto-send: deliver the reply directly via Matrix
+        await ctx.runMutation(internal.messages.mutations.internalSendMessage, {
+          conversationId,
+          content: reply,
+        });
+        console.log(
+          `[Dispatcher] Auto-sent reply for conversation ${conversationId}`,
+        );
+      } else {
+        // Manual mode: store as a suggested reply card for user approval
+        await ctx.runMutation(
+          internal.conversations.mutations.patchConversation,
+          {
+            conversationId,
+            patch: { suggestedReply: reply },
+          },
+        );
+      }
+      return reply;
+    },
+  });
+}
+
+// ── Contact Suggestion Tools ─────────────────────────────────────────────────
+
+/**
+ * Tool the DA calls to create a new contact suggestion.
+ * The DA should check the PARTICIPANTS block (profile + pending suggestions)
+ * before calling this to avoid duplicates or subsets of existing data.
+ */
+export const createContactSuggestion = createTool<
+  { contactId: string; field: string; value: string },
   string,
   ToolCtx<DataModel>
 >({
-  description:
-    "Suggest a draft reply written as if the user is typing it. If no reply is appropriate, omit the reply field to clear any stale suggestion.",
+  description: `Create a contact suggestion for a field update. Check the PARTICIPANTS block first — do NOT suggest a field if the existing profile already has that data or if a pending suggestion already covers it. Use the contactId from the PARTICIPANTS block. Allowed fields: ${CONTACT_FIELD_KEYS.join(", ")}.`,
   inputSchema: z.object({
-    conversationId: z.string().describe("The Convex conversation ID"),
-    reply: z
+    contactId: z
       .string()
-      .optional()
+      .describe("The Convex ID of the contact (from the PARTICIPANTS block)"),
+    field: z.string().describe(`One of: ${CONTACT_FIELD_KEYS.join(", ")}`),
+    value: z
+      .string()
       .describe(
-        "The draft reply text, written in the user's voice (first person). Omit if no reply is needed.",
+        'The suggested value as a string. For birthday use ISO 8601 (e.g. "1990-05-15"). For roles use comma-separated role names from AVAILABLE ROLES. For emails/phoneNumbers pass a JSON array of objects with an optional label: [{"label":"personal","value":"x@y.com"}]. For addresses/otherNames pass a JSON array of strings: ["123 Main St"].',
       ),
   }),
-  execute: async (ctx, { conversationId, reply }): Promise<string> => {
-    if (!reply) {
-      // No reply — clear any stale suggestion
-      await ctx.runMutation(
-        internal.conversations.mutations.patchConversation,
-        {
-          conversationId: conversationId as Id<"conversations">,
-          patch: { suggestedReply: undefined },
-        },
-      );
-      return "No reply needed — cleared stale suggestion.";
+  execute: async (ctx, { contactId, field, value }): Promise<string> => {
+    if (!value.trim()) {
+      return "Empty value — skipping.";
     }
 
-    // Check if autoSend is enabled on this conversation
-    const conv = await ctx.runQuery(
-      internal.conversations.queries.getByIdInternal,
-      { id: conversationId as Id<"conversations"> },
-    );
+    await ctx.runMutation(internal.contactSuggestions.mutations.push, {
+      contactId: contactId as Id<"contacts">,
+      field,
+      value,
+    });
 
-    if (conv?.autoSend) {
-      // Auto-send: deliver the reply directly via Matrix
-      await ctx.runMutation(internal.messages.mutations.internalSendMessage, {
-        conversationId: conversationId as Id<"conversations">,
-        content: reply,
-      });
-      console.log(
-        `[Dispatcher] Auto-sent reply for conversation ${conversationId}`,
-      );
-    } else {
-      // Manual mode: store as a suggested reply card for user approval
-      await ctx.runMutation(
-        internal.conversations.mutations.patchConversation,
-        {
-          conversationId: conversationId as Id<"conversations">,
-          patch: { suggestedReply: reply },
-        },
-      );
-    }
-    return reply;
+    return `Created suggestion: ${field} → "${value}" for contact ${contactId}`;
   },
 });
 
 /**
- * Tool the LLM calls to suggest mutation actions (updateContact, createArtifact, assignRole).
- * Writes the suggestions directly to the conversation.
+ * Tool the DA calls to update an existing pending suggestion.
+ * Use when the DA discovers better/more complete info for something it
+ * previously suggested (visible in the PARTICIPANTS block as a pending suggestion).
  */
-export const suggestActions = createTool<
-  { conversationId: string; actions: unknown[] },
+export const updateContactSuggestion = createTool<
+  { suggestionId: string; value: string },
   string,
   ToolCtx<DataModel>
 >({
   description:
-    "Suggest write operations for the user to approve. Each action is an object with a 'type' field (updateContact, createArtifact, assignRole) and relevant parameters.",
+    "Update the value of an existing pending contact suggestion. Use the suggestion ID from the PARTICIPANTS block (shown as [id:xxx]).",
   inputSchema: z.object({
-    conversationId: z.string().describe("The Convex conversation ID"),
-    actions: z
-      .array(DispatcherMutationSchema)
-      .describe("Array of mutation actions to suggest."),
+    suggestionId: z
+      .string()
+      .describe(
+        "The ID of the pending suggestion to update (from the PARTICIPANTS block)",
+      ),
+    value: z.string().describe("The updated value for the suggestion"),
   }),
-  execute: async (ctx, { conversationId, actions }): Promise<string> => {
-    // Check if autoAct is enabled on this conversation
-    const conv = await ctx.runQuery(
-      internal.conversations.queries.getByIdInternal,
-      { id: conversationId as Id<"conversations"> },
-    );
-
-    if (conv?.autoAct) {
-      // Auto-act: execute each action immediately
-      for (const action of actions) {
-        await ctx.runMutation(
-          internal.conversations.mutations.internalExecuteSuggestedAction,
-          {
-            conversationId: conversationId as Id<"conversations">,
-            actionJson: JSON.stringify(action),
-          },
-        );
-      }
-      console.log(
-        `[Dispatcher] Auto-executed ${actions.length} action(s) for conversation ${conversationId}`,
-      );
-      return `Auto-executed ${actions.length} action(s)`;
+  execute: async (ctx, { suggestionId, value }): Promise<string> => {
+    if (!value.trim()) {
+      return "Empty value — skipping.";
     }
 
-    // Manual mode: store as suggested actions for user approval
-    await ctx.runMutation(internal.conversations.mutations.patchConversation, {
-      conversationId: conversationId as Id<"conversations">,
-      patch: {
-        suggestedActions: actions.map((a) => JSON.stringify(a)),
-      },
+    await ctx.runMutation(internal.contactSuggestions.mutations.updateValue, {
+      suggestionId: suggestionId as Id<"contactSuggestions">,
+      value,
     });
-    return `Suggested ${actions.length} action(s)`;
+
+    return `Updated suggestion ${suggestionId} → "${value}"`;
   },
 });

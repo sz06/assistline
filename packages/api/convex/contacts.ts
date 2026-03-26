@@ -16,15 +16,6 @@ const emailValidator = v.object({
   value: v.string(),
 });
 
-const addressValidator = v.object({
-  label: v.optional(v.string()),
-  street: v.optional(v.string()),
-  city: v.optional(v.string()),
-  state: v.optional(v.string()),
-  postalCode: v.optional(v.string()),
-  country: v.optional(v.string()),
-});
-
 const contactFields = {
   name: v.optional(v.string()),
   nickname: v.optional(v.string()),
@@ -35,9 +26,36 @@ const contactFields = {
   jobTitle: v.optional(v.string()),
   birthday: v.optional(v.string()),
   notes: v.optional(v.string()),
-  addresses: v.optional(v.array(addressValidator)),
+  addresses: v.optional(v.array(v.string())),
   roles: v.optional(v.array(v.id("roles"))),
 };
+
+/**
+ * Canonical list of allowed contact field keys.
+ * Single source of truth — used by the DA's tools and prompt.
+ */
+export const CONTACT_FIELD_KEYS = Object.keys(contactFields) as Array<
+  keyof typeof contactFields
+>;
+
+/**
+ * Shape of a resolved contact profile as returned by `getContactProfileQuery`.
+ * Single source of truth — imported by helpers, tools, and tests.
+ */
+export interface ProfileShape {
+  _id?: string;
+  name?: string;
+  nickname?: string;
+  otherNames?: string[];
+  phoneNumbers?: { label?: string; value: string }[];
+  emails?: { label?: string; value: string }[];
+  company?: string;
+  jobTitle?: string;
+  birthday?: string;
+  notes?: string;
+  addresses?: string[];
+  roles?: string[]; // resolved role names
+}
 
 // ---------------------------------------------------------------------------
 // Queries
@@ -202,6 +220,7 @@ export const getContactProfileQuery = internalQuery({
       jobTitle: contact.jobTitle,
       birthday: contact.birthday,
       notes: contact.notes,
+      addresses: contact.addresses,
       roles: roleNames,
     };
   },

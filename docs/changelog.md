@@ -5,7 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.22.4] - 2026-03-25
+
+### Added
+
+- **Artifact Merging & Vectorization**: Added a new "Merge suggestions" tab on the Artifacts page that clusters highly similar artifacts using a new high-performance cosine similarity utility. Users can interactively merge these into a unified, re-embedded artifact. Additionally, manual updates now automatically trigger background revectorization, and administrators can trigger a one-click backfill for any missing embeddings.
+- **Global User Profiles**: Introduced a first-class `userProfile` table and a new `/profile` settings page. Self-detection now reliably uses Matrix IDs instead of fragile phone number parsing.
+- **Inline Contact Suggestions UI**: Agent-suggested contact updates now appear directly in the conversation window via a dedicated panel, allowing users to quickly Approve or Dismiss proposed changes.
+- **Centralized Suggestion Management**: Added a "Suggestions" tab to the Artifacts page to review, approve, or dismiss AI-generated memory updates across the entire system.
+
+### Changed
+
+- **Dispatcher Architecture Rewrite**: Completely overhauled the AI Dispatcher's thread management. Instead of accumulating individual message rows, it now builds a single "rolling snapshot" of recent messages. This drastically reduces database writes and injects contact profiles directly into the message text for better LLM context.
+- **Streamlined Contact Management**: Eliminated the standalone Contact Manager Agent. The Dispatcher now handles contact suggestions natively using a simplified, flat row-per-field database schema. Address fields have also been simplified to plain text strings.
+- **Dispatcher Stability & Performance**: Implemented idempotency guards (snapshot hashing) and a 500ms debounce to prevent race conditions and duplicate replies during rapid message bursts. Full state resets are now enforced whenever AI is toggled off and back on.
+- **Optimized Embeddings**: Caching has been introduced for artifact suggestion embeddings to prevent redundant API calls during approval workflows.
+
+### Fixed
+
+- **Runaway Tool Loops**: Enforced a strict "ONE-PASS RULE" in the system prompt and adjusted maxSteps limits to completely prevent the Dispatcher from getting stuck in infinite, duplicate tool-calling loops.
+- **Agent Context & RAG Accuracy**: Redacted messages are now correctly filtered out of the AI's context. RAG vector search results now require a minimum relevance score (0.5) to be injected into prompts, reducing noise.
+- **Thread Initialization Bugs**: Fixed an issue where threads would fail to reset when AI was re-enabled, and patched a race condition that could leave a thread entirely empty on its first run.
+- **Prompt Flooding in Group Chats**: The Dispatcher no longer floods the LLM prompt with hundreds of bare phone numbers in large group chats; it now only includes contacts that have meaningful profile data attached.
+- **General Code Health**: Cleaned up incorrect tool names in prompts, fixed silent embedding failures, resolved typing bugs, and removed unnecessary database casts and queries.
+
+## [2.22.3] - 2026-03-25
+
+### Fixed
+
+- **ContactManager Agent Type Safety** (`packages/api`): Replaced `args: any` in the `suggestContactUpdate` tool `execute` function with the properly inferred `SuggestContactUpdateArgs` type from `z.infer<typeof suggestContactUpdateSchema>`. Fixes the `no-any` rule violation.
+
+### Changed
+
+- **ContactManager Agent: Role ID Consistency** (`packages/api`): The contact profile passed to the LLM system prompt now uses raw role IDs (not resolved names) so the model can correctly compare assigned roles against the "Available Roles" list and avoid re-suggesting already-assigned roles.
+- **ContactManager Agent: Removed Unused `conversationId` Arg** (`packages/api`): The `processContactNotes` action accepted `conversationId` but never used it. The arg has been removed from the action signature.
+- **ContactManager Agent: Tool Loop Cap** (`packages/api`): Added `stopWhen: stepCountIs(3)` to the `generateText` call, capping the tool-calling loop to 3 LLM steps and preventing runaway tool invocations on hallucinated multi-field suggestions.
+- **Contact Manager: Fire-and-Forget Dispatch** (`packages/api`): The Dispatcher's `forwardContactNotes` tool now schedules the Contact Manager action via `ctx.scheduler.runAfter(0, …)` instead of blocking with `ctx.runAction`. This returns control to the dispatcher immediately.
+- **Contact Suggestions: Deduplication** (`packages/api`): The `push` mutation now skips insertion if a pending suggestion for the same contact with the same set of field keys already exists, preventing duplicate suggestion cards appearing for the same contact on back-to-back messages.
+- **Contact Suggestions: Audit Log on Creation** (`packages/api`): The `push` mutation now logs a `contact.suggestion.created` entry to the audit trail (matching the existing `dismiss` and `execute` audit entries). Also fixed a typo: "Optioanlly" → "Optionally".
+- **`contactSuggestions` Schema Tightened** (`packages/api`): The `data` field on the `contactSuggestions` table is now a typed `v.object(…)` with explicit optional fields (name, nickname, company, jobTitle, birthday, notes, roles) instead of `v.any()`. This mirrors `suggestContactUpdateSchema` and makes the schema self-documenting.
+
 ## [2.22.2] - 2026-03-25
+
 
 ### Added
 - **Sidedrawer Component** (`packages/ui`): New generic mobile sliding drawer component that extracts the overlay behavior originally embedded directly inside the Sidebar.

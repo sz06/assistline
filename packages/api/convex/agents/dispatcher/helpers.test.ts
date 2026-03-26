@@ -1,29 +1,30 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildMessageBlock,
+  buildConversationSnapshot,
   buildParticipantsBlock,
   buildRolesBlock,
   formatThreadMessage,
+  hashString,
 } from "./helpers";
 
 // ── formatThreadMessage ──────────────────────────────────────────────────────
 
 describe("formatThreadMessage", () => {
-  it("should format an incoming message with contactId", () => {
-    expect(formatThreadMessage("in", "k17abc", "Hello")).toBe(
-      "[in] [contact:k17abc]: Hello",
-    );
-  });
-
-  it("should format an outgoing message with [user] label", () => {
+  it("should format an outgoing message as [user]", () => {
     expect(formatThreadMessage("out", "user", "Hi there")).toBe(
       "[out] [user]: Hi there",
     );
   });
 
+  it("should format an inbound message with contactId", () => {
+    expect(formatThreadMessage("in", "k17abc", "Hello")).toBe(
+      "[in] [contact:k17abc]: Hello",
+    );
+  });
+
   it("should show (media) for empty text", () => {
-    expect(formatThreadMessage("in", "k17abc", "")).toBe(
-      "[in] [contact:k17abc]: (media)",
+    expect(formatThreadMessage("out", "user", "")).toBe(
+      "[out] [user]: (media)",
     );
   });
 
@@ -31,167 +32,6 @@ describe("formatThreadMessage", () => {
     expect(formatThreadMessage("in", "k17abc", "   ")).toBe(
       "[in] [contact:k17abc]: (media)",
     );
-  });
-
-  it("should handle multiline text", () => {
-    const result = formatThreadMessage("in", "contactA", "line1\nline2");
-    expect(result).toBe("[in] [contact:contactA]: line1\nline2");
-  });
-});
-
-// ── buildMessageBlock ────────────────────────────────────────────────────────
-
-describe("buildMessageBlock", () => {
-  const contactMap: Record<string, string> = {
-    "@alice:matrix.local": "contactAlice",
-    "@bob:matrix.local": "contactBob",
-  };
-
-  it("should return null for empty messages array", () => {
-    expect(buildMessageBlock([], contactMap)).toBeNull();
-  });
-
-  it("should format a single message inline without heading", () => {
-    const result = buildMessageBlock(
-      [
-        {
-          sender: "@alice:matrix.local",
-          direction: "in",
-          text: "Hey",
-          timestamp: 1000,
-        },
-      ],
-      contactMap,
-    );
-    expect(result).toEqual({
-      content: "[in] [contact:contactAlice]: Hey",
-      lastTimestamp: 1000,
-    });
-  });
-
-  it("should wrap multiple messages with a heading", () => {
-    const result = buildMessageBlock(
-      [
-        {
-          sender: "@alice:matrix.local",
-          direction: "in",
-          text: "Hey",
-          timestamp: 1000,
-        },
-        {
-          sender: "@bob:matrix.local",
-          direction: "in",
-          text: "Hi",
-          timestamp: 2000,
-        },
-      ],
-      contactMap,
-    );
-    expect(result).toEqual({
-      content:
-        "## MESSAGES\n\n[in] [contact:contactAlice]: Hey\n[in] [contact:contactBob]: Hi",
-      lastTimestamp: 2000,
-    });
-  });
-
-  it("should use the provided heading", () => {
-    const result = buildMessageBlock(
-      [
-        {
-          sender: "@alice:matrix.local",
-          direction: "in",
-          text: "Hello",
-          timestamp: 500,
-        },
-        {
-          sender: "@bob:matrix.local",
-          direction: "out",
-          text: "Hi back",
-          timestamp: 600,
-        },
-      ],
-      contactMap,
-      "CONVERSATION HISTORY",
-    );
-    expect(result?.content).toMatch(/^## CONVERSATION HISTORY/);
-    expect(result?.content).toContain("[in] [contact:contactAlice]: Hello");
-    expect(result?.content).toContain("[out] [user]: Hi back");
-    expect(result?.lastTimestamp).toBe(600);
-  });
-
-  it("should always use heading for single message if heading is provided", () => {
-    const result = buildMessageBlock(
-      [
-        {
-          sender: "@alice:matrix.local",
-          direction: "in",
-          text: "Solo",
-          timestamp: 100,
-        },
-      ],
-      contactMap,
-      "CATCH-UP",
-    );
-    expect(result?.content).toBe(
-      "## CATCH-UP\n\n[in] [contact:contactAlice]: Solo",
-    );
-  });
-
-  it("should use 'unknown' for unresolved senders", () => {
-    const result = buildMessageBlock(
-      [
-        {
-          sender: "@unknown:matrix.local",
-          direction: "in",
-          text: "Who am I",
-          timestamp: 100,
-        },
-      ],
-      contactMap,
-    );
-    expect(result?.content).toBe("[in] [contact:unknown]: Who am I");
-  });
-
-  it("should use [user] for outgoing messages regardless of sender", () => {
-    const result = buildMessageBlock(
-      [
-        {
-          sender: "@me:matrix.local",
-          direction: "out",
-          text: "Going out",
-          timestamp: 300,
-        },
-      ],
-      contactMap,
-    );
-    expect(result?.content).toBe("[out] [user]: Going out");
-  });
-
-  it("should return the max timestamp across all messages", () => {
-    const result = buildMessageBlock(
-      [
-        {
-          sender: "@alice:matrix.local",
-          direction: "in",
-          text: "A",
-          timestamp: 500,
-        },
-        {
-          sender: "@bob:matrix.local",
-          direction: "in",
-          text: "B",
-          timestamp: 100,
-        },
-        {
-          sender: "@alice:matrix.local",
-          direction: "in",
-          text: "C",
-          timestamp: 999,
-        },
-      ],
-      contactMap,
-    );
-    expect(result?.lastTimestamp).toBe(999);
   });
 });
 
@@ -202,58 +42,124 @@ describe("buildParticipantsBlock", () => {
     expect(buildParticipantsBlock([])).toBe("");
   });
 
-  it("should handle a profile not found", () => {
-    const result = buildParticipantsBlock([
-      { contactId: "abc", profile: null },
-    ]);
-    expect(result).toContain("(profile not found)");
-  });
-
-  it("should show bare contact reference for empty profile", () => {
-    const result = buildParticipantsBlock([{ contactId: "xyz", profile: {} }]);
-    expect(result).toContain("- [contact:xyz]");
-    // Should NOT have a trailing colon or comma
-    expect(result).not.toContain("- [contact:xyz]:");
-  });
-
-  it("should include name, phone, company, and roles", () => {
+  it("should format a contact with full profile and no pending suggestions", () => {
     const result = buildParticipantsBlock([
       {
-        contactId: "xyz",
+        contactId: "k17abc",
         profile: {
           name: "Alice",
-          phoneNumbers: [{ value: "+123", label: "Mobile" }],
-          company: "Acme",
           roles: ["Client", "VIP"],
+          notes: "Prefers morning calls",
         },
       },
     ]);
     expect(result).toContain("## PARTICIPANTS");
-    expect(result).toContain("[contact:xyz]:");
-    expect(result).toContain('Name: "Alice"');
-    expect(result).toContain("Phone: +123 (Mobile)");
-    expect(result).toContain('Company: "Acme"');
-    expect(result).toContain("Roles: [Client, VIP]");
+    expect(result).toContain(
+      "[contact:k17abc] — name: Alice | roles: Client, VIP | notes: Prefers morning calls",
+    );
+    expect(result).toContain("pending suggestions: none");
   });
 
-  it("should handle multiple participants", () => {
+  it("should show 'unknown' for missing name", () => {
+    const result = buildParticipantsBlock([{ contactId: "abc", profile: {} }]);
+    expect(result).toContain("name: unknown");
+  });
+
+  it("should show 'none' for missing roles", () => {
     const result = buildParticipantsBlock([
-      { contactId: "a", profile: { name: "Alice" } },
-      { contactId: "b", profile: { name: "Bob" } },
+      { contactId: "abc", profile: { name: "Bob" } },
     ]);
-    expect(result).toContain("[contact:a]:");
-    expect(result).toContain("[contact:b]:");
+    expect(result).toContain("roles: none");
   });
 
-  it("should include job title and notes when present", () => {
+  it("should show 'none' for missing notes", () => {
+    const result = buildParticipantsBlock([
+      { contactId: "abc", profile: { name: "Bob" } },
+    ]);
+    expect(result).toContain("notes: none");
+  });
+
+  it("should handle null profile", () => {
+    const result = buildParticipantsBlock([
+      { contactId: "abc", profile: null },
+    ]);
+    expect(result).toContain("name: unknown | roles: none | notes: none");
+    expect(result).toContain("pending suggestions: none");
+  });
+
+  it("should render pending suggestions when present", () => {
     const result = buildParticipantsBlock([
       {
-        contactId: "c",
-        profile: { name: "Carol", jobTitle: "CEO", notes: "Important client" },
+        contactId: "k17abc",
+        profile: { name: "Alice" },
+        pendingSuggestions: [
+          { _id: "sugg1", field: "birthday", value: "1990-05-15" },
+          { _id: "sugg2", field: "company", value: "Acme" },
+        ],
       },
     ]);
-    expect(result).toContain('Job: "CEO"');
-    expect(result).toContain('Notes: "Important client"');
+    expect(result).toContain('[id:sugg1] birthday → "1990-05-15"');
+    expect(result).toContain('[id:sugg2] company → "Acme"');
+    expect(result).not.toContain("pending suggestions: none");
+  });
+
+  it("should show 'pending suggestions: none' when pendingSuggestions is empty", () => {
+    const result = buildParticipantsBlock([
+      {
+        contactId: "abc",
+        profile: { name: "Bob" },
+        pendingSuggestions: [],
+      },
+    ]);
+    expect(result).toContain("pending suggestions: none");
+  });
+});
+
+// ── buildConversationSnapshot ────────────────────────────────────────────────
+
+describe("buildConversationSnapshot", () => {
+  it("should return just conversation block for no profiles", () => {
+    const result = buildConversationSnapshot(
+      [{ direction: "out", senderContactId: "user", text: "Hi" }],
+      [],
+    );
+    expect(result).toContain("## CONVERSATION");
+    expect(result).not.toContain("## PARTICIPANTS");
+    expect(result).toContain("[out] [user]: Hi");
+  });
+
+  it("should combine participants block with conversation", () => {
+    const result = buildConversationSnapshot(
+      [
+        { direction: "in", senderContactId: "k17abc", text: "Hello" },
+        { direction: "out", senderContactId: "user", text: "Hi" },
+      ],
+      [{ contactId: "k17abc", profile: { name: "Alice" } }],
+    );
+    const lines = result.split("\n");
+    const participantsIdx = lines.findIndex((l) => l === "## PARTICIPANTS");
+    const conversationIdx = lines.findIndex((l) => l === "## CONVERSATION");
+    expect(participantsIdx).toBeGreaterThanOrEqual(0);
+    expect(conversationIdx).toBeGreaterThan(participantsIdx);
+    expect(result).toContain("[contact:k17abc] — name: Alice");
+    expect(result).toContain("[in] [contact:k17abc]: Hello");
+    expect(result).toContain("[out] [user]: Hi");
+  });
+});
+
+// ── hashString ───────────────────────────────────────────────────────────────
+
+describe("hashString", () => {
+  it("should return the same hash for the same input", () => {
+    expect(hashString("hello")).toBe(hashString("hello"));
+  });
+
+  it("should return different hashes for different inputs", () => {
+    expect(hashString("hello")).not.toBe(hashString("world"));
+  });
+
+  it("should handle empty string", () => {
+    expect(hashString("")).toBe("0");
   });
 });
 
@@ -272,7 +178,6 @@ describe("buildRolesBlock", () => {
     expect(result).toContain("## AVAILABLE ROLES");
     expect(result).toContain("- **Client**: A paying client");
     expect(result).toContain("- **Friend**");
-    // Friend should not have a colon since no description
     expect(result).not.toContain("- **Friend**:");
   });
 });

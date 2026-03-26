@@ -94,19 +94,7 @@ export const sendMessage = mutation({
       auditSource: args.source ?? "user",
     });
 
-    // Trigger Chatter agent if AI is enabled
-    if (conv.aiEnabled) {
-      await ctx.scheduler.runAfter(
-        0,
-        internal.agents.dispatcher.agent.processMessage,
-        {
-          conversationId: args.conversationId,
-          senderContactId: "user",
-          messageText: args.content,
-          messageDirection: "out",
-        },
-      );
-    }
+    // Dispatcher only reacts to inbound messages — no trigger on outbound.
 
     return messageId;
   },

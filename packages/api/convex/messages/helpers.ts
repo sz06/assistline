@@ -140,7 +140,10 @@ export async function insertInboundMessage(
     timestamp: args.timestamp,
   });
 
-  // Trigger Chatter agent if AI is enabled on this conversation
+  // Trigger Dispatcher agent if AI is enabled on this conversation.
+  // 500ms debounce — gives Convex time to process other near-simultaneous
+  // messages; the idempotency hash guard in processMessage handles any
+  // remaining duplicates.
   const convRecord = conversation ?? (await ctx.db.get(conversationId));
   if (convRecord?.aiEnabled) {
     const senderIdentity = await ctx.db
@@ -149,7 +152,7 @@ export async function insertInboundMessage(
       .first();
 
     await ctx.scheduler.runAfter(
-      0,
+      500,
       internal.agents.dispatcher.agent.processMessage,
       {
         conversationId,

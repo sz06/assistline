@@ -8,7 +8,7 @@
     "lint": "turbo lint",
     "format": "biome format . --write",
     "check": "biome check .",
-    "storybook": "pnpm --filter @repo/ui storybook",
+    "storybook": "pnpm --filter dashboard storybook",
     "setup:envs": "node scripts/setup.mjs",
     "convex:key": "docker exec convex-backend ./generate_admin_key.sh",
     "convex:push": "CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3410 CONVEX_SELF_HOSTED_ADMIN_KEY=$(pnpm --silent convex:key) pnpm --filter @repo/api push",

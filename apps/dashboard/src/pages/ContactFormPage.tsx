@@ -22,21 +22,10 @@ const emailEntrySchema = z.object({
   value: z.string().email("Invalid email address"),
 });
 
-const addressEntrySchema = z.object({
-  label: z.string().optional(),
-  street: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  postalCode: z.string().optional(),
-  country: z.string().optional(),
-});
-
-const otherNameEntrySchema = z.string().min(1, "Name is required");
-
 const contactFormSchema = z.object({
   name: z.string(),
   nickname: z.string(),
-  otherNames: z.array(otherNameEntrySchema),
+  otherNames: z.array(z.string().min(1, "Name is required")),
   roles: z.array(z.string()),
   phoneNumbers: z.array(phoneEntrySchema),
   emails: z.array(emailEntrySchema),
@@ -44,7 +33,7 @@ const contactFormSchema = z.object({
   jobTitle: z.string(),
   birthday: z.string(),
   notes: z.string(),
-  addresses: z.array(addressEntrySchema),
+  addresses: z.array(z.string()),
 });
 
 type ContactFormData = z.infer<typeof contactFormSchema>;
@@ -111,14 +100,9 @@ export function ContactFormPage() {
     remove: removeEmail,
   } = useFieldArray({ control, name: "emails" });
 
-  const {
-    fields: addressFields,
-    append: appendAddress,
-    remove: removeAddress,
-  } = useFieldArray({ control, name: "addresses" });
-
-  // otherNames is string[] — useFieldArray needs objects, so manage manually
+  // otherNames and addresses are string[] — manage manually via watch/setValue
   const otherNames = watch("otherNames");
+  const addresses = watch("addresses");
   const selectedRoles = watch("roles");
 
   // When editing and data loads, populate the form once
@@ -487,68 +471,36 @@ export function ContactFormPage() {
             <Label>Addresses</Label>
             <button
               type="button"
-              onClick={() => appendAddress({})}
+              onClick={() => setValue("addresses", [...addresses, ""])}
               className="text-xs text-blue-500 hover:text-blue-600 font-medium transition-colors"
             >
               + Add Address
             </button>
           </div>
-          <div className="space-y-4">
-            {addressFields.map((field, i) => (
-              <div
-                key={field.id}
-                className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20 space-y-3"
+          {addresses.map((_val, i) => (
+            <div key={i} className="flex items-center gap-2 mt-2">
+              <Input
+                {...register(`addresses.${i}` as const)}
+                placeholder="e.g. 123 Main St, Toronto, ON M5V 2T6"
+                className="flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const updated = [...addresses];
+                  updated.splice(i, 1);
+                  setValue("addresses", updated);
+                }}
+                className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                aria-label="Remove address"
               >
-                <div className="flex items-center justify-between">
-                  <Input
-                    {...register(`addresses.${i}.label`)}
-                    placeholder="Label (Home, Work…)"
-                    className="w-48 bg-white dark:bg-gray-900 mt-1"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeAddress(i)}
-                    className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-                    aria-label="Remove address"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <Input
-                  {...register(`addresses.${i}.street`)}
-                  placeholder="Street"
-                  className="bg-white dark:bg-gray-900"
-                />
-                <div className="grid grid-cols-2 gap-3">
-                  <Input
-                    {...register(`addresses.${i}.city`)}
-                    placeholder="City"
-                    className="bg-white dark:bg-gray-900"
-                  />
-                  <Input
-                    {...register(`addresses.${i}.state`)}
-                    placeholder="State"
-                    className="bg-white dark:bg-gray-900"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <Input
-                    {...register(`addresses.${i}.postalCode`)}
-                    placeholder="Postal Code"
-                    className="bg-white dark:bg-gray-900"
-                  />
-                  <Input
-                    {...register(`addresses.${i}.country`)}
-                    placeholder="Country"
-                    className="bg-white dark:bg-gray-900"
-                  />
-                </div>
-              </div>
-            ))}
-            {addressFields.length === 0 && (
-              <p className="text-sm text-gray-500 italic">No addresses added</p>
-            )}
-          </div>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+          {addresses.length === 0 && (
+            <p className="text-sm text-gray-500 italic">No addresses added</p>
+          )}
         </div>
 
         {/* ── Notes ── */}

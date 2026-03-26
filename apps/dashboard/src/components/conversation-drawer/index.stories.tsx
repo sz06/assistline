@@ -12,7 +12,6 @@ const meta = {
   args: {
     onAIEnabledChange: fn(),
     onAutoSendChange: fn(),
-    onAutoActChange: fn(),
     onDeleteChat: fn(),
   },
 } satisfies Meta<typeof ConversationDrawer>;
@@ -25,7 +24,6 @@ export const Default: Story = {
   args: {
     aiEnabled: false,
     autoSend: false,
-    autoAct: false,
   },
 };
 
@@ -34,7 +32,6 @@ export const AIEnabled: Story = {
   args: {
     aiEnabled: true,
     autoSend: true,
-    autoAct: false,
     tokensIn: 12_450,
     tokensOut: 3_820,
   },
@@ -45,7 +42,6 @@ export const AllFeaturesOn: Story = {
   args: {
     aiEnabled: true,
     autoSend: true,
-    autoAct: true,
     tokensIn: 48_900,
     tokensOut: 15_230,
   },

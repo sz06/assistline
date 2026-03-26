@@ -3,22 +3,20 @@ import { Button, ConfirmDialog, Input } from "@repo/ui";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import {
   ArrowLeft,
-  Bot,
   Inbox,
   Loader2,
   MessageSquare,
-  Pencil,
   Plus,
   Search,
   Send,
   Sparkles,
-  Tag,
   Trash2,
   Users,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { channelColorMap, channelIconMap } from "../components/ChannelIcons";
+import { ContactSuggestionsPanel } from "../components/contact-suggestions";
 import { ConversationDrawer } from "../components/conversation-drawer";
 import { AI_TOGGLE_COLORS } from "../constants";
 
@@ -237,8 +235,7 @@ export function ConversationsPage() {
               {filtered.map((conv) => {
                 const statusObj = statusConfig[conv.status || "idle"];
                 const isSelected = selectedId === conv._id;
-                const hasAnyAI =
-                  conv.aiEnabled || conv.autoSend || conv.autoAct;
+                const hasAnyAI = conv.aiEnabled || conv.autoSend;
                 return (
                   <button
                     type="button"
@@ -258,9 +255,6 @@ export function ConversationsPage() {
                         />
                         <span
                           className={`flex-1 ${conv.autoSend ? AI_TOGGLE_COLORS.autoSend : "bg-transparent"}`}
-                        />
-                        <span
-                          className={`flex-1 ${conv.autoAct ? AI_TOGGLE_COLORS.autoAct : "bg-transparent"}`}
                         />
                       </span>
                     )}
@@ -365,10 +359,10 @@ function ChatPanel({
     api.conversations.mutations.dismissSuggestedReply,
   );
   const dismissSuggestedActionMut = useMutation(
-    api.conversations.mutations.dismissSuggestedAction,
+    api.artifactSuggestions.mutations.dismiss,
   );
   const executeSuggestedActionMut = useMutation(
-    api.conversations.mutations.executeSuggestedAction,
+    api.artifactSuggestions.mutations.execute,
   );
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -383,7 +377,7 @@ function ChatPanel({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [data?.messages]);
+  }, [data?.messages?.at(-1)?._id]);
 
   if (!data)
     return (
@@ -400,6 +394,14 @@ function ChatPanel({
       setSending(false);
     }
   };
+
+  // Pre-compute last message per sender contact for badge deduplication
+  const lastMsgIdPerContact = new Map<string, string>();
+  for (const msg of data.messages) {
+    if (msg.senderContactId) {
+      lastMsgIdPerContact.set(msg.senderContactId, msg._id);
+    }
+  }
 
   return (
     <>
@@ -426,9 +428,11 @@ function ChatPanel({
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="font-semibold text-sm text-gray-900 dark:text-gray-100">
-            {data.participantDetails.name}
-          </h2>
+          <div className="flex items-center gap-1">
+            <h2 className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+              {data.participantDetails.name}
+            </h2>
+          </div>
           <div className="text-[11px] text-gray-500">
             {data.memberCount > 2
               ? `${data.memberCount} members${data.topic ? ` · ${data.topic}` : ""}`
@@ -437,10 +441,10 @@ function ChatPanel({
         </div>
 
         {/* AI toggle status dots (read-only) */}
-        {(data.aiEnabled || data.autoSend || data.autoAct) && (
+        {(data.aiEnabled || data.autoSend) && (
           <div
             className="flex items-center gap-1 mr-1"
-            title="AI: green = Enabled, amber = Auto Send, violet = Auto Act"
+            title="AI: green = Enabled, amber = Auto Send"
           >
             {data.aiEnabled && (
               <span
@@ -452,19 +456,12 @@ function ChatPanel({
                 className={`h-2 w-2 rounded-full ${AI_TOGGLE_COLORS.autoSend}`}
               />
             )}
-            {data.autoAct && (
-              <span
-                className={`h-2 w-2 rounded-full ${AI_TOGGLE_COLORS.autoAct}`}
-              />
-            )}
           </div>
         )}
 
-        {/* Conversation Settings Drawer */}
         <ConversationDrawer
           aiEnabled={data.aiEnabled === true}
           autoSend={data.autoSend === true}
-          autoAct={data.autoAct === true}
           tokensIn={data.aiTokensIn}
           tokensOut={data.aiTokensOut}
           onAIEnabledChange={(checked) =>
@@ -477,12 +474,6 @@ function ChatPanel({
             updateAISettings({
               conversationId: id,
               autoSend: checked,
-            })
-          }
-          onAutoActChange={(checked) =>
-            updateAISettings({
-              conversationId: id,
-              autoAct: checked,
             })
           }
           onDeleteChat={() => setShowDeleteConfirm(true)}
@@ -503,6 +494,12 @@ function ChatPanel({
               messageType !== "text" &&
               messageType !== "notice" &&
               msg.attachmentUrl;
+
+            // Show badge only on latest inbound message per sender contact
+            const showSuggestionsBadge =
+              isUser &&
+              !!msg.senderContactId &&
+              lastMsgIdPerContact.get(msg.senderContactId) === msg._id;
 
             return (
               <div key={msg._id}>
@@ -594,7 +591,6 @@ function ChatPanel({
                         </div>
                       )}
 
-                    {/* Timestamp + edited label */}
                     <p
                       className={`text-[10px] mt-1.5 ${isUser ? "text-gray-400" : "text-white/70"}`}
                     >
@@ -603,6 +599,15 @@ function ChatPanel({
                         <span className="ml-1.5 italic">(edited)</span>
                       )}
                     </p>
+
+                    {/* Contact suggestions — inline below message on latest msg per sender */}
+                    {showSuggestionsBadge && msg.senderContactId && (
+                      <ContactSuggestionsPanel
+                        suggestions={
+                          data.contactSuggestions[msg.senderContactId] ?? []
+                        }
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -657,14 +662,9 @@ function ChatPanel({
       </div>
 
       {/* AI Suggested Actions */}
-      {data.suggestedActions?.map((actionStr, idx) => {
-        let parsed: Record<string, unknown> = {};
-        try {
-          parsed = JSON.parse(actionStr);
-        } catch {
-          /* raw string fallback */
-        }
-        const actionType = (parsed.type as string) ?? "unknown";
+      {data.artifactSuggestions?.map((action, idx) => {
+        const actionType =
+          action.type === "update" ? "updateArtifact" : "createArtifact";
 
         // Badge config per action type
         const badgeConfig: Record<
@@ -686,25 +686,18 @@ function ChatPanel({
             text: "text-emerald-700",
             accent: "bg-emerald-500",
           },
-          updateContact: {
-            icon: Pencil,
+          updateArtifact: {
+            icon: Plus, // or Pen
             label: "Update",
-            bg: "bg-sky-50",
-            border: "border-sky-200",
-            text: "text-sky-700",
-            accent: "bg-sky-500",
-          },
-          assignRole: {
-            icon: Tag,
-            label: "Assign",
-            bg: "bg-violet-50",
-            border: "border-violet-200",
-            text: "text-violet-700",
-            accent: "bg-violet-500",
+            bg: "bg-emerald-50",
+            border: "border-emerald-200",
+            text: "text-emerald-700",
+            accent: "bg-emerald-500",
           },
         };
+
         const badge = badgeConfig[actionType] ?? {
-          icon: Bot,
+          icon: Plus,
           label: actionType,
           bg: "bg-gray-50",
           border: "border-gray-200",
@@ -712,11 +705,6 @@ function ChatPanel({
           accent: "bg-gray-500",
         };
         const BadgeIcon = badge.icon;
-
-        // Extract displayable fields (exclude 'type' and IDs)
-        const displayFields = Object.entries(parsed).filter(
-          ([k]) => k !== "type" && k !== "contactId",
-        );
 
         return (
           <div
@@ -732,19 +720,14 @@ function ChatPanel({
                 {badge.label}
               </span>
               <span className={`text-xs font-medium ${badge.text}`}>
-                {actionType === "updateContact" && "Contact"}
-                {actionType === "createArtifact" && "Memory / Fact"}
-                {actionType === "assignRole" && "Role"}
+                Memory / Fact
               </span>
               <div className="flex-1" />
               <Button
                 size="sm"
                 onClick={() =>
                   executeSuggestedActionMut({
-                    conversationId: id,
-                    actionIndex: idx,
-                    actionJson: actionStr,
-                    source: "user",
+                    suggestionId: action._id,
                   })
                 }
                 className={`h-6 px-2.5 text-[10px] font-semibold ${badge.accent} hover:opacity-90`}
@@ -755,8 +738,7 @@ function ChatPanel({
                 type="button"
                 onClick={() =>
                   dismissSuggestedActionMut({
-                    conversationId: id,
-                    actionIndex: idx,
+                    suggestionId: action._id,
                   })
                 }
                 className="text-gray-400 hover:text-gray-600 shrink-0"
@@ -766,65 +748,21 @@ function ChatPanel({
             </div>
 
             {/* Field details */}
-            {displayFields.length > 0 && (
-              <div className="flex flex-col gap-1.5 pl-1">
-                {displayFields.map(([key, value]) => {
-                  // Format value for display — handle arrays and objects
-                  const formatValue = (v: unknown): string => {
-                    if (v === null || v === undefined) return "—";
-                    if (Array.isArray(v)) {
-                      return v
-                        .map((item) => {
-                          if (typeof item === "object" && item !== null) {
-                            // e.g. { label: "work", value: "email@..." }
-                            const obj = item as Record<string, unknown>;
-                            const parts = Object.values(obj).filter(Boolean);
-                            return parts.join(": ");
-                          }
-                          return String(item);
-                        })
-                        .join(", ");
-                    }
-                    if (typeof v === "object") {
-                      return Object.entries(v as Record<string, unknown>)
-                        .filter(([, val]) => val)
-                        .map(([k, val]) => `${k}: ${val}`)
-                        .join(", ");
-                    }
-                    return String(v);
-                  };
-
-                  const formatted = formatValue(value);
-
-                  return (
-                    <div
-                      key={key}
-                      className="flex items-baseline gap-2 text-xs"
-                    >
-                      <span className="text-gray-400 font-medium min-w-[60px]">
-                        {key}
-                      </span>
-                      {actionType === "updateContact" ? (
-                        <span className="flex items-center gap-1.5">
-                          <span className="text-gray-300 line-through">
-                            empty
-                          </span>
-                          <span className="text-gray-400">→</span>
-                          <span className={`font-medium ${badge.text}`}>
-                            {formatted}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className={badge.text}>{formatted}</span>
-                      )}
-                    </div>
-                  );
-                })}
+            <div className="flex flex-col gap-1.5 pl-1">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                  value
+                </span>
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {action.value}
+                </span>
               </div>
-            )}
+            </div>
           </div>
         );
       })}
+
+      {/* Suggested Reply */}
       {data.suggestedReply && (
         <div className="px-4 py-2 bg-amber-50 border-t border-amber-200 flex items-start gap-3">
           <Sparkles className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
@@ -837,7 +775,7 @@ function ChatPanel({
               setDraft(data.suggestedReply ?? "");
               dismissSuggestedReplyMut({ conversationId: id });
             }}
-            className="bg-amber-500 h-7 text-xs"
+            className="bg-amber-500 hover:bg-amber-600 h-7 text-xs text-white"
           >
             Use Reply
           </Button>

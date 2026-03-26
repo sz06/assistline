@@ -1,45 +1,50 @@
 "use node";
 
 import { Agent, createThread, saveMessage } from "@convex-dev/agent";
+import { stepCountIs } from "ai";
 import { v } from "convex/values";
 import { components, internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { internalAction } from "../../_generated/server";
 import { resolveLanguageModel } from "../../ai/engine";
+import type { ContactProfile, ProfileShape } from "./helpers";
+import { buildConversationSnapshot, hashString } from "./helpers";
+
 import { buildDispatcherSystemPrompt } from "./prompt";
 import {
-  forwardFacts,
-  searchArtifacts,
-  suggestActions,
-  suggestReply,
+  createContactSuggestion,
+  createForwardFactsTool,
+  createSuggestReplyTool,
+  updateContactSuggestion,
 } from "./tools";
 
-// Maximum number of messages to keep in the agent thread.
-const MAX_THREAD_MESSAGES = 20;
+// Maximum number of recent messages to include in each snapshot sent to the LLM.
+const SNAPSHOT_MESSAGE_LIMIT = 30;
 
 /**
  * Create the Dispatcher agent dynamically — we resolve the language model at
  * runtime from the user's configured AI providers.
  *
- * The conversationId is captured in the closure so the usageHandler can
- * attribute token usage to the correct conversation.
+ * Roles are fetched once and baked into the system prompt so the agent
+ * doesn't re-query them on every invocation.
  */
 function createDispatcherAgent(
   model: ReturnType<typeof resolveLanguageModel>,
   conversationId: Id<"conversations">,
+  roles: Array<{ name: string; description?: string }>,
 ) {
   return new Agent(components.agent, {
     name: "Dispatcher",
     // biome-ignore lint/suspicious/noExplicitAny: AI SDK LanguageModel ↔ agent component type bridge
     languageModel: model as any,
-    instructions: buildDispatcherSystemPrompt(new Date().toISOString()),
+    instructions: buildDispatcherSystemPrompt(new Date().toISOString(), roles),
     tools: {
-      searchArtifacts,
-      suggestReply,
-      suggestActions,
-      forwardFacts,
+      suggestReply: createSuggestReplyTool({ conversationId }),
+      createContactSuggestion,
+      updateContactSuggestion,
+      forwardFacts: createForwardFactsTool({ conversationId }),
     },
-    maxSteps: 1,
+    maxSteps: 5,
     usageHandler: async (ctx, { usage }) => {
       const inputTokens = usage.inputTokens ?? 0;
       const outputTokens = usage.outputTokens ?? 0;
@@ -53,22 +58,21 @@ function createDispatcherAgent(
   });
 }
 
-import {
-  buildMessageBlock,
-  buildParticipantsBlock,
-  buildRolesBlock,
-} from "./helpers";
-
 /**
  * Main Dispatcher agent entry point.
- * Called after each message when a conversation has aiEnabled = true.
+ * Called after each inbound message when a conversation has aiEnabled = true.
  *
- * Flow:
- * 1. Bootstrap: if no thread exists, create one and load last 20 messages.
- * 2. Catch-up: if thread exists, sync messages since last sync timestamp.
- * 3. Prune: delete oldest messages if thread exceeds MAX_THREAD_MESSAGES.
- * 4. Build prompt with participant profiles + available roles.
- * 5. Run the agent — it only has response tools, no context-gathering tools.
+ * Architecture — Rolling Snapshot:
+ * 1. Fetch the last SNAPSHOT_MESSAGE_LIMIT messages from the DB.
+ * 2. Batch-resolve Matrix sender IDs → Convex contactIds.
+ * 3. Fetch contact profiles for unique contactIds → build PARTICIPANTS block.
+ * 4. Build compact message lines ([contact:id] only, no repeated profile data).
+ * 5. Combine into a single snapshot string and hash it.
+ * 6. If the hash matches the stored lastSnapshotHash → bail out (concurrent run).
+ * 7. Get-or-create the agent thread, clear old messages, save snapshot as one row.
+ * 8. Run the agent — it responds with suggestReply / forwardContactNotes /
+ *    forwardFacts / searchArtifacts as appropriate.
+ * 9. Persist the new hash and update conversation status.
  */
 export const processMessage = internalAction({
   args: {
@@ -91,7 +95,16 @@ export const processMessage = internalAction({
       return;
     }
 
-    // 2. Resolve the AI SDK language model
+    // 2. Load roles (used in system prompt — fetched once per invocation)
+    const roles = (await ctx.runQuery(
+      internal.roles.listInternal,
+      {},
+    )) as Array<{
+      name: string;
+      description?: string;
+    }>;
+
+    // 3. Resolve the AI model and create the agent
     const model = resolveLanguageModel(
       {
         provider: defaultProvider.provider,
@@ -100,9 +113,10 @@ export const processMessage = internalAction({
       },
       defaultProvider.model,
     );
-
-    // 3. Create the agent with the resolved model
-    const dispatcher = createDispatcherAgent(model, args.conversationId);
+    const dispatcher = createDispatcherAgent(model, args.conversationId, roles);
+    console.log(
+      `[Dispatcher] Using provider=${defaultProvider.provider} model=${defaultProvider.model}`,
+    );
 
     // 4. Get the conversation
     const conversation = await ctx.runQuery(
@@ -110,193 +124,226 @@ export const processMessage = internalAction({
       { id: args.conversationId },
     );
     if (!conversation) {
-      console.error("[Dispatcher] Conversation not found:", args.conversationId);
+      console.error(
+        "[Dispatcher] Conversation not found:",
+        args.conversationId,
+      );
       return;
     }
 
-    let threadId = conversation.agentThreadId;
+    // 5. Fetch latest messages for the snapshot (filters redacted internally)
+    const messages = await ctx.runQuery(
+      internal.messages.queries.getConversationHistoryQuery,
+      {
+        conversationId: args.conversationId,
+        limit: SNAPSHOT_MESSAGE_LIMIT,
+      },
+    );
 
+    if (messages.length === 0) {
+      console.log("[Dispatcher] No messages to process. Skipping.");
+      return;
+    }
+
+    // 6. Resolve contactIds for all unique inbound senders (batch query)
+    const uniqueInboundSenders = [
+      ...new Set(
+        messages.filter((m) => m.direction === "in").map((m) => m.sender),
+      ),
+    ];
+    const senderToContactId = (await ctx.runQuery(
+      internal.contacts.resolveContactIds,
+      { matrixIds: uniqueInboundSenders },
+    )) as Record<string, string>;
+
+    // 7a. Resolve contact profiles for the PARTICIPANTS block (unique contacts only)
+    const uniqueContactIds = [
+      ...new Set(Object.values(senderToContactId)),
+    ] as Id<"contacts">[];
+    const profiles = await Promise.all(
+      uniqueContactIds.map(async (contactId) => ({
+        contactId,
+        profile: (await ctx.runQuery(internal.contacts.getContactProfileQuery, {
+          contactId,
+        })) as ProfileShape | null,
+      })),
+    );
+
+    // 7b. Fetch pending contact suggestions for each participant
+    const pendingSuggestionsMap = (await ctx.runQuery(
+      internal.contactSuggestions.queries.listByContactIds,
+      { contactIds: uniqueContactIds },
+    )) as Record<string, Array<{ _id: string; field: string; value: string }>>;
+
+    // 7c. Build compact per-message lines (contactId only, no repeated profile data)
+    const enrichedMessages = messages.map((m) => ({
+      direction: m.direction,
+      senderContactId:
+        m.direction === "in"
+          ? (senderToContactId[m.sender] ?? "unknown")
+          : "user",
+      text: m.text,
+    }));
+
+    // 7d. Merge pending suggestions into profiles for the snapshot
+    const profilesWithSuggestions = profiles.map((p) => ({
+      ...p,
+      pendingSuggestions: pendingSuggestionsMap[p.contactId] ?? [],
+    }));
+
+    const snapshot = buildConversationSnapshot(
+      enrichedMessages,
+      profilesWithSuggestions,
+    );
+    const snapshotHash = hashString(snapshot);
+
+    // 8. Idempotency guard — skip if another concurrent run already processed
+    //    this exact snapshot (race condition protection)
+    if (conversation.lastSnapshotHash === snapshotHash) {
+      console.log(
+        "[Dispatcher] Snapshot unchanged (concurrent run) — skipping LLM call.",
+      );
+      return;
+    }
+
+    // 9. Get-or-create the persistent thread for this conversation
+    let threadId = conversation.agentThreadId;
     if (!threadId) {
-      // ── Bootstrap: new thread ──────────────────────────────────────────
       threadId = await createThread(ctx, components.agent, {
         title: `Conversation: ${args.conversationId}`,
       });
-
-      // Load last 20 messages from conversation history
-      const history = await ctx.runQuery(
-        internal.messages.queries.getConversationHistoryQuery,
-        { conversationId: args.conversationId, limit: MAX_THREAD_MESSAGES },
-      );
-
-      // Resolve senders → contactIds
-      const senderMatrixIds = [...new Set(history.map((m) => m.sender))];
-      const contactMap = (await ctx.runQuery(
-        internal.contacts.resolveContactIds,
-        { matrixIds: senderMatrixIds },
-      )) as Record<string, string>;
-
-      const block = buildMessageBlock(
-        history,
-        contactMap,
-        "CONVERSATION HISTORY",
-      );
-
-      if (block) {
-        await saveMessage(ctx, components.agent, {
-          threadId,
-          agentName: "Dispatcher",
-          message: { role: "user", content: block.content },
-        });
-
-        await ctx.runMutation(
-          internal.conversations.mutations.patchConversation,
-          {
-            conversationId: args.conversationId,
-            patch: {
-              agentThreadId: threadId,
-              lastAgentSyncTimestamp: block.lastTimestamp,
-            },
-          },
-        );
-      } else {
-        // No messages yet — just save the thread ID
-        await ctx.runMutation(
-          internal.conversations.mutations.patchConversation,
-          {
-            conversationId: args.conversationId,
-            patch: {
-              agentThreadId: threadId,
-              lastAgentSyncTimestamp: Date.now(),
-            },
-          },
-        );
-      }
-    } else {
-      // ── Catch-up: sync new messages since last sync ────────────────────
-      const sinceTimestamp = conversation.lastAgentSyncTimestamp ?? 0;
-
-      const newMessages = await ctx.runQuery(
-        internal.messages.queries.getConversationHistoryQuery,
+      await ctx.runMutation(
+        internal.conversations.mutations.patchConversation,
         {
           conversationId: args.conversationId,
-          limit: MAX_THREAD_MESSAGES,
-          sinceTimestamp,
+          patch: { agentThreadId: threadId },
         },
       );
-
-      // Resolve senders → contactIds
-      const catchUpSenderIds = [...new Set(newMessages.map((m) => m.sender))];
-      const catchUpContactMap = (await ctx.runQuery(
-        internal.contacts.resolveContactIds,
-        { matrixIds: catchUpSenderIds },
-      )) as Record<string, string>;
-
-      const block = buildMessageBlock(
-        newMessages,
-        catchUpContactMap,
-        "CATCH-UP",
-      );
-
-      if (block) {
-        await saveMessage(ctx, components.agent, {
-          threadId,
-          agentName: "Dispatcher",
-          message: { role: "user", content: block.content },
-        });
-
-        await ctx.runMutation(
-          internal.conversations.mutations.patchConversation,
-          {
-            conversationId: args.conversationId,
-            patch: { lastAgentSyncTimestamp: block.lastTimestamp },
-          },
-        );
-      }
+      console.log(`[Dispatcher] Created thread ${threadId}`);
     }
 
-    // ── Prune: keep only the last MAX_THREAD_MESSAGES in the thread ─────
+    // 10. Clean out all previous messages from the thread (rolling snapshot —
+    //     each run starts with a fresh single-row context).
     try {
-      const threadMessages = await dispatcher.listMessages(ctx, {
+      const existing = await dispatcher.listMessages(ctx, {
         threadId,
         paginationOpts: { numItems: 200, cursor: null },
-        excludeToolMessages: true,
         statuses: ["success"],
       });
-
-      const userMessages = threadMessages.page.filter(
-        (m) => m.message?.role === "user",
-      );
-
-      if (userMessages.length > MAX_THREAD_MESSAGES) {
-        const toDelete = userMessages.slice(
-          0,
-          userMessages.length - MAX_THREAD_MESSAGES,
-        );
-        const messageIds = toDelete.map((m) => m._id);
-        await dispatcher.deleteMessages(ctx, { messageIds });
+      if (existing.page.length > 0) {
+        await dispatcher.deleteMessages(ctx, {
+          messageIds: existing.page.map((m) => m._id),
+        });
         console.log(
-          `[Dispatcher] Pruned ${messageIds.length} old messages from thread`,
+          `[Dispatcher] Cleared ${existing.page.length} old thread messages.`,
         );
       }
-    } catch (pruneError: unknown) {
+    } catch (cleanErr: unknown) {
       console.warn(
-        "[Dispatcher] Pruning failed (non-fatal):",
-        pruneError instanceof Error ? pruneError.message : String(pruneError),
+        "[Dispatcher] Thread cleanup failed (non-fatal):",
+        cleanErr instanceof Error ? cleanErr.message : String(cleanErr),
       );
     }
 
-    // ── Build prompt with participant profiles + roles ───────────────────
-    // Resolve ALL participant matrixIds (from conversation.participants)
-    const participantMatrixIds = conversation.participants ?? [];
-    const contactMap = await ctx.runQuery(internal.contacts.resolveContactIds, {
-      matrixIds: participantMatrixIds,
+    // 11. Save the snapshot as a single thread row
+    try {
+      await saveMessage(ctx, components.agent, {
+        threadId,
+        agentName: "Dispatcher",
+        message: { role: "user", content: snapshot },
+      });
+    } catch (saveErr: unknown) {
+      console.warn(
+        "[Dispatcher] Snapshot saveMessage failed (non-fatal):",
+        saveErr instanceof Error ? saveErr.message : String(saveErr),
+      );
+    }
+
+    // 12. Persist the snapshot hash before the LLM call so any concurrent
+    //     invocation that reads it after us will bail out.
+    const lastMessageTimestamp = messages[messages.length - 1].timestamp;
+    await ctx.runMutation(internal.conversations.mutations.patchConversation, {
+      conversationId: args.conversationId,
+      patch: {
+        lastSnapshotHash: snapshotHash,
+        lastAgentSyncTimestamp: lastMessageTimestamp,
+      },
     });
 
-    // Fetch full profiles for each unique resolved contact concurrently
-    const uniqueContactIds = [...new Set(Object.values(contactMap))] as Id<"contacts">[];
-    const profileEntries: Array<{
-      contactId: string;
-      profile: Record<string, unknown> | null;
-    }> = await Promise.all(
-      uniqueContactIds.map(async (contactId) => {
-        const profile = await ctx.runQuery(
-          internal.contacts.getContactProfileQuery,
-          { contactId },
-        );
-        return { contactId, profile };
-      })
-    );
-
-    // Fetch available roles
-    const roles = await ctx.runQuery(internal.roles.listInternal, {});
-
-    const participantsBlock = buildParticipantsBlock(profileEntries);
-    const rolesBlock = buildRolesBlock(roles);
-
-    const prompt = [
-      `Process the latest events in conversation ${args.conversationId}. Respond using your tools.`,
-      participantsBlock,
-      rolesBlock,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
-
-    // ── Run the agent ────────────────────────────────────────────────────
+    // 13. Run the agent
     try {
       await dispatcher.generateText(
         ctx,
         { threadId },
-        { prompt },
+        {
+          prompt:
+            "Process the latest events in this conversation. Respond using your tools.",
+          stopWhen: stepCountIs(2),
+        },
         {
           contextOptions: {
-            recentMessages: MAX_THREAD_MESSAGES,
+            recentMessages: 10,
+          },
+        },
+      );
+
+      // 14. Update conversation status after successful run
+      const lastDirection = messages[messages.length - 1].direction;
+      await ctx.runMutation(
+        internal.conversations.mutations.patchConversation,
+        {
+          conversationId: args.conversationId,
+          patch: {
+            status: lastDirection === "in" ? "needs_reply" : "idle",
           },
         },
       );
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      console.error("[Dispatcher] Agent error:", errorMessage);
+      console.error(
+        `[Dispatcher] Agent error (provider=${defaultProvider.provider} model=${defaultProvider.model}):`,
+        errorMessage,
+      );
+      console.error(
+        "[Dispatcher] Hint: 'Invalid JSON response' typically means the model does not support tool calling or returned plain text instead of a tool-call payload. Try switching to a model with native function-calling support (e.g. gpt-4o, claude-3-5-sonnet, gemini-1.5-pro).",
+      );
+    }
+  },
+});
+
+/**
+ * Delete all agent thread messages for a conversation when AI is disabled.
+ * Runs as a background action so the mutation that disables AI doesn't block.
+ *
+ * Uses deleteThreadSync which deletes the thread AND all its messages in
+ * batched mutations — no need to manually list/delete messages first.
+ */
+export const cleanupThread = internalAction({
+  args: {
+    threadId: v.string(),
+  },
+  handler: async (ctx, { threadId }) => {
+    // Create a minimal agent instance — model is not needed for deletion.
+    // biome-ignore lint/suspicious/noExplicitAny: model unused for cleanup-only operation
+    const agent = new Agent(components.agent, {
+      name: "Dispatcher",
+      languageModel: null as any,
+      instructions: "",
+      tools: {},
+      maxSteps: 1,
+    });
+
+    try {
+      await agent.deleteThreadSync(ctx, { threadId });
+      console.log(
+        `[Dispatcher] cleanupThread: deleted thread ${threadId} and all its messages.`,
+      );
+    } catch (err: unknown) {
+      console.error(
+        "[Dispatcher] cleanupThread failed:",
+        err instanceof Error ? err.message : String(err),
+      );
     }
   },
 });

@@ -11,20 +11,49 @@ export const updateAISettings = mutation({
     conversationId: v.id("conversations"),
     aiEnabled: v.optional(v.boolean()),
     autoSend: v.optional(v.boolean()),
-    autoAct: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const patch: Record<string, boolean> = {};
+    const patch: Record<string, boolean | undefined> = {};
     if (args.aiEnabled !== undefined) patch.aiEnabled = args.aiEnabled;
     if (args.autoSend !== undefined) patch.autoSend = args.autoSend;
-    if (args.autoAct !== undefined) patch.autoAct = args.autoAct;
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch(args.conversationId, patch);
     }
 
-    // When AI is toggled ON, immediately trigger the agent
     if (args.aiEnabled === true) {
+      // Clear all stale AI state so processMessage always bootstraps fresh.
+      await ctx.db.patch(args.conversationId, {
+        agentThreadId: undefined,
+        lastAgentSyncTimestamp: undefined,
+        lastSnapshotHash: undefined,
+        suggestedReply: undefined,
+      });
       await triggerAgentOnEnable(ctx, args.conversationId);
+    }
+
+    if (args.aiEnabled === false) {
+      // Read the thread ID before wiping it so we can clean up the agent component.
+      const conv = await ctx.db.get(args.conversationId);
+      const threadId = conv?.agentThreadId;
+
+      // Reset all AI state on the conversation immediately.
+      await ctx.db.patch(args.conversationId, {
+        agentThreadId: undefined,
+        lastAgentSyncTimestamp: undefined,
+        lastSnapshotHash: undefined,
+        suggestedReply: undefined,
+        aiTokensIn: 0,
+        aiTokensOut: 0,
+      });
+
+      // Schedule background cleanup of agent thread messages (requires an action).
+      if (threadId) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.agents.dispatcher.agent.cleanupThread,
+          { threadId },
+        );
+      }
     }
   },
 });
@@ -59,7 +88,7 @@ async function triggerAgentOnEnable(
   }
 
   await ctx.scheduler.runAfter(
-    0,
+    500,
     internal.agents.dispatcher.agent.processMessage,
     {
       conversationId,
@@ -76,50 +105,6 @@ export const dismissSuggestedReply = mutation({
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.conversationId, { suggestedReply: undefined });
-  },
-});
-
-export const dismissSuggestedAction = mutation({
-  args: {
-    conversationId: v.id("conversations"),
-    actionIndex: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const conv = await ctx.db.get(args.conversationId);
-    if (!conv || !conv.suggestedActions) return;
-
-    const actions = [...conv.suggestedActions];
-    actions.splice(args.actionIndex, 1);
-
-    await ctx.db.patch(args.conversationId, {
-      suggestedActions: actions.length > 0 ? actions : undefined,
-    });
-  },
-});
-
-/**
- * Execute a suggested action from the Chatter agent.
- * Parses the action JSON, dispatches the write, removes it from the list.
- */
-export const executeSuggestedAction = mutation({
-  args: {
-    conversationId: v.id("conversations"),
-    actionIndex: v.number(),
-    actionJson: v.string(),
-    source: v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
-  },
-  handler: async (ctx, args) => {
-    await executeActionDispatch(ctx, args.actionJson, args.source);
-
-    // Remove the executed action from the list
-    const conv = await ctx.db.get(args.conversationId);
-    if (conv?.suggestedActions) {
-      const actions = [...conv.suggestedActions];
-      actions.splice(args.actionIndex, 1);
-      await ctx.db.patch(args.conversationId, {
-        suggestedActions: actions.length > 0 ? actions : undefined,
-      });
-    }
   },
 });
 
@@ -298,9 +283,9 @@ export const patchConversation = internalMutation({
     conversationId: v.id("conversations"),
     patch: v.object({
       suggestedReply: v.optional(v.string()),
-      suggestedActions: v.optional(v.array(v.string())),
       agentThreadId: v.optional(v.string()),
       lastAgentSyncTimestamp: v.optional(v.number()),
+      lastSnapshotHash: v.optional(v.string()),
       status: v.optional(
         v.union(
           v.literal("idle"),

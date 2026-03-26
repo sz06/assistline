@@ -21,12 +21,16 @@ import type * as ai_embeddings from "../ai/embeddings.js";
 import type * as ai_engine from "../ai/engine.js";
 import type * as ai_models from "../ai/models.js";
 import type * as aiProviders from "../aiProviders.js";
+import type * as artifactSuggestions_mutations from "../artifactSuggestions/mutations.js";
+import type * as artifactSuggestions_queries from "../artifactSuggestions/queries.js";
 import type * as artifacts from "../artifacts.js";
 import type * as auditLogs from "../auditLogs.js";
 import type * as channelActions from "../channelActions.js";
 import type * as channels from "../channels.js";
 import type * as chatSessions from "../chatSessions.js";
 import type * as config from "../config.js";
+import type * as contactSuggestions_mutations from "../contactSuggestions/mutations.js";
+import type * as contactSuggestions_queries from "../contactSuggestions/queries.js";
 import type * as contacts from "../contacts.js";
 import type * as conversations_helpers from "../conversations/helpers.js";
 import type * as conversations_mutations from "../conversations/mutations.js";
@@ -39,8 +43,10 @@ import type * as messages_helpers from "../messages/helpers.js";
 import type * as messages_mutations from "../messages/mutations.js";
 import type * as messages_queries from "../messages/queries.js";
 import type * as roles from "../roles.js";
+import type * as userProfile from "../userProfile.js";
 import type * as utils_contacts from "../utils/contacts.js";
 import type * as utils_matrix from "../utils/matrix.js";
+import type * as utils_vector from "../utils/vector.js";
 
 import type {
   ApiFromModules,
@@ -62,12 +68,16 @@ declare const fullApi: ApiFromModules<{
   "ai/engine": typeof ai_engine;
   "ai/models": typeof ai_models;
   aiProviders: typeof aiProviders;
+  "artifactSuggestions/mutations": typeof artifactSuggestions_mutations;
+  "artifactSuggestions/queries": typeof artifactSuggestions_queries;
   artifacts: typeof artifacts;
   auditLogs: typeof auditLogs;
   channelActions: typeof channelActions;
   channels: typeof channels;
   chatSessions: typeof chatSessions;
   config: typeof config;
+  "contactSuggestions/mutations": typeof contactSuggestions_mutations;
+  "contactSuggestions/queries": typeof contactSuggestions_queries;
   contacts: typeof contacts;
   "conversations/helpers": typeof conversations_helpers;
   "conversations/mutations": typeof conversations_mutations;
@@ -80,8 +90,10 @@ declare const fullApi: ApiFromModules<{
   "messages/mutations": typeof messages_mutations;
   "messages/queries": typeof messages_queries;
   roles: typeof roles;
+  userProfile: typeof userProfile;
   "utils/contacts": typeof utils_contacts;
   "utils/matrix": typeof utils_matrix;
+  "utils/vector": typeof utils_vector;
 }>;
 
 /**

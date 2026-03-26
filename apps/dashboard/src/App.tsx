@@ -10,6 +10,7 @@ import { ConfigPage } from "./pages/ConfigPage";
 import { ContactFormPage } from "./pages/ContactFormPage";
 import { ContactsPage } from "./pages/ContactsPage";
 import { ConversationsPage } from "./pages/ConversationsPage";
+import { ProfilePage } from "./pages/ProfilePage";
 import { ProviderFormPage } from "./pages/ProviderFormPage";
 import { ProvidersPage } from "./pages/ProvidersPage";
 import { RolesPage } from "./pages/RolesPage";
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="audit-logs" element={<AuditLogsPage />} />
         <Route path="simulator" element={<SimulatorPage />} />
         <Route path="chat" element={<ChatPage />} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="wiki">
           <Route index element={<WikiPage />} />
           <Route path=":slug" element={<WikiPage />} />

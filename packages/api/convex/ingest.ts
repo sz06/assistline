@@ -112,9 +112,7 @@ export const handleMatrixEvent = internalAction({
         await ctx.runMutation(internal.messages.mutations.redactMessage, {
           eventId: redactedEventId,
         });
-        console.log(
-          `[ingest] 🗑 Redacted ${redactedEventId} by ${args.sender}`,
-        );
+        console.log(`[ingest] 🗑 Redacted ${redactedEventId} by ${args.sender}`);
       }
       return;
     }
@@ -199,8 +197,7 @@ export const handleMatrixEvent = internalAction({
     if (!messageType) return;
 
     const body = (content.body as string) ?? "";
-    const replyToEventId =
-      relatesTo?.["m.in_reply_to"]?.event_id ?? undefined;
+    const replyToEventId = relatesTo?.["m.in_reply_to"]?.event_id ?? undefined;
 
     const info = content.info as
       | { mimetype?: string; size?: number }
@@ -254,26 +251,26 @@ export const handleEphemeralEvent = internalMutation({
     type: v.string(),
     content: v.string(), // JSON-stringified event.content
 
-    // Self-identities for filtering
+    // Self-identity for filtering (the listener bot's own Matrix ID)
     botUserId: v.string(),
-    userPuppetIds: v.array(v.string()),
   },
   handler: async (ctx, args) => {
     const content = JSON.parse(args.content) as Record<string, unknown>;
+
+    // Load the user's known Matrix puppet IDs from the profile singleton.
+    const userProfile = await ctx.db.query("userProfile").first();
+    const selfIds = new Set(userProfile?.matrixIds ?? []);
 
     if (args.type === "m.receipt") {
       for (const [eventId, readers] of Object.entries(
         content as Record<string, Record<string, unknown>>,
       )) {
-        const readReceipts = (readers as Record<string, unknown>)[
-          "m.read"
-        ] as Record<string, unknown> | undefined;
+        const readReceipts = (readers as Record<string, unknown>)["m.read"] as
+          | Record<string, unknown>
+          | undefined;
         if (readReceipts) {
           for (const userId of Object.keys(readReceipts)) {
-            if (
-              userId === args.botUserId ||
-              args.userPuppetIds.includes(userId)
-            ) {
+            if (userId === args.botUserId || selfIds.has(userId)) {
               // Use the conversations domain mutation
               const conv = await ctx.db
                 .query("conversations")
@@ -299,8 +296,7 @@ export const handleEphemeralEvent = internalMutation({
     if (args.type === "m.typing") {
       const typingUserIds = (content.user_ids ?? []) as string[];
       const others = typingUserIds.filter(
-        (id) =>
-          id !== args.botUserId && !args.userPuppetIds.includes(id),
+        (id) => id !== args.botUserId && !selfIds.has(id),
       );
       const conv = await ctx.db
         .query("conversations")

@@ -38,6 +38,15 @@ export const embedText = internalAction({
     );
 
     const { embedding } = await embed({ model, value: args.text });
-    return embedding;
+
+    // Normalize to exactly 1536 dimensions (the Convex vector index requirement)
+    // Slicing works for larger models (like text-embedding-3-large)
+    // Padding works for smaller ones
+    const normalizedEmbedding =
+      embedding.length > 1536
+        ? embedding.slice(0, 1536)
+        : [...embedding, ...Array(1536 - embedding.length).fill(0)];
+
+    return normalizedEmbedding;
   },
 });

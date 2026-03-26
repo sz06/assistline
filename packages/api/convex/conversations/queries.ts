@@ -30,7 +30,14 @@ export const list = query({
     const pageWithDetails = await Promise.all(
       paginatedResult.page.map(async (conv) => {
         const participantDetails = await resolveParticipantDetails(ctx, conv);
-        return { ...conv, participantDetails };
+        const artifactSuggestions = await ctx.db
+          .query("artifactSuggestions")
+          .withIndex("by_conversationId", (q) =>
+            q.eq("conversationId", conv._id),
+          )
+          .collect();
+
+        return { ...conv, participantDetails, artifactSuggestions };
       }),
     );
 
@@ -49,11 +56,62 @@ export const getWithMessages = query({
       "historicalFetchSize.messagesPerConversation",
       50,
     );
-    return buildConversationWithMessages(
+    const convWithMessages = await buildConversationWithMessages(
       ctx,
       args.id,
       args.messageLimit ?? defaultMsgLimit,
     );
+    if (!convWithMessages) return null;
+
+    // Fetch contactSuggestions for every unique inbound sender (works for groups too)
+    const uniqueContactIds = [
+      ...new Set(
+        convWithMessages.messages
+          .map((m) => m.senderContactId)
+          .filter((id): id is Id<"contacts"> => id !== null),
+      ),
+    ];
+
+    const contactSuggestionsEntries = await Promise.all(
+      uniqueContactIds.map(async (contactId) => {
+        const rawSuggestions = await ctx.db
+          .query("contactSuggestions")
+          .withIndex("by_contactId", (q) => q.eq("contactId", contactId))
+          .collect();
+
+        // For "roles" suggestions, resolve role IDs → names and re-serialize the value
+        const suggestions = await Promise.all(
+          rawSuggestions.map(async (s) => {
+            if (s.field !== "roles") return s;
+            let roleIds: string[] = [];
+            try {
+              roleIds = JSON.parse(s.value) as string[];
+            } catch {
+              return s;
+            }
+            const roleNames = await Promise.all(
+              roleIds.map(async (roleId: string) => {
+                const role = await ctx.db.get(roleId as Id<"roles">);
+                return role?.name ?? roleId;
+              }),
+            );
+            return { ...s, value: JSON.stringify(roleNames) };
+          }),
+        );
+
+        return [contactId, suggestions] as const;
+      }),
+    );
+
+    // Record<contactId, suggestions[]> — easy O(1) lookup in the UI
+    const contactSuggestions = Object.fromEntries(contactSuggestionsEntries);
+
+    const artifactSuggestions = await ctx.db
+      .query("artifactSuggestions")
+      .withIndex("by_conversationId", (q) => q.eq("conversationId", args.id))
+      .collect();
+
+    return { ...convWithMessages, artifactSuggestions, contactSuggestions };
   },
 });
 

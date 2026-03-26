@@ -15,18 +15,14 @@ const SidedrawerWithState = () => {
           Sidedrawer Demo
         </h1>
         <p className="text-sm text-gray-500 mb-6">
-          Click the button below to open the mobile side drawer. The drawer
-          component is hidden on md screens and larger based on CSS, so if you
-          are on a large desktop screen you might not see the drawer overlay
-          properly unless you resize.
+          Click the button below to open the mobile side drawer. Normally, this
+          component is hidden on medium screens and larger (`md:hidden`), but
+          we're forcing it to be visible here for demonstration purposes using
+          `className="!block"`.
         </p>
         <Button onClick={() => setIsOpen(true)}>Open Drawer</Button>
       </div>
 
-      {/* Forcing it visible even on desktop for the story via a negative margin/z-index trick if necessary, 
-          but here we just use the native Sidedrawer classnames which hide it on md+.
-          We'll add a wrapper class that overrides md:hidden just for the story display if needed, 
-          but it's better to show it realistically as a mobile drawer. */}
       <div className="md:hidden">
         <p className="text-sm text-amber-600 dark:text-amber-400 mt-4">
           Resize window to mobile width or use responsive mode to see the drawer
@@ -34,7 +30,11 @@ const SidedrawerWithState = () => {
         </p>
       </div>
 
-      <Sidedrawer isOpen={isOpen} onClose={() => setIsOpen(false)}>
+      <Sidedrawer
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        className="!block"
+      >
         <aside className="h-full w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col">
           <div className="h-16 flex items-center px-4 border-b border-gray-200 dark:border-gray-800">
             <div className="flex items-center gap-3">

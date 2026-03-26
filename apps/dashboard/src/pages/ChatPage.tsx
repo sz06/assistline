@@ -1,6 +1,6 @@
+import { useUIMessages } from "@convex-dev/agent/react";
 import { api, type Id } from "@repo/api";
 import { Button, Input } from "@repo/ui";
-import { useUIMessages } from "@convex-dev/agent/react";
 import { useMutation, useQuery } from "convex/react";
 import {
   Bot,
@@ -139,7 +139,7 @@ export function ChatPage() {
         {activeSession ? (
           <ChatThread
             key={activeSession._id}
-            threadId={activeSession.threadId}
+            session={activeSession}
             input={input}
             sending={sending}
             onInputChange={setInput}
@@ -221,9 +221,8 @@ function SessionItem({
         <Bot className="h-4 w-4 shrink-0 opacity-60" />
         <span className="truncate flex-1">{displayTitle}</span>
         <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
-          <span
-            role="button"
-            tabIndex={0}
+          <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               onStartRename();
@@ -235,10 +234,9 @@ function SessionItem({
             title="Rename"
           >
             <Pencil className="h-3 w-3" />
-          </span>
-          <span
-            role="button"
-            tabIndex={0}
+          </button>
+          <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               onDelete();
@@ -250,7 +248,7 @@ function SessionItem({
             title="Delete"
           >
             <Trash2 className="h-3 w-3" />
-          </span>
+          </button>
         </span>
       </button>
     </div>
@@ -260,14 +258,17 @@ function SessionItem({
 // ── Chat Thread ──────────────────────────────────────────────────────────────
 
 function ChatThread({
-  threadId,
+  session,
   input,
   sending,
   onInputChange,
   onSend,
   onKeyDown,
 }: {
-  threadId: string;
+  session: {
+    _id: Id<"chatSessions">;
+    threadId: string;
+  };
   input: string;
   sending: boolean;
   onInputChange: (v: string) => void;
@@ -276,9 +277,21 @@ function ChatThread({
 }) {
   const { results: messages, status } = useUIMessages(
     api.chatSessions.listThreadMessages,
-    { threadId },
+    { threadId: session.threadId },
     { initialNumItems: 50, stream: true },
   );
+
+  const artifactSuggestions = useQuery(api.artifactSuggestions.queries.list, {
+    sessionId: session._id,
+  });
+
+  const dismissSuggestedAction = useMutation(
+    api.artifactSuggestions.mutations.dismiss,
+  );
+  const executeSuggestedAction = useMutation(
+    api.artifactSuggestions.mutations.execute,
+  );
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom on new messages
@@ -320,7 +333,7 @@ function ChatThread({
           <div className="w-full space-y-4">
             {messages?.map((msg, idx) => (
               <MessageBubble
-                key={`${threadId}-${idx}`}
+                key={`${session.threadId}-${idx}`}
                 role={msg.role}
                 parts={msg.parts}
                 isStreaming={msg.status === "streaming"}
@@ -330,6 +343,62 @@ function ChatThread({
           </div>
         )}
       </div>
+
+      {/* Suggested Actions Banner */}
+      {artifactSuggestions && artifactSuggestions.length > 0 && (
+        <div className="flex flex-col border-t border-gray-200 dark:border-gray-800 bg-emerald-50/50 dark:bg-emerald-950/20">
+          {artifactSuggestions.map((action, idx) => {
+            const isUpdate = action.type === "update";
+
+            return (
+              <div
+                key={idx}
+                className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 md:px-8 py-3 border-b border-gray-200 dark:border-gray-800/50 last:border-b-0"
+              >
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 mt-0.5 sm:mt-0">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-0.5">
+                      {isUpdate ? "Fact Updated" : "Fact Discovered"}
+                    </p>
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                      {action.value}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      dismissSuggestedAction({
+                        suggestionId: action._id,
+                      })
+                    }
+                    className="h-8 pr-3 pl-2.5 text-xs text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400"
+                  >
+                    <X className="h-3.5 w-3.5 mr-1" />
+                    Dismiss
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      executeSuggestedAction({
+                        suggestionId: action._id,
+                      })
+                    }
+                    className="h-8 px-4 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors"
+                  >
+                    Approve
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Input bar */}
       <div className="border-t border-gray-200 dark:border-gray-800 px-4 md:px-8 py-3 bg-white dark:bg-gray-950">
@@ -391,11 +460,7 @@ function MessageBubble({
             : "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400"
         }`}
       >
-        {isUser ? (
-          <User className="h-4 w-4" />
-        ) : (
-          <Bot className="h-4 w-4" />
-        )}
+        {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
       </div>
 
       {/* Message */}
@@ -442,7 +507,11 @@ function EmptyState({ onNewChat }: { onNewChat: () => void }) {
         Your personal AI assistant. Ask questions, search your knowledge base,
         and I'll remember important facts about you.
       </p>
-      <Button onClick={onNewChat} className="mt-6" data-testid="empty-new-chat-btn">
+      <Button
+        onClick={onNewChat}
+        className="mt-6"
+        data-testid="empty-new-chat-btn"
+      >
         <MessageSquarePlus className="h-4 w-4 mr-2" />
         Start a Conversation
       </Button>

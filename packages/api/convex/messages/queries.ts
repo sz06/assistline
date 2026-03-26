@@ -48,13 +48,16 @@ export const getConversationHistoryQuery = internalQuery({
     const maxResults = limit ?? 20;
     const messages = await query.take(maxResults);
 
-    return messages.reverse().map((m) => ({
-      _id: m._id,
-      sender: m.sender,
-      direction: m.direction,
-      text: m.text ?? "",
-      timestamp: m.timestamp,
-      isRedacted: m.isRedacted,
-    }));
+    return messages
+      .filter((m) => !m.isRedacted)
+      .reverse()
+      .map((m) => ({
+        _id: m._id,
+        sender: m.sender,
+        direction: m.direction,
+        text: m.text ?? "",
+        timestamp: m.timestamp,
+        isRedacted: m.isRedacted,
+      }));
   },
 });

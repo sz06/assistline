@@ -1,39 +1,66 @@
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { extractWhatsAppPhoneNumber } from "../utils/matrix";
 
 /**
  * For a DM conversation, find the "other" participant (not the user) and
- * return their contact details. Uses the channel's connected phone number
- * to identify which participant is the user.
+ * return their contact details.
+ *
+ * Strategy: query inbound messages for this conversation to get the other
+ * sender's Matrix ID. One inbound message is enough — in a DM there is only
+ * ever one other person. Falls back to conv.participants for new conversations
+ * that have no messages yet.
+ *
+ * Self-detection uses the userProfile.matrixIds list (explicit IDs stored
+ * by the user or auto-populated when channels connect) instead of fragile
+ * phone-number parsing from Matrix IDs.
  */
 export async function resolveOtherParticipantContact(
   ctx: QueryCtx,
   conv: {
+    _id: Id<"conversations">;
     participants: string[];
     channelId: Id<"channels">;
     name?: string;
   },
-): Promise<{ name: string; phone: string; email: string } | null> {
-  // Look up the channel to get the user's own phone number
-  const channel = await ctx.db.get(conv.channelId);
-  // Normalize to digits-only so "+16477127932" matches "16477127932"
-  const userPhone = channel?.phoneNumber?.replace(/\D/g, "");
+): Promise<{
+  name: string;
+  phone: string;
+  email: string;
+  contactId: Id<"contacts"> | null;
+} | null> {
+  // Load the user's known Matrix IDs for self-detection.
+  const userProfile = await ctx.db.query("userProfile").first();
+  const selfIds = new Set(userProfile?.matrixIds ?? []);
 
-  // Find the participant whose phone number does NOT match the user's
-  for (const participantMatrixId of conv.participants) {
-    const participantPhone = extractWhatsAppPhoneNumber(participantMatrixId);
+  // One inbound message is enough — in a DM there's only ever one other sender.
+  // conv.participants is the fallback if no messages exist yet.
+  const inboundMessages = await ctx.db
+    .query("messages")
+    .withIndex("by_conversationId_timestamp", (q) =>
+      q.eq("conversationId", conv._id),
+    )
+    .filter((q) => q.eq(q.field("direction"), "in"))
+    .order("desc")
+    .take(1);
 
-    // Skip this participant if they match the user's phone number
-    if (userPhone && participantPhone === userPhone) {
-      continue;
-    }
+  // Collect candidate Matrix IDs
+  const seenSenders = new Set<string>();
+  for (const msg of inboundMessages) {
+    seenSenders.add(msg.sender);
+  }
+  // Fallback: conv.participants for conversations with no messages yet
+  for (const p of conv.participants) {
+    seenSenders.add(p);
+  }
 
-    // Look up this participant's contact
+  for (const senderMatrixId of seenSenders) {
+    // Skip the user's own Matrix IDs (puppet accounts)
+    if (selfIds.has(senderMatrixId)) continue;
+
     const identity = await ctx.db
       .query("contactIdentities")
-      .withIndex("by_matrixId", (q) => q.eq("matrixId", participantMatrixId))
+      .withIndex("by_matrixId", (q) => q.eq("matrixId", senderMatrixId))
       .first();
 
     if (identity) {
@@ -43,9 +70,10 @@ export async function resolveOtherParticipantContact(
           name:
             contact.name?.trim() ||
             contact.otherNames?.[0] ||
-            (conv.name ?? participantMatrixId),
+            (conv.name ?? senderMatrixId),
           phone: contact.phoneNumbers?.[0]?.value ?? "",
           email: contact.emails?.[0]?.value ?? "",
+          contactId: identity.contactId,
         };
       }
     }
@@ -61,13 +89,29 @@ export async function resolveOtherParticipantContact(
 export async function resolveParticipantDetails(
   ctx: QueryCtx,
   conv: {
+    _id: Id<"conversations">;
     participants: string[];
     channelId: Id<"channels">;
     name?: string;
     memberCount: number;
   },
-): Promise<{ name: string; phone: string; email: string }> {
-  const details = { name: conv.name ?? "Unknown", phone: "", email: "" };
+): Promise<{
+  name: string;
+  phone: string;
+  email: string;
+  contactId: Id<"contacts"> | null;
+}> {
+  const details: {
+    name: string;
+    phone: string;
+    email: string;
+    contactId: Id<"contacts"> | null;
+  } = {
+    name: conv.name ?? "Unknown",
+    phone: "",
+    email: "",
+    contactId: null,
+  };
 
   const isGroup = (conv.memberCount ?? 0) > 2;
   if (isGroup && conv.name) {
@@ -78,6 +122,7 @@ export async function resolveParticipantDetails(
       details.name = otherContact.name;
       details.phone = otherContact.phone;
       details.email = otherContact.email;
+      details.contactId = otherContact.contactId;
     }
   }
 
@@ -109,13 +154,17 @@ export async function buildConversationWithMessages(
 
   const participantDetails = await resolveParticipantDetails(ctx, conv);
 
-  // Resolve sender display names — cache per sender to avoid redundant lookups
+  // Resolve sender display names + contactIds — cache per sender
   const senderNameCache = new Map<string, string>();
+  const senderContactIdCache = new Map<string, Id<"contacts"> | null>();
   const resolvedMessages = await Promise.all(
     messages.map(async (msg) => {
       let senderName: string | undefined;
+      let senderContactId: Id<"contacts"> | null = null;
+
       if (senderNameCache.has(msg.sender)) {
         senderName = senderNameCache.get(msg.sender);
+        senderContactId = senderContactIdCache.get(msg.sender) ?? null;
       } else {
         const identity = await ctx.db
           .query("contactIdentities")
@@ -126,12 +175,14 @@ export async function buildConversationWithMessages(
           if (contact) {
             senderName =
               contact.name?.trim() || contact.otherNames?.[0] || undefined;
+            senderContactId = identity.contactId;
           }
         }
         senderNameCache.set(msg.sender, senderName ?? msg.sender);
+        senderContactIdCache.set(msg.sender, senderContactId);
         senderName = senderNameCache.get(msg.sender);
       }
-      return { ...msg, senderName };
+      return { ...msg, senderName, senderContactId };
     }),
   );
 
@@ -161,7 +212,8 @@ export async function executeActionDispatch(
   ctx: MutationCtx,
   actionJson: string,
   source: "user" | "agent" | "system",
-  autoAct?: boolean,
+  _aiEnabled?: boolean,
+  autoSend?: boolean,
 ) {
   const action = JSON.parse(actionJson) as Record<string, unknown>;
   const actionType = action.type as string;
@@ -184,7 +236,7 @@ export async function executeActionDispatch(
         entityId: contact._id,
         details: JSON.stringify({
           via: "agent",
-          ...(autoAct ? { autoAct: true } : {}),
+          ...(autoSend ? { autoSend: true } : {}),
           fields: Object.keys(patch),
         }),
         timestamp: Date.now(),
@@ -205,7 +257,6 @@ export async function executeActionDispatch(
       details: JSON.stringify({
         value: action.value,
         via: "agent",
-        ...(autoAct ? { autoAct: true } : {}),
       }),
       timestamp: Date.now(),
     });
@@ -236,7 +287,6 @@ export async function executeActionDispatch(
       details: JSON.stringify({
         roleName: action.roleName,
         via: "agent",
-        ...(autoAct ? { autoAct: true } : {}),
       }),
       timestamp: Date.now(),
     });

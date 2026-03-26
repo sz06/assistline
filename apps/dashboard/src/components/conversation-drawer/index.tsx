@@ -1,26 +1,20 @@
 import { Drawer } from "@base-ui/react/drawer";
 import { Switch } from "@base-ui/react/switch";
 import { cn } from "@repo/ui";
-import { Bot, MoreVertical, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Bot, MoreVertical, Send, Trash2, X } from "lucide-react";
 import * as React from "react";
 
 export interface ConversationDrawerProps {
   /** Whether the AI agent is enabled for this conversation */
   aiEnabled: boolean;
-  /** Whether suggested replies are sent automatically */
   autoSend: boolean;
-  /** Whether suggested actions are executed automatically */
-  autoAct: boolean;
   /** Input token count (shown when AI is enabled) */
   tokensIn?: number;
   /** Output token count (shown when AI is enabled) */
   tokensOut?: number;
   /** Called when the AI enabled toggle changes */
   onAIEnabledChange: (value: boolean) => void;
-  /** Called when the auto-send toggle changes */
   onAutoSendChange: (value: boolean) => void;
-  /** Called when the auto-act toggle changes */
-  onAutoActChange: (value: boolean) => void;
   /** Called when the delete chat button is clicked */
   onDeleteChat: () => void;
 }
@@ -29,12 +23,10 @@ export interface ConversationDrawerProps {
 export function ConversationDrawer({
   aiEnabled,
   autoSend,
-  autoAct,
   tokensIn,
   tokensOut,
   onAIEnabledChange,
   onAutoSendChange,
-  onAutoActChange,
   onDeleteChat,
 }: ConversationDrawerProps) {
   const [open, setOpen] = React.useState(false);
@@ -92,18 +84,6 @@ export function ConversationDrawer({
                   disabled={!aiEnabled}
                   accentColor="amber"
                   testId="ai-toggle-autosend"
-                />
-
-                {/* Auto Perform Actions */}
-                <ToggleRow
-                  icon={<Sparkles className="h-4 w-4 text-violet-500" />}
-                  title="Auto Perform Actions"
-                  description="Execute suggested actions automatically"
-                  checked={autoAct}
-                  onCheckedChange={onAutoActChange}
-                  disabled={!aiEnabled}
-                  accentColor="violet"
-                  testId="ai-toggle-autoact"
                 />
 
                 {/* Token Usage Stats */}

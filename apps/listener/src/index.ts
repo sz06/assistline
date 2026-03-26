@@ -131,6 +131,20 @@ async function refreshChannelCache(): Promise<void> {
         const puppetId = `@whatsapp_${digits}:${serverName}`;
         userPuppetIds.add(puppetId);
         console.log(`[listener] ✓ Self-puppet: ${puppetId}`);
+
+        // Persist to userProfile so Convex ingest can read it without
+        // requiring the listener to pass it as an argument.
+        try {
+          await convex.mutation(api.userProfile.addMatrixId, {
+            matrixId: puppetId,
+          });
+        } catch (err) {
+          console.warn(
+            `[listener] ⚠ Could not persist self-puppet to userProfile: ${
+              err instanceof Error ? err.message : err
+            }`,
+          );
+        }
       }
     }
   }
@@ -599,7 +613,6 @@ async function forwardEphemeralEvent(
       type: event.type,
       content: JSON.stringify(event.content),
       botUserId: MATRIX_BOT_USER_ID,
-      userPuppetIds: [...userPuppetIds],
     });
   } catch (err) {
     console.error(

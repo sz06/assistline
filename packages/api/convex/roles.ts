@@ -1,5 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { internalQuery, mutation, query } from "./_generated/server";
 
 export const list = query({
@@ -91,3 +93,30 @@ export const remove = mutation({
     });
   },
 });
+
+/**
+ * Resolves an array of role names to role IDs.
+ * Creates any roles that do not exist yet.
+ */
+export async function resolveRoleNamesToIds(
+  ctx: MutationCtx,
+  roleNames: string[],
+): Promise<Id<"roles">[]> {
+  const roleIds: Id<"roles">[] = [];
+  for (const roleName of roleNames) {
+    if (typeof roleName !== "string") continue;
+
+    const existingRole = await ctx.db
+      .query("roles")
+      .withIndex("by_name", (q) => q.eq("name", roleName))
+      .unique();
+
+    if (existingRole) {
+      roleIds.push(existingRole._id);
+    } else {
+      const newRoleId = await ctx.db.insert("roles", { name: roleName });
+      roleIds.push(newRoleId);
+    }
+  }
+  return roleIds;
+}

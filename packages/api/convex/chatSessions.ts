@@ -8,7 +8,7 @@ import {
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 // ---------------------------------------------------------------------------
 // Chat Sessions CRUD
@@ -109,11 +109,10 @@ export const sendMessage = mutation({
     await ctx.db.patch(args.sessionId, { updatedAt: Date.now() });
 
     // Schedule the Chatter agent to generate a reply
-    await ctx.scheduler.runAfter(
-      0,
-      internal.agents.chatter.agent.chat,
-      { threadId: session.threadId },
-    );
+    await ctx.scheduler.runAfter(0, internal.agents.chatter.agent.chat, {
+      threadId: session.threadId,
+      sessionId: session._id,
+    });
 
     return session.threadId;
   },
