@@ -21,12 +21,12 @@ async function embedText(
   return await ctx.runAction(internal.ai.embeddings.embedText, { text });
 }
 
-async function getUserRoleId(ctx: ActionCtx): Promise<Id<"roles"> | null> {
-  const roles = await ctx.runQuery(internal.roles.listInternal, {});
-  const userRole = (roles as Array<{ _id: Id<"roles">; name: string }>).find(
-    (r) => r.name === "User",
-  );
-  return userRole?._id ?? null;
+async function fetchRoles(ctx: ActionCtx) {
+  return (await ctx.runQuery(internal.roles.listInternal, {})) as Array<{
+    _id: Id<"roles">;
+    name: string;
+    description?: string;
+  }>;
 }
 
 /**
@@ -149,17 +149,34 @@ async function preSearchFacts(
 // Tool schemas
 // ---------------------------------------------------------------------------
 
+const artifactPayloadSchema = {
+  roles: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Array of role names that should have access to this fact. If omitted, defaults to ['User'].",
+    ),
+  expiresAt: z
+    .string()
+    .optional()
+    .describe(
+      "ISO 8601 date string for when this fact should expire (for strictly temporary facts only).",
+    ),
+};
+
 const createSchema = z.object({
   value: z
     .string()
     .describe(
       'The self-descriptive fact to store, e.g. "User\'s home address: 123 Main St"',
     ),
+  ...artifactPayloadSchema,
 });
 
 const updateSchema = z.object({
   id: z.string().describe("The Convex ID of the existing artifact to update"),
   value: z.string().describe("The new value for the artifact"),
+  ...artifactPayloadSchema,
 });
 
 const updatePendingSuggestionSchema = z.object({
@@ -169,6 +186,7 @@ const updatePendingSuggestionSchema = z.object({
   value: z
     .string()
     .describe("The updated new value for the pending suggestion"),
+  ...artifactPayloadSchema,
 });
 
 const skipSchema = z.object({
@@ -188,18 +206,43 @@ function buildTools(
     conversationId?: Id<"conversations">;
     sessionId?: Id<"chatSessions">;
   },
-  userRoleId?: Id<"roles"> | null,
+  roles?: Array<{ _id: Id<"roles">; name: string }>,
   /** Map of fact value → pre-computed embedding vector */
   embeddingCache?: Map<string, number[] | null>,
 ) {
   const { conversationId, sessionId } = context ?? {};
+
+  const resolvePayload = (payload: {
+    roles?: string[];
+    expiresAt?: string;
+  }) => {
+    let accessibleToRoles: Id<"roles">[] | undefined;
+    if (payload.roles && payload.roles.length > 0 && roles) {
+      accessibleToRoles = roles
+        .filter((r) => payload.roles!.includes(r.name))
+        .map((r) => r._id);
+    }
+    const expiresAt = payload.expiresAt
+      ? new Date(payload.expiresAt).getTime()
+      : undefined;
+
+    // Fallback to User role if no valid roles resolved
+    if (!accessibleToRoles || accessibleToRoles.length === 0) {
+      const userRole = roles?.find((r) => r.name === "User");
+      if (userRole) {
+        accessibleToRoles = [userRole._id];
+      }
+    }
+
+    return { accessibleToRoles, expiresAt };
+  };
 
   return {
     createArtifactSuggestion: tool({
       description:
         "Suggest a new artifact. Use when no existing artifact or suggestion matches this fact.",
       inputSchema: createSchema,
-      execute: async ({ value }) => {
+      execute: async ({ value, roles, expiresAt }) => {
         // Look up the cached embedding for this value
         const valueEmbedding = embeddingCache?.get(value) ?? null;
 
@@ -224,12 +267,16 @@ function buildTools(
           }
         }
 
+        const payload = resolvePayload({ roles, expiresAt });
+
         await ctx.runMutation(internal.artifactSuggestions.mutations.push, {
           conversationId,
           sessionId,
           type: "create",
           value,
           embedding: embedding ?? undefined,
+          accessibleToRoles: payload.accessibleToRoles,
+          expiresAt: payload.expiresAt,
         });
         console.log(
           `[Artifactor] Suggested new artifact for approval: "${value}"`,
@@ -242,7 +289,7 @@ function buildTools(
       description:
         "Suggest an update to an existing artifact whose value has changed. The user must manually approve this.",
       inputSchema: updateSchema,
-      execute: async ({ id, value }) => {
+      execute: async ({ id, value, roles, expiresAt }) => {
         // Look up the cached embedding for this value
         const valueEmbedding = embeddingCache?.get(value) ?? null;
 
@@ -267,6 +314,8 @@ function buildTools(
           }
         }
 
+        const payload = resolvePayload({ roles, expiresAt });
+
         await ctx.runMutation(internal.artifactSuggestions.mutations.push, {
           conversationId,
           sessionId,
@@ -274,6 +323,8 @@ function buildTools(
           artifactId: id as Id<"artifacts">,
           value,
           embedding: embedding ?? undefined,
+          accessibleToRoles: payload.accessibleToRoles,
+          expiresAt: payload.expiresAt,
         });
         console.log(
           `[Artifactor] Suggested artifact update ${id} for approval: "${value}"`,
@@ -286,12 +337,14 @@ function buildTools(
       description:
         "Update an existing pending suggestion to reflect new information.",
       inputSchema: updatePendingSuggestionSchema,
-      execute: async ({ suggestionId, value }) => {
+      execute: async ({ suggestionId, value, roles, expiresAt }) => {
         // Look up the cached embedding for this value
         const valueEmbedding = embeddingCache?.get(value) ?? null;
 
         // If no cached embedding, compute one now
         const embedding = valueEmbedding ?? (await embedText(ctx, value));
+
+        const payload = resolvePayload({ roles, expiresAt });
 
         await ctx.runMutation(
           internal.artifactSuggestions.mutations.internalUpdate,
@@ -299,6 +352,8 @@ function buildTools(
             id: suggestionId as Id<"artifactSuggestions">,
             value,
             embedding: embedding ?? undefined,
+            accessibleToRoles: payload.accessibleToRoles,
+            expiresAt: payload.expiresAt,
           },
         );
 
@@ -397,22 +452,34 @@ export const processFacts = internalAction({
     const prompt = `Process the following facts about the user. For each fact, I've already searched for similar existing artifacts and pending suggestions. Based on the matches, call createArtifactSuggestion (new), updateArtifactSuggestion (existing artifact value changed), updatePendingSuggestion (pending suggestion value changed), or skipFact (unchanged).\n\n${factsWithMatches}`;
 
     // 7. Single-step LLM call — tools are create/update/skip only
-    // Hoist getUserRoleId once here so createArtifact doesn't re-query per invocation.
-    const userRoleId = await getUserRoleId(ctx);
+    // Hoist roles fetch once here so createArtifact doesn't re-query per invocation.
+    const roles = await fetchRoles(ctx);
     try {
-      await generateText({
+      const result = await generateText({
         model,
-        system: buildArtifactorSystemPrompt(),
+        system: buildArtifactorSystemPrompt(roles),
         prompt,
         tools: buildTools(
           ctx,
           { conversationId, sessionId },
-          userRoleId,
+          roles,
           embeddingCache,
         ),
         // Cap at facts.length + 1 steps: one tool call per fact plus one buffer.
         stopWhen: stepCountIs(facts.length + 1),
       });
+
+      const inputTokens = result.usage?.inputTokens ?? 0;
+      const outputTokens = result.usage?.outputTokens ?? 0;
+      if (inputTokens > 0 || outputTokens > 0) {
+        await ctx.runMutation(internal.aiProviders.recordUsage, {
+          // defaultProvider._id is fetched via dynamic query, so tell TS it's an Id
+          id: defaultProvider._id as Id<"aiProviders">,
+          tokensIn: inputTokens,
+          tokensOut: outputTokens,
+        });
+      }
+
       console.log("[Artifactor] Finished processing facts.");
     } catch (error: unknown) {
       const errorMessage =

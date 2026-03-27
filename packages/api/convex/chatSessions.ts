@@ -49,6 +49,30 @@ export const list = query({
 });
 
 /**
+ * Paginated list of chat sessions with optional title search, newest first.
+ */
+export const listPaginated = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    search: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const search = args.search?.trim();
+    if (search) {
+      return ctx.db
+        .query("chatSessions")
+        .withSearchIndex("search_title", (q) => q.search("title", search))
+        .paginate(args.paginationOpts);
+    }
+    return ctx.db
+      .query("chatSessions")
+      .withIndex("by_updatedAt")
+      .order("desc")
+      .paginate(args.paginationOpts);
+  },
+});
+
+/**
  * Get a single chat session by ID.
  */
 export const get = query({
@@ -133,5 +157,26 @@ export const listThreadMessages = query({
     const paginated = await listUIMessages(ctx, components.agent, args);
     const streams = await syncStreams(ctx, components.agent, args);
     return { ...paginated, streams };
+  },
+});
+
+/**
+ * Increment the token usage for a chat session.
+ * Used by the Chatter agent's usageHandler.
+ */
+export const incrementTokenUsage = internalMutation({
+  args: {
+    sessionId: v.id("chatSessions"),
+    inputTokens: v.number(),
+    outputTokens: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) return;
+
+    await ctx.db.patch(args.sessionId, {
+      aiTokensIn: (session.aiTokensIn ?? 0) + args.inputTokens,
+      aiTokensOut: (session.aiTokensOut ?? 0) + args.outputTokens,
+    });
   },
 });

@@ -7,7 +7,10 @@ import type { DataModel, Id } from "../../_generated/dataModel";
 import { CONTACT_FIELD_KEYS } from "../../contacts";
 
 // ── Shared Tools (re-exported) ───────────────────────────────────────────────
-export { createForwardFactsTool } from "../shared/tools";
+export {
+  createForwardFactsTool,
+  createSearchArtifactsTool,
+} from "../shared/tools";
 
 // ── Dispatcher-Only Tools ────────────────────────────────────────────────────
 

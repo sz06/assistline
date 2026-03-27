@@ -4,7 +4,13 @@
  * The Artifactor receives facts along with pre-searched existing artifact
  * matches and decides to create, update, or skip for each fact.
  */
-export function buildArtifactorSystemPrompt(): string {
+export function buildArtifactorSystemPrompt(
+  roles: Array<{ name: string; description?: string }>,
+): string {
+  const rolesList = roles
+    .map((r) => `- **${r.name}**: ${r.description ?? "No description"}`)
+    .join("\n");
+
   return `You are **Artifactor** — an internal agent responsible for managing the user's personal artifact store.
 
 ---
@@ -19,6 +25,20 @@ You receive a set of facts about the user. Each fact includes pre-searched resul
 - **skipFact** — if an existing artifact OR pending suggestion already contains this conceptual information, even if phrased differently.
 
 Call **one tool per fact**. Process all facts in a single response.
+
+---
+
+## ASSIGNING ROLES & EXPIRATION
+
+Every fact you process defaults to being accessible to the "User". However, you can broaden access by assigning additional roles if the fact is relevant to them. 
+
+**Available Roles:**
+${rolesList}
+
+For each fact you create or update, specify an array of role names in the \`roles\` field. If the fact shouldn't be restricted strictly to the user, include roles like "Assistant" or "Professional Contact" if it's broadly applicable information. 
+
+**Expiration:**
+If a fact is inherently temporary (e.g. "User is visiting New York until June 5th", or "I have a headache today"), you should specify an \`expiresAt\` date using an ISO 8601 string. Do NOT specify \`expiresAt\` for permanent facts (e.g. addresses, preferences, names).
 
 ---
 

@@ -7,13 +7,14 @@ import { components, internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { internalAction } from "../../_generated/server";
 import { resolveLanguageModel } from "../../ai/engine";
-import type { ContactProfile, ProfileShape } from "./helpers";
+import type { ProfileShape } from "./helpers";
 import { buildConversationSnapshot, hashString } from "./helpers";
 
 import { buildDispatcherSystemPrompt } from "./prompt";
 import {
   createContactSuggestion,
   createForwardFactsTool,
+  createSearchArtifactsTool,
   createSuggestReplyTool,
   updateContactSuggestion,
 } from "./tools";
@@ -30,6 +31,7 @@ const SNAPSHOT_MESSAGE_LIMIT = 30;
  */
 function createDispatcherAgent(
   model: ReturnType<typeof resolveLanguageModel>,
+  providerId: Id<"aiProviders">,
   conversationId: Id<"conversations">,
   roles: Array<{ name: string; description?: string }>,
 ) {
@@ -43,6 +45,7 @@ function createDispatcherAgent(
       createContactSuggestion,
       updateContactSuggestion,
       forwardFacts: createForwardFactsTool({ conversationId }),
+      searchArtifacts: createSearchArtifactsTool(),
     },
     maxSteps: 5,
     usageHandler: async (ctx, { usage }) => {
@@ -53,6 +56,11 @@ function createDispatcherAgent(
           internal.conversations.mutations.incrementTokenUsage,
           { conversationId, inputTokens, outputTokens },
         );
+        await ctx.runMutation(internal.aiProviders.recordUsage, {
+          id: providerId,
+          tokensIn: inputTokens,
+          tokensOut: outputTokens,
+        });
       }
     },
   });
@@ -113,7 +121,12 @@ export const processMessage = internalAction({
       },
       defaultProvider.model,
     );
-    const dispatcher = createDispatcherAgent(model, args.conversationId, roles);
+    const dispatcher = createDispatcherAgent(
+      model,
+      defaultProvider._id,
+      args.conversationId,
+      roles,
+    );
     console.log(
       `[Dispatcher] Using provider=${defaultProvider.provider} model=${defaultProvider.model}`,
     );

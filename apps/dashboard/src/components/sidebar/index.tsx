@@ -55,7 +55,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "flex h-screen w-64 flex-col border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900",
+        "flex h-screen w-full flex-col border-r border-gray-200/60 bg-white/60 backdrop-blur-xl dark:border-gray-800/60 dark:bg-gray-950/60",
         className,
       )}
     >
@@ -65,7 +65,7 @@ export function Sidebar({
         </div>
       )}
 
-      <div className="px-4 pt-4 pb-2">
+      <div className="px-3 pt-3 pb-2">
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
           <Input
@@ -78,7 +78,7 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="flex-1 space-y-4 px-3 py-2 overflow-y-auto">
+      <nav className="flex-1 space-y-4 py-2 overflow-y-auto">
         {filteredGroups.map((group, idx) => (
           <SidebarNavGroup
             // biome-ignore lint/suspicious/noArrayIndexKey: Index is stable enough for sidebar groups
@@ -124,12 +124,12 @@ function SidebarNavGroup({
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
-          className="flex w-full items-center justify-between px-2 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors"
+          className="group flex w-full items-center justify-between px-3 py-1.5 text-[11px] font-bold text-gray-500 uppercase tracking-widest hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
         >
           {group.title}
           <ChevronDown
             className={cn(
-              "h-3.5 w-3.5 transition-transform duration-200",
+              "h-3.5 w-3.5 transition-transform duration-300 opacity-60 group-hover:opacity-100",
               isExpanded ? "" : "-rotate-90",
             )}
           />
@@ -146,16 +146,32 @@ function SidebarNavGroup({
                 type="button"
                 onClick={() => onNavigate(link.href)}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-sm font-medium transition-colors",
+                  "relative flex w-full items-center gap-3 px-3 py-2 text-sm font-medium transition-all duration-200 active:scale-[0.98] outline-none",
                   isActive
-                    ? "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                    : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800",
+                    ? "bg-blue-600/10 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400"
+                    : "text-gray-600 hover:bg-gray-100/80 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800/50 dark:hover:text-gray-100",
                 )}
               >
-                {link.icon && (
-                  <span className="h-4 w-4 shrink-0">{link.icon}</span>
+                {isActive && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-2/3 w-1 rounded-r-full bg-blue-600 dark:bg-blue-500" />
                 )}
-                {link.label}
+                {link.icon && (
+                  <span
+                    className={cn(
+                      "h-4 w-4 shrink-0 transition-colors",
+                      isActive
+                        ? "text-blue-700 dark:text-blue-400"
+                        : "text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300",
+                    )}
+                  >
+                    {link.icon}
+                  </span>
+                )}
+                <span
+                  className={cn("truncate", isActive ? "font-semibold" : "")}
+                >
+                  {link.label}
+                </span>
               </button>
             );
           })}

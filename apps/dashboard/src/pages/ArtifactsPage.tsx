@@ -52,6 +52,10 @@ export function ArtifactsPage() {
   const [pageSize, setPageSize] = useState<number>(10);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  type SortOption = "updatedAt" | "createdAt" | "expiry";
+  const [sortBy, setSortBy] = useState<SortOption>("updatedAt");
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+
   useEffect(() => {
     if (!debouncedSearch.trim()) {
       setSearchResults(null);
@@ -110,7 +114,7 @@ export function ArtifactsPage() {
     setDeletingId(null);
   };
 
-  // Filter → Paginate
+  // Filter → Sort → Paginate
   const { paged, totalFiltered } = useMemo(() => {
     if (!artifacts) return { paged: undefined, totalFiltered: 0 };
 
@@ -119,12 +123,45 @@ export function ArtifactsPage() {
       list = searchResults ?? [];
     }
 
+    list = [...list].sort((a: any, b: any) => {
+      let valA: number;
+      let valB: number;
+
+      switch (sortBy) {
+        case "createdAt":
+          valA = a._creationTime;
+          valB = b._creationTime;
+          break;
+        case "expiry":
+          valA = a.expiresAt ?? Number.MAX_SAFE_INTEGER;
+          valB = b.expiresAt ?? Number.MAX_SAFE_INTEGER;
+          break;
+        case "updatedAt":
+        default:
+          valA = a.updatedAt;
+          valB = b.updatedAt;
+          break;
+      }
+
+      if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+      if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+
     const start = (page - 1) * pageSize;
     return {
       paged: list.slice(start, start + pageSize),
       totalFiltered: list.length,
     };
-  }, [artifacts, debouncedSearch, searchResults, page, pageSize]);
+  }, [
+    artifacts,
+    debouncedSearch,
+    searchResults,
+    page,
+    pageSize,
+    sortBy,
+    sortOrder,
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
   const rangeStart = totalFiltered === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -216,10 +253,10 @@ export function ArtifactsPage() {
 
         {activeTab === "artifacts" && (
           <>
-            {/* Search bar */}
+            {/* Search and Sort controls */}
             {artifacts && artifacts.length > 0 && (
-              <div className="flex items-center gap-2 mt-2 mb-6 w-full">
-                <div className="relative w-full flex-1">
+              <div className="flex flex-col sm:flex-row items-center gap-3 mt-2 mb-6 w-full">
+                <div className="relative w-full sm:flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <Input
                     value={search}
@@ -228,6 +265,27 @@ export function ArtifactsPage() {
                     className="pl-10"
                     data-testid="artifacts-search"
                   />
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortOption)}
+                    className="flex-1 sm:flex-none h-9 border border-gray-200 dark:border-gray-800 rounded-md bg-white dark:bg-gray-950 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  >
+                    <option value="updatedAt">Updated At</option>
+                    <option value="createdAt">Created At</option>
+                    <option value="expiry">Expiry</option>
+                  </select>
+                  <select
+                    value={sortOrder}
+                    onChange={(e) =>
+                      setSortOrder(e.target.value as "desc" | "asc")
+                    }
+                    className="h-9 border border-gray-200 dark:border-gray-800 rounded-md bg-white dark:bg-gray-950 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  >
+                    <option value="desc">Desc</option>
+                    <option value="asc">Asc</option>
+                  </select>
                 </div>
               </div>
             )}
@@ -337,6 +395,7 @@ export function ArtifactsPage() {
                 <SuggestionCard
                   key={s._id}
                   suggestion={s}
+                  roles={roles}
                   onApprove={() =>
                     executeSuggestion({
                       suggestionId: s._id as Id<"artifactSuggestions">,

@@ -14,6 +14,8 @@ export const push = internalMutation({
     value: v.string(),
     artifactId: v.optional(v.id("artifacts")),
     embedding: v.optional(v.array(v.float64())),
+    accessibleToRoles: v.optional(v.array(v.id("roles"))),
+    expiresAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     // Dedup: skip if same scope + type + value already has a pending suggestion
@@ -64,6 +66,8 @@ export const push = internalMutation({
       value: args.value,
       artifactId: args.artifactId,
       embedding: args.embedding,
+      accessibleToRoles: args.accessibleToRoles,
+      expiresAt: args.expiresAt,
     });
   },
 });
@@ -114,14 +118,17 @@ export const execute = mutation({
     if (suggestion.type === "create") {
       await ctx.runMutation(internal.artifacts.internalCreate, {
         value: suggestion.value,
-        accessibleToRoles: [], // Global access assuming no context
+        accessibleToRoles: suggestion.accessibleToRoles ?? [],
         embedding: suggestion.embedding,
+        expiresAt: suggestion.expiresAt,
       });
     } else if (suggestion.type === "update" && suggestion.artifactId) {
       await ctx.runMutation(internal.artifacts.internalUpdate, {
         id: suggestion.artifactId,
         value: suggestion.value,
         embedding: suggestion.embedding,
+        accessibleToRoles: suggestion.accessibleToRoles,
+        expiresAt: suggestion.expiresAt,
       });
     }
   },
@@ -135,6 +142,8 @@ export const internalUpdate = internalMutation({
     id: v.id("artifactSuggestions"),
     value: v.optional(v.string()),
     embedding: v.optional(v.array(v.float64())),
+    accessibleToRoles: v.optional(v.array(v.id("roles"))),
+    expiresAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const { id, ...patch } = args;

@@ -10,6 +10,8 @@ export default defineSchema({
     apiKey: v.optional(v.string()), // Optional for local models
     baseUrl: v.optional(v.string()), // Custom endpoint URL (e.g. Ollama, CLIProxyAPI)
     isDefault: v.boolean(),
+    aiTokensIn: v.optional(v.number()), // Cumulative LLM input tokens
+    aiTokensOut: v.optional(v.number()), // Cumulative LLM output tokens
   })
     .index("by_isDefault", ["isDefault"])
     .index("by_type", ["type"]),
@@ -208,7 +210,11 @@ export default defineSchema({
     title: v.optional(v.string()), // User-set or auto-generated title
     threadId: v.string(), // @convex-dev/agent thread ID
     updatedAt: v.number(),
-  }).index("by_updatedAt", ["updatedAt"]),
+    aiTokensIn: v.optional(v.number()), // Cumulative LLM input tokens
+    aiTokensOut: v.optional(v.number()), // Cumulative LLM output tokens
+  })
+    .index("by_updatedAt", ["updatedAt"])
+    .searchIndex("search_title", { searchField: "title" }),
 
   artifactSuggestions: defineTable({
     sessionId: v.optional(v.id("chatSessions")),
@@ -217,6 +223,8 @@ export default defineSchema({
     value: v.string(), // the proposed new value
     artifactId: v.optional(v.id("artifacts")), // only for update
     embedding: v.optional(v.array(v.float64())), // Embedding vector for semantic search
+    accessibleToRoles: v.optional(v.array(v.id("roles"))),
+    expiresAt: v.optional(v.number()),
   })
     .index("by_sessionId", ["sessionId"])
     .index("by_conversationId", ["conversationId"])

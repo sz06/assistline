@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.22.7] - 2026-03-26
+
+### Added
+
+- **AI Provider Token Tracking** (`packages/api`, `apps/dashboard`): Added `aiTokensIn` and `aiTokensOut` fields to the `aiProviders` table to track cumulative LLM token usage per provider. New `recordUsage` internal mutation atomically increments these counters. All three agents (Chatter, Dispatcher, Artifactor) now report token usage to the active provider via their usage handlers.
+- **`getStats` Query** (`packages/api`): New public query that aggregates total input/output tokens across all providers and returns the currently active language provider name and model — used to power the dashboard header widget.
+- **`AiProviderWidget` Component** (`apps/dashboard`): Extracted the header token display into a standalone `AiProviderWidget` component with a compact provider-switcher dropdown. Users can change the default language provider on-the-fly directly from the header. Includes 5 Storybook stories: `Default`, `NoTokens`, `LargeTokenCounts`, `NoProviders`, and `SingleProvider`.
+- **`useOnClickOutside` Hook** (`apps/dashboard`): New `hooks/use-on-click-outside.ts` utility hook used by `AiProviderWidget` to auto-close the dropdown on outside clicks.
+
+### Changed
+
+- **Dashboard Header** (`apps/dashboard`): The inline token badge has been replaced by the new `AiProviderWidget` component, now connected to live `getStats` and `list` queries with a `setDefault` mutation binding.
+
+## [2.22.6] - 2026-03-26
+
+### Fixed
+
+- **Channel Status Preserved After Pairing Timeout** (`packages/api`): The `startWhatsAppPairing` action no longer overwrites a working channel's status with `"error"` when a QR code scan times out. If the channel already has a `connectedAt` and `phoneNumber` (i.e. was previously connected), a failed re-pair attempt now restores the `"connected"` state instead of leaving the channel stuck as `"error"`.
+
+## [2.22.5] - 2026-03-26
+
+### Added
+
+- **Chatter Session Renaming** (`packages/api`): Added `renameChatSession` tool to the Chatter agent. The agent can now automatically recognize the topic of conversation and proactively update the chat's title using the `chatSessions.rename` mutation.
+
 ## [2.22.4] - 2026-03-25
 
 ### Added
@@ -23,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **DOM Nesting Hydration Error**: Fixed a React hydration error in `ChatPage.tsx` caused by nested `<button>` tags by refactoring the `SessionItem` component to use a proper, unnested HTML structure.
 - **Runaway Tool Loops**: Enforced a strict "ONE-PASS RULE" in the system prompt and adjusted maxSteps limits to completely prevent the Dispatcher from getting stuck in infinite, duplicate tool-calling loops.
 - **Agent Context & RAG Accuracy**: Redacted messages are now correctly filtered out of the AI's context. RAG vector search results now require a minimum relevance score (0.5) to be injected into prompts, reducing noise.
 - **Thread Initialization Bugs**: Fixed an issue where threads would fail to reset when AI was re-enabled, and patched a race condition that could leave a thread entirely empty on its first run.

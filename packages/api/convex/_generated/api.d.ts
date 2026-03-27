@@ -12,6 +12,7 @@ import type * as agents_artifactor_agent from "../agents/artifactor/agent.js";
 import type * as agents_artifactor_prompt from "../agents/artifactor/prompt.js";
 import type * as agents_chatter_agent from "../agents/chatter/agent.js";
 import type * as agents_chatter_prompt from "../agents/chatter/prompt.js";
+import type * as agents_chatter_tools from "../agents/chatter/tools.js";
 import type * as agents_dispatcher_agent from "../agents/dispatcher/agent.js";
 import type * as agents_dispatcher_helpers from "../agents/dispatcher/helpers.js";
 import type * as agents_dispatcher_prompt from "../agents/dispatcher/prompt.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   "agents/artifactor/prompt": typeof agents_artifactor_prompt;
   "agents/chatter/agent": typeof agents_chatter_agent;
   "agents/chatter/prompt": typeof agents_chatter_prompt;
+  "agents/chatter/tools": typeof agents_chatter_tools;
   "agents/dispatcher/agent": typeof agents_dispatcher_agent;
   "agents/dispatcher/helpers": typeof agents_dispatcher_helpers;
   "agents/dispatcher/prompt": typeof agents_dispatcher_prompt;

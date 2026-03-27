@@ -1,3 +1,5 @@
+import { api } from "@repo/api";
+import { useMutation, useQuery } from "convex/react";
 import {
   BookOpen,
   Bot,
@@ -15,8 +17,9 @@ import {
   UserCircle,
   Users,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { AiProviderWidget } from "../components/ai-provider-widget";
 import { Sidedrawer } from "../components/side-drawer";
 import { Sidebar } from "../components/sidebar";
 
@@ -112,6 +115,33 @@ export function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Token stats
+  const tokenStats = useQuery(api.aiProviders.getStats) ?? {
+    totalTokensIn: 0,
+    totalTokensOut: 0,
+    activeProvider: null,
+  };
+
+  // All language providers (for the switcher dropdown)
+  const allProviders = useQuery(api.aiProviders.list) ?? [];
+  const languageProviders = allProviders
+    .filter((p) => p.type === "language")
+    .map((p) => ({
+      _id: p._id,
+      name: p.name ?? null,
+      provider: p.provider,
+      model: p.model ?? null,
+      isDefault: p.isDefault,
+    }));
+
+  const setDefault = useMutation(api.aiProviders.setDefault);
+  const handleSetDefault = useCallback(
+    (id: string) => {
+      setDefault({ id: id as Parameters<typeof setDefault>[0]["id"] });
+    },
+    [setDefault],
+  );
+
   // Theme state
   const [theme, setTheme] = useState<"light" | "dark">(getInitialTheme);
 
@@ -166,7 +196,7 @@ export function DashboardLayout() {
   return (
     <div className="flex h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">
       {/* Desktop Sidebar */}
-      <div className="hidden md:flex">
+      <div className="hidden md:flex w-64 shrink-0">
         <Sidebar {...sidebarProps} />
       </div>
 
@@ -191,6 +221,13 @@ export function DashboardLayout() {
 
           {/* Right controls */}
           <div className="flex items-center gap-2 md:gap-3">
+            {/* AI Provider Token Widget */}
+            <AiProviderWidget
+              stats={tokenStats}
+              providers={languageProviders}
+              onSetDefault={handleSetDefault}
+            />
+
             {/* Theme Toggle */}
             <button
               type="button"

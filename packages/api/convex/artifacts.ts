@@ -322,6 +322,8 @@ export const internalUpdate = internalMutation({
     id: v.id("artifacts"),
     value: v.optional(v.string()),
     embedding: v.optional(v.array(v.float64())),
+    accessibleToRoles: v.optional(v.array(v.id("roles"))),
+    expiresAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const { id, ...patch } = args;

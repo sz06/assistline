@@ -2,12 +2,16 @@
 
 import { Agent } from "@convex-dev/agent";
 import { v } from "convex/values";
-import { api, components, internal } from "../../_generated/api";
+import { components, internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { internalAction } from "../../_generated/server";
 import { resolveLanguageModel } from "../../ai/engine";
-import { createForwardFactsTool } from "../shared/tools";
+import {
+  createForwardFactsTool,
+  createSearchArtifactsTool,
+} from "../shared/tools";
 import { buildChatterSystemPrompt } from "./prompt";
+import { createRenameChatSessionTool } from "./tools";
 
 /**
  * Create the Chatter agent dynamically — resolves the language model at
@@ -15,6 +19,7 @@ import { buildChatterSystemPrompt } from "./prompt";
  */
 function createChatterAgent(
   model: ReturnType<typeof resolveLanguageModel>,
+  providerId: Id<"aiProviders">,
   instructions: string,
   sessionId: Id<"chatSessions">,
 ) {
@@ -25,8 +30,26 @@ function createChatterAgent(
     instructions,
     tools: {
       forwardFacts: createForwardFactsTool({ sessionId }),
+      searchArtifacts: createSearchArtifactsTool(),
+      renameChatSession: createRenameChatSessionTool({ sessionId }),
     },
     maxSteps: 2,
+    usageHandler: async (ctx, { usage }) => {
+      const inputTokens = usage.inputTokens ?? 0;
+      const outputTokens = usage.outputTokens ?? 0;
+      if (inputTokens > 0 || outputTokens > 0) {
+        await ctx.runMutation(internal.chatSessions.incrementTokenUsage, {
+          sessionId,
+          inputTokens,
+          outputTokens,
+        });
+        await ctx.runMutation(internal.aiProviders.recordUsage, {
+          id: providerId,
+          tokensIn: inputTokens,
+          tokensOut: outputTokens,
+        });
+      }
+    },
   });
 }
 
@@ -79,74 +102,20 @@ export const chat = internalAction({
       defaultProvider.model,
     );
 
-    // 3. Build the base agent (needed to list messages for RAG)
-    const baseInstructions = buildChatterSystemPrompt(new Date().toISOString());
-    const chatter = createChatterAgent(model, baseInstructions, args.sessionId);
-
-    // 4. Extract the last user message for RAG context
-    const threadMessages = await chatter.listMessages(ctx, {
-      threadId: args.threadId,
-      paginationOpts: { numItems: 10, cursor: null },
-      excludeToolMessages: true,
-    });
-    const userMessages = threadMessages.page.filter(
-      (m) => m.message?.role === "user",
+    // 3. Build the agent
+    const instructions = buildChatterSystemPrompt(new Date().toISOString());
+    const chatter = createChatterAgent(
+      model,
+      defaultProvider._id,
+      instructions,
+      args.sessionId,
     );
-    const lastUserMessage = userMessages[userMessages.length - 1];
 
-    let queryText = "";
-    if (lastUserMessage?.message?.content) {
-      queryText = extractTextFromContent(
-        lastUserMessage.message.content as
-          | string
-          | Array<{ type: string; text?: string }>,
-      );
-    }
-
-    // 5. Perform vector search based on user's message
-    let contextDocs = "";
-    if (queryText) {
-      const embedding = await ctx.runAction(internal.ai.embeddings.embedText, {
-        text: queryText,
-      });
-      if (embedding) {
-        const searchResults = await ctx.vectorSearch(
-          "artifacts",
-          "by_embedding",
-          {
-            vector: embedding,
-            limit: 10,
-          },
-        );
-        // C3: Only inject artifacts with a meaningful relevance score
-        const relevantResults = searchResults.filter((r) => r._score >= 0.5);
-        if (relevantResults.length > 0) {
-          const docs = await ctx.runQuery(internal.artifacts.fetchByIds, {
-            ids: relevantResults.map((r) => r._id),
-          });
-          if (docs.length > 0) {
-            contextDocs = docs.map((d) => `- ${d.value}`).join("\n");
-          }
-        }
-      } else {
-        console.warn(
-          "[Chatter] Embedding returned null — running without RAG context.",
-        );
-      }
-    }
-
-    // 6. Rebuild agent with final instructions (including RAG context if present)
-    const finalInstructions = contextDocs
-      ? `${baseInstructions}\n\n## KNOWLEDGE BASE\nHere are facts about the user retrieved from the database that may be relevant to their latest message:\n${contextDocs}`
-      : baseInstructions;
-
-    // If context changed, create a fresh agent with the updated instructions
-    const finalChatter = contextDocs
-      ? createChatterAgent(model, finalInstructions, args.sessionId)
-      : chatter;
-
+    // 4. Run the agent
+    // No explicit prompt text is needed because the user's message is already
+    // appended to the thread prior to calling this handler.
     try {
-      await finalChatter.generateText(ctx, { threadId: args.threadId }, {});
+      await chatter.generateText(ctx, { threadId: args.threadId }, {});
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);

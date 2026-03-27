@@ -1,5 +1,5 @@
 import { Button } from "@repo/ui";
-import { Check, Lightbulb, X } from "lucide-react";
+import { Check, Clock, Lightbulb, Shield, X } from "lucide-react";
 
 export interface SuggestionCardProps {
   suggestion: {
@@ -10,16 +10,26 @@ export interface SuggestionCardProps {
     embedding?: number[];
     sessionId?: string;
     conversationId?: string;
+    accessibleToRoles?: string[];
+    expiresAt?: number;
   };
+  roles?: { _id: string; name: string }[];
   onApprove: () => void;
   onDismiss: () => void;
 }
 
 export function SuggestionCard({
   suggestion,
+  roles,
   onApprove,
   onDismiss,
 }: SuggestionCardProps) {
+  const accessibleRoles =
+    roles &&
+    suggestion.accessibleToRoles &&
+    suggestion.accessibleToRoles.length > 0
+      ? roles.filter((r) => suggestion.accessibleToRoles!.includes(r._id))
+      : [];
   return (
     <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-4 flex items-start gap-4 transition-colors hover:border-blue-300 dark:hover:border-blue-700">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 mt-1">
@@ -46,6 +56,29 @@ export function SuggestionCard({
           )}
           {suggestion.conversationId && (
             <span className="text-gray-400">Conversation</span>
+          )}
+
+          {accessibleRoles.length > 0 && (
+            <span
+              className="px-1.5 py-0.5 rounded font-medium flex items-center gap-1 bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+              title={accessibleRoles.map((r) => r.name).join(", ")}
+            >
+              <Shield className="h-3 w-3" />
+              {accessibleRoles.map((r) => r.name).join(", ")}
+            </span>
+          )}
+
+          {suggestion.expiresAt && (
+            <span
+              className="px-1.5 py-0.5 rounded font-medium flex items-center gap-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+              title={new Date(suggestion.expiresAt).toLocaleString()}
+            >
+              <Clock className="h-3 w-3" />
+              {new Date(suggestion.expiresAt).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              })}
+            </span>
           )}
         </div>
         <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg border border-gray-100 dark:border-gray-800 line-clamp-3 whitespace-pre-wrap">

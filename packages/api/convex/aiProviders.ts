@@ -1,6 +1,11 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalQuery, mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 
 // ---------------------------------------------------------------------------
 // Queries
@@ -51,9 +56,58 @@ export const getDefault = query({
   },
 });
 
+/** Get global token statistics across all providers and the current default model. */
+export const getStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const providers = await ctx.db.query("aiProviders").collect();
+
+    let totalTokensIn = 0;
+    let totalTokensOut = 0;
+    let activeProviderModel = null;
+    let activeProviderName = null;
+
+    for (const p of providers) {
+      totalTokensIn += p.aiTokensIn ?? 0;
+      totalTokensOut += p.aiTokensOut ?? 0;
+      if (p.isDefault && p.type === "language") {
+        activeProviderModel = p.model ?? null;
+        activeProviderName = p.name || p.provider;
+      }
+    }
+
+    return {
+      totalTokensIn,
+      totalTokensOut,
+      activeProvider:
+        activeProviderName && activeProviderModel
+          ? { name: activeProviderName, model: activeProviderModel }
+          : null,
+    };
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Mutations
 // ---------------------------------------------------------------------------
+
+/** Internal: Increment token usage for a provider. */
+export const recordUsage = internalMutation({
+  args: {
+    id: v.id("aiProviders"),
+    tokensIn: v.number(),
+    tokensOut: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const provider = await ctx.db.get(args.id);
+    if (!provider) return;
+
+    await ctx.db.patch(args.id, {
+      aiTokensIn: (provider.aiTokensIn ?? 0) + args.tokensIn,
+      aiTokensOut: (provider.aiTokensOut ?? 0) + args.tokensOut,
+    });
+  },
+});
 
 /** Create (add) a new AI provider. */
 export const create = mutation({

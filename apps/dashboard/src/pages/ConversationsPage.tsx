@@ -6,7 +6,6 @@ import {
   Inbox,
   Loader2,
   MessageSquare,
-  Plus,
   Search,
   Send,
   Sparkles,
@@ -15,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { InlineSuggestionCard } from "../components/artifacts/inline-suggestion-card";
 import { channelColorMap, channelIconMap } from "../components/ChannelIcons";
 import { ContactSuggestionsPanel } from "../components/contact-suggestions";
 import { ConversationDrawer } from "../components/conversation-drawer";
@@ -347,6 +347,7 @@ function ChatPanel({
   onBack: () => void;
 }) {
   const data = useQuery(api.conversations.queries.getWithMessages, { id });
+  const roles = useQuery(api.roles.list);
   const sendMessage = useMutation(api.messages.mutations.sendMessage);
   const updateAISettings = useMutation(
     api.conversations.mutations.updateAISettings,
@@ -662,105 +663,28 @@ function ChatPanel({
       </div>
 
       {/* AI Suggested Actions */}
-      {data.artifactSuggestions?.map((action, idx) => {
-        const actionType =
-          action.type === "update" ? "updateArtifact" : "createArtifact";
-
-        // Badge config per action type
-        const badgeConfig: Record<
-          string,
-          {
-            icon: typeof Plus;
-            label: string;
-            bg: string;
-            border: string;
-            text: string;
-            accent: string;
-          }
-        > = {
-          createArtifact: {
-            icon: Plus,
-            label: "Add",
-            bg: "bg-emerald-50",
-            border: "border-emerald-200",
-            text: "text-emerald-700",
-            accent: "bg-emerald-500",
-          },
-          updateArtifact: {
-            icon: Plus, // or Pen
-            label: "Update",
-            bg: "bg-emerald-50",
-            border: "border-emerald-200",
-            text: "text-emerald-700",
-            accent: "bg-emerald-500",
-          },
-        };
-
-        const badge = badgeConfig[actionType] ?? {
-          icon: Plus,
-          label: actionType,
-          bg: "bg-gray-50",
-          border: "border-gray-200",
-          text: "text-gray-700",
-          accent: "bg-gray-500",
-        };
-        const BadgeIcon = badge.icon;
-
-        return (
-          <div
-            key={idx}
-            className={`px-4 py-3 ${badge.bg} border-t ${badge.border} flex flex-col gap-2`}
-          >
-            {/* Header row */}
-            <div className="flex items-center gap-2">
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold text-white ${badge.accent}`}
-              >
-                <BadgeIcon className="h-3 w-3" />
-                {badge.label}
-              </span>
-              <span className={`text-xs font-medium ${badge.text}`}>
-                Memory / Fact
-              </span>
-              <div className="flex-1" />
-              <Button
-                size="sm"
-                onClick={() =>
-                  executeSuggestedActionMut({
-                    suggestionId: action._id,
-                  })
-                }
-                className={`h-6 px-2.5 text-[10px] font-semibold ${badge.accent} hover:opacity-90`}
-              >
-                Approve
-              </Button>
-              <button
-                type="button"
-                onClick={() =>
-                  dismissSuggestedActionMut({
-                    suggestionId: action._id,
-                  })
-                }
-                className="text-gray-400 hover:text-gray-600 shrink-0"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            {/* Field details */}
-            <div className="flex flex-col gap-1.5 pl-1">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                  value
-                </span>
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {action.value}
-                </span>
-              </div>
-            </div>
-          </div>
-        );
-      })}
+      {data.artifactSuggestions && data.artifactSuggestions.length > 0 && (
+        <div className="flex flex-col border-t border-gray-200 dark:border-gray-800 bg-emerald-50/50 dark:bg-emerald-950/20">
+          {data.artifactSuggestions.map((action, idx) => (
+            <InlineSuggestionCard
+              key={action._id || idx}
+              suggestion={action}
+              roles={roles}
+              onApprove={() =>
+                executeSuggestedActionMut({
+                  suggestionId: action._id as Id<"artifactSuggestions">,
+                })
+              }
+              onDismiss={() =>
+                dismissSuggestedActionMut({
+                  suggestionId: action._id as Id<"artifactSuggestions">,
+                })
+              }
+              className="px-4 border-b border-gray-200 dark:border-gray-800/50 last:border-b-0"
+            />
+          ))}
+        </div>
+      )}
 
       {/* Suggested Reply */}
       {data.suggestedReply && (

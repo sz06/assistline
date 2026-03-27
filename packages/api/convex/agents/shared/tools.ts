@@ -51,3 +51,56 @@ export function createForwardFactsTool({
     },
   });
 }
+
+/**
+ * Search the user's stored artifacts (facts, preferences, information).
+ * Used by both Dispatcher and Chatter when they need context to answer a question or process a message.
+ */
+export function createSearchArtifactsTool() {
+  return createTool<{ query: string }, string, ToolCtx<DataModel>>({
+    description:
+      'Search the user\'s stored artifacts for facts, preferences, addresses, relationships, etc. Use this whenever you need context about the user. Provide a clear search query, e.g. "home address" or "dietary preferences".',
+    inputSchema: z.object({
+      query: z
+        .string()
+        .describe(
+          "The semantic search query to find relevant facts about the user.",
+        ),
+    }),
+    execute: async (ctx, { query }): Promise<string> => {
+      const embedding = await ctx.runAction(internal.ai.embeddings.embedText, {
+        text: query,
+      });
+
+      if (!embedding) {
+        return "Search failed: could not generate embedding for query.";
+      }
+
+      const searchResults = await ctx.vectorSearch(
+        "artifacts",
+        "by_embedding",
+        {
+          vector: embedding,
+          limit: 10,
+        },
+      );
+
+      // Filter to meaningful relevance scores
+      const relevantResults = searchResults.filter((r) => r._score >= 0.5);
+
+      if (relevantResults.length === 0) {
+        return "No relevant facts found for this query.";
+      }
+
+      const docs = await ctx.runQuery(internal.artifacts.fetchByIds, {
+        ids: relevantResults.map((r) => r._id),
+      });
+
+      if (docs.length === 0) {
+        return "No relevant facts found for this query.";
+      }
+
+      return docs.map((d) => `- ${d.value}`).join("\n");
+    },
+  });
+}

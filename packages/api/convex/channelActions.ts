@@ -279,10 +279,30 @@ export const startWhatsAppPairing = internalAction({
       const message =
         error instanceof Error ? error.message : "Unknown pairing error";
       console.error(`[pairing] ✗ ${message}`);
-      await ctx.runMutation(internal.channels.internalSetError, {
-        id: args.channelId,
-        error: message,
-      });
+
+      // If the channel was previously connected (has connectedAt), don't clobber
+      // its status with an error — restore it to connected instead. This prevents
+      // a QR timeout on a re-pair attempt from breaking an otherwise working channel.
+      const existingChannel = await ctx.runQuery(
+        internal.channels.internalGet,
+        {
+          id: args.channelId,
+        },
+      );
+      if (existingChannel?.connectedAt && existingChannel?.phoneNumber) {
+        console.warn(
+          `[pairing] Channel was previously connected — restoring to 'connected' instead of 'error'`,
+        );
+        await ctx.runMutation(internal.channels.internalSetConnected, {
+          id: args.channelId,
+          phoneNumber: existingChannel.phoneNumber,
+        });
+      } else {
+        await ctx.runMutation(internal.channels.internalSetError, {
+          id: args.channelId,
+          error: message,
+        });
+      }
     }
   },
 });

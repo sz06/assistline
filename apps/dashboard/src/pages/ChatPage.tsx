@@ -1,12 +1,14 @@
 import { useUIMessages } from "@convex-dev/agent/react";
 import { api, type Id } from "@repo/api";
 import { Button, Input } from "@repo/ui";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import {
+  ArrowLeft,
   Bot,
   Loader2,
   MessageSquarePlus,
   Pencil,
+  Search,
   Send,
   Sparkles,
   Trash2,
@@ -16,9 +18,23 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { InlineSuggestionCard } from "../components/artifacts/inline-suggestion-card";
+import { useDebounce } from "../hooks/use-debounce";
 
 export function ChatPage() {
-  const sessions = useQuery(api.chatSessions.list);
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
+
+  const {
+    results: sessions,
+    status: paginationStatus,
+    loadMore,
+  } = usePaginatedQuery(
+    api.chatSessions.listPaginated,
+    { search: debouncedSearch || undefined },
+    { initialNumItems: 20 },
+  );
+
   const createSession = useMutation(api.chatSessions.create);
   const removeSession = useMutation(api.chatSessions.remove);
   const renameSession = useMutation(api.chatSessions.rename);
@@ -33,12 +49,39 @@ export function ChatPage() {
   const [renamingId, setRenamingId] = useState<Id<"chatSessions"> | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
+  // Infinite scroll sentinel
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const handleIntersection = useCallback(
+    (entries: IntersectionObserverEntry[]) => {
+      if (entries[0]?.isIntersecting && paginationStatus === "CanLoadMore") {
+        loadMore(20);
+      }
+    },
+    [paginationStatus, loadMore],
+  );
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(handleIntersection, {
+      rootMargin: "200px",
+    });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [handleIntersection]);
+
   // Resolve the active session
   const activeSession = sessions?.find((s) => s._id === activeSessionId);
 
-  // Auto-select newest session when sessions load
+  // Auto-select newest session on initial load only (not when user presses back)
+  const hasAutoSelected = useRef(false);
   useEffect(() => {
-    if (!activeSessionId && sessions && sessions.length > 0) {
+    if (
+      !hasAutoSelected.current &&
+      !activeSessionId &&
+      sessions &&
+      sessions.length > 0
+    ) {
+      hasAutoSelected.current = true;
       setActiveSessionId(sessions[0]._id);
     }
   }, [sessions, activeSessionId]);
@@ -85,8 +128,13 @@ export function ChatPage() {
   return (
     <div className="flex h-full">
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-      <aside className="w-64 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 flex flex-col">
-        <div className="p-3 border-b border-gray-200 dark:border-gray-800">
+      {/* On mobile: full width when no session selected; hidden when one is selected */}
+      <aside
+        className={`w-full md:w-64 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 flex flex-col ${
+          activeSessionId ? "hidden md:flex" : "flex"
+        }`}
+      >
+        <div className="p-3 border-b border-gray-200 dark:border-gray-800 flex flex-col gap-2">
           <Button
             onClick={handleNewChat}
             className="w-full justify-center"
@@ -95,16 +143,36 @@ export function ChatPage() {
             <MessageSquarePlus className="h-4 w-4 mr-2" />
             New Chat
           </Button>
+          {/* Search bar */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search chats…"
+              className="pl-8 h-8 text-sm"
+              data-testid="chat-search-input"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {sessions === undefined ? (
+          {paginationStatus === "LoadingFirstPage" ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
             </div>
           ) : sessions.length === 0 ? (
             <p className="text-center text-sm text-gray-400 dark:text-gray-500 py-8 px-3">
-              No chats yet
+              {search ? "No chats match your search" : "No chats yet"}
             </p>
           ) : (
             <div className="py-1">
@@ -129,13 +197,27 @@ export function ChatPage() {
                   onDelete={() => handleDelete(s._id)}
                 />
               ))}
+
+              {/* Infinite scroll sentinel */}
+              <div ref={sentinelRef} className="h-1" />
+
+              {paginationStatus === "LoadingMore" && (
+                <div className="flex justify-center py-3">
+                  <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                </div>
+              )}
             </div>
           )}
         </div>
       </aside>
 
       {/* ── Main Chat Area ──────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* On mobile: hidden when no session selected; full width when one is selected */}
+      <div
+        className={`flex-1 flex flex-col min-w-0 ${
+          activeSessionId ? "flex" : "hidden md:flex"
+        }`}
+      >
         {activeSession ? (
           <ChatThread
             key={activeSession._id}
@@ -145,6 +227,7 @@ export function ChatPage() {
             onInputChange={setInput}
             onSend={handleSend}
             onKeyDown={handleKeyDown}
+            onBack={() => setActiveSessionId(null)}
           />
         ) : (
           <EmptyState onNewChat={handleNewChat} />
@@ -208,27 +291,28 @@ function SessionItem({
   }
 
   return (
-    <div className="px-2 py-0.5 group">
-      <button
-        type="button"
-        onClick={onSelect}
-        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
+    <div className="px-2 py-0.5">
+      <div
+        className={`group flex items-center w-full rounded-lg transition-colors ${
           isActive
             ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 font-medium"
             : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
         }`}
       >
-        <Bot className="h-4 w-4 shrink-0 opacity-60" />
-        <span className="truncate flex-1">{displayTitle}</span>
-        <span className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+        <button
+          type="button"
+          onClick={onSelect}
+          className="flex-1 flex items-center gap-2 px-3 py-2 text-left text-sm truncate bg-transparent border-none outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset rounded-lg"
+        >
+          <Bot className="h-4 w-4 shrink-0 opacity-60" />
+          <span className="truncate">{displayTitle}</span>
+        </button>
+        <div className="hidden group-hover:flex items-center gap-0.5 shrink-0 pr-2">
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onStartRename();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onStartRename();
             }}
             className="p-1 rounded text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
             title="Rename"
@@ -241,16 +325,13 @@ function SessionItem({
               e.stopPropagation();
               onDelete();
             }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") onDelete();
-            }}
             className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
             title="Delete"
           >
             <Trash2 className="h-3 w-3" />
           </button>
-        </span>
-      </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -264,16 +345,19 @@ function ChatThread({
   onInputChange,
   onSend,
   onKeyDown,
+  onBack,
 }: {
   session: {
     _id: Id<"chatSessions">;
     threadId: string;
+    title?: string;
   };
   input: string;
   sending: boolean;
   onInputChange: (v: string) => void;
   onSend: () => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
+  onBack: () => void;
 }) {
   const { results: messages, status } = useUIMessages(
     api.chatSessions.listThreadMessages,
@@ -284,6 +368,7 @@ function ChatThread({
   const artifactSuggestions = useQuery(api.artifactSuggestions.queries.list, {
     sessionId: session._id,
   });
+  const roles = useQuery(api.roles.list);
 
   const dismissSuggestedAction = useMutation(
     api.artifactSuggestions.mutations.dismiss,
@@ -310,6 +395,20 @@ function ChatThread({
 
   return (
     <>
+      {/* Mobile header — back button + session title */}
+      <div className="md:hidden flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shrink-0">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+          {session.title ?? "Untitled Chat"}
+        </span>
+      </div>
+
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4">
         {isLoading ? (
@@ -347,56 +446,20 @@ function ChatThread({
       {/* Suggested Actions Banner */}
       {artifactSuggestions && artifactSuggestions.length > 0 && (
         <div className="flex flex-col border-t border-gray-200 dark:border-gray-800 bg-emerald-50/50 dark:bg-emerald-950/20">
-          {artifactSuggestions.map((action, idx) => {
-            const isUpdate = action.type === "update";
-
-            return (
-              <div
-                key={idx}
-                className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 md:px-8 py-3 border-b border-gray-200 dark:border-gray-800/50 last:border-b-0"
-              >
-                <div className="flex items-start gap-3 flex-1">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 mt-0.5 sm:mt-0">
-                    <Sparkles className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-0.5">
-                      {isUpdate ? "Fact Updated" : "Fact Discovered"}
-                    </p>
-                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                      {action.value}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      dismissSuggestedAction({
-                        suggestionId: action._id,
-                      })
-                    }
-                    className="h-8 pr-3 pl-2.5 text-xs text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400"
-                  >
-                    <X className="h-3.5 w-3.5 mr-1" />
-                    Dismiss
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      executeSuggestedAction({
-                        suggestionId: action._id,
-                      })
-                    }
-                    className="h-8 px-4 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors"
-                  >
-                    Approve
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
+          {artifactSuggestions.map((action, idx) => (
+            <InlineSuggestionCard
+              key={action._id || idx}
+              suggestion={action}
+              roles={roles}
+              onApprove={() =>
+                executeSuggestedAction({ suggestionId: action._id })
+              }
+              onDismiss={() =>
+                dismissSuggestedAction({ suggestionId: action._id })
+              }
+              className="px-4 md:px-8 border-b border-gray-200 dark:border-gray-800/50 last:border-b-0"
+            />
+          ))}
         </div>
       )}
 
