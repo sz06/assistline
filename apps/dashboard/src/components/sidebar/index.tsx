@@ -124,7 +124,7 @@ function SidebarNavGroup({
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
-          className="group flex w-full items-center justify-between px-3 py-1.5 text-[11px] font-bold text-gray-500 uppercase tracking-widest hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+          className="group flex w-full items-center justify-between px-4 py-1.5 text-[11px] font-bold text-gray-500 uppercase tracking-widest hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
         >
           {group.title}
           <ChevronDown
@@ -146,7 +146,7 @@ function SidebarNavGroup({
                 type="button"
                 onClick={() => onNavigate(link.href)}
                 className={cn(
-                  "relative flex w-full items-center gap-3 px-3 py-2 text-sm font-medium transition-all duration-200 active:scale-[0.98] outline-none",
+                  "relative flex w-full items-center gap-3 px-4 py-2 text-sm font-medium transition-all duration-200 active:scale-[0.98] outline-none",
                   isActive
                     ? "bg-blue-600/10 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400"
                     : "text-gray-600 hover:bg-gray-100/80 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800/50 dark:hover:text-gray-100",

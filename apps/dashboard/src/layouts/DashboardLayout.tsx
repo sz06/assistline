@@ -196,7 +196,7 @@ export function DashboardLayout() {
   return (
     <div className="flex h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">
       {/* Desktop Sidebar */}
-      <div className="hidden md:flex w-64 shrink-0">
+      <div className="hidden md:flex w-56 shrink-0">
         <Sidebar {...sidebarProps} />
       </div>
 
