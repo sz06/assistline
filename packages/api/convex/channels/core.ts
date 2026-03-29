@@ -82,9 +82,9 @@ export const create = mutation({
 
 /** Request pairing — sets status to "pairing" and kicks off the pairing action. */
 export const requestPairing = mutation({
-  args: { 
+  args: {
     id: v.id("channels"),
-    phoneNumber: v.optional(v.string())
+    phoneNumber: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const channel = await ctx.db.get(args.id);

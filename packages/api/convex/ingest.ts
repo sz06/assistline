@@ -259,7 +259,8 @@ export const handleMatrixEvent = internalAction({
       memberCount: args.memberCount,
       participants: args.participants,
       topic: args.topic,
-      roomName: args.roomName && !isMatrixId(args.roomName) ? args.roomName : undefined,
+      roomName:
+        args.roomName && !isMatrixId(args.roomName) ? args.roomName : undefined,
       senderName: args.senderName,
       senderAvatarUrl: args.senderAvatarUrl,
     });

@@ -2,6 +2,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { extractSenderInfo } from "../utils/contacts";
+import { syncContactHandles } from "../contacts";
 
 // ---------------------------------------------------------------------------
 // Message type union — shared across insert paths
@@ -242,6 +243,22 @@ export async function findMessageByEventId(
 // Upsert sender contact from Matrix identity
 // ---------------------------------------------------------------------------
 
+/**
+ * Automatic contact generation and enrichment function that runs behind the scenes 
+ * whenever a new inbound message is received.
+ *
+ * Intercepts the raw Matrix Sender ID of incoming messages (e.g. `@whatsapp_14165551234:matrix.local`) 
+ * and performs the following tasks:
+ * 
+ * 1. Automatic Contact Creation: If this is the first time the person has messaged, 
+ *    it creates a new `contacts` and `contactIdentities` record so they instantly 
+ *    appear in the dashboard.
+ * 2. Handle Parsing (Phone/Email Extraction): Automatically parses the Matrix ID to logically
+ *    extract their E.164 phone number, name, or metadata, inserting it into `contactHandles`.
+ * 3. Opportunistic Updates ("Upsert"): If the contact exists but is missing an avatar, display 
+ *    name, or phone number dynamically provided by the recent event, it opportunistically patches 
+ *    the contact record to add the missing information without overriding hand-entered data.
+ */
 async function upsertSenderContact(
   ctx: MutationCtx,
   args: {
@@ -263,7 +280,6 @@ async function upsertSenderContact(
   if (!existingIdentity) {
     const contactId = await ctx.db.insert("contacts", {
       avatarUrl: args.senderAvatarUrl,
-      phoneNumbers: phone ? [{ label: "Mobile", value: phone }] : undefined,
       otherNames: otherName ? [otherName] : undefined,
       lastUpdateAt: Date.now(),
     });
@@ -272,16 +288,36 @@ async function upsertSenderContact(
       matrixId: args.sender,
       platform,
     });
+
+    // Also sync to the new handles table
+    if (phone) {
+      await syncContactHandles(ctx, contactId, [
+        { label: "Mobile", value: phone },
+      ]);
+    }
   } else {
     const contact = await ctx.db.get(existingIdentity.contactId);
     if (contact) {
       const patch: Record<string, unknown> = {};
 
-      if (
-        (!contact.phoneNumbers || contact.phoneNumbers.length === 0) &&
-        phone
-      ) {
-        patch.phoneNumbers = [{ label: "Mobile", value: phone }];
+      const existingHandles = await ctx.db
+        .query("contactHandles")
+        .withIndex("by_contactId", (q) => q.eq("contactId", contact._id))
+        .collect();
+
+      const hasPhone = existingHandles.some((h) => h.type === "phone");
+
+      if (!hasPhone && phone) {
+        let formattedPhone = phone.replace(/[\s\-()]/g, "");
+        if (/^\d+$/.test(formattedPhone)) {
+          formattedPhone = `+${formattedPhone}`;
+        }
+        await ctx.db.insert("contactHandles", {
+          contactId: contact._id,
+          type: "phone",
+          value: formattedPhone,
+          label: "Mobile",
+        });
       }
 
       if (!contact.avatarUrl && args.senderAvatarUrl) {

@@ -35,14 +35,12 @@ type ColumnKey =
 type SortField = "name" | "company" | "created" | "updated";
 type SortDir = "asc" | "desc";
 
-interface PhoneEntry {
-  label?: string;
-  value: string;
-}
 
-interface EmailEntry {
-  label?: string;
+interface ContactHandle {
+  _id: Id<"contactHandles">;
+  type: "phone" | "email" | "facebook" | "instagram" | "telegram";
   value: string;
+  label?: string;
 }
 
 interface Contact {
@@ -51,8 +49,7 @@ interface Contact {
   name?: string;
   nickname?: string;
   otherNames?: string[];
-  phoneNumbers?: PhoneEntry[];
-  emails?: EmailEntry[];
+  handles?: ContactHandle[];
   company?: string;
   jobTitle?: string;
   birthday?: string;
@@ -251,12 +248,16 @@ export function ContactsPage() {
       list = contacts.filter((c) => {
         const n = displayName(c.name, c.nickname).toLowerCase();
         const comp = (c.company ?? "").toLowerCase();
-        const phones = (c.phoneNumbers ?? [])
-          .map((p) => p.value)
+        const phones = (
+          c.handles?.filter((h: ContactHandle) => h.type === "phone") ?? []
+        )
+          .map((p: ContactHandle) => p.value)
           .join(" ")
           .toLowerCase();
-        const emails = (c.emails ?? [])
-          .map((e) => e.value)
+        const emails = (
+          c.handles?.filter((h: ContactHandle) => h.type === "email") ?? []
+        )
+          .map((e: ContactHandle) => e.value)
           .join(" ")
           .toLowerCase();
         return (
@@ -676,8 +677,8 @@ function ContactRow({
     contact.otherNames,
   );
   const gradient = pickGradient(name);
-  const primaryPhone = contact.phoneNumbers?.[0]?.value;
-  const primaryEmail = contact.emails?.[0]?.value;
+  const primaryPhone = contact.handles?.find((h) => h.type === "phone")?.value;
+  const primaryEmail = contact.handles?.find((h) => h.type === "email")?.value;
   const roleNames = (contact.roles ?? [])
     .map((id) => roleMap[String(id)])
     .filter(Boolean);

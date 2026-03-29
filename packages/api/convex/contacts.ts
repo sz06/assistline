@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { internalQuery, mutation, query } from "./_generated/server";
 
@@ -20,8 +21,6 @@ const contactFields = {
   name: v.optional(v.string()),
   nickname: v.optional(v.string()),
   otherNames: v.optional(v.array(v.string())),
-  phoneNumbers: v.optional(v.array(phoneNumberValidator)),
-  emails: v.optional(v.array(emailValidator)),
   company: v.optional(v.string()),
   jobTitle: v.optional(v.string()),
   birthday: v.optional(v.string()),
@@ -58,8 +57,77 @@ export interface ProfileShape {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+export async function syncContactHandles(
+  ctx: any,
+  contactId: Id<"contacts">,
+  phoneNumbers?: { label?: string; value: string }[],
+  emails?: { label?: string; value: string }[],
+) {
+  // Clear existing handles
+  const existingHandles = await ctx.db
+    .query("contactHandles")
+    .withIndex("by_contactId", (q: any) => q.eq("contactId", contactId))
+    .collect();
+
+  for (const handle of existingHandles) {
+    if (handle.type === "phone" && phoneNumbers !== undefined) {
+      await ctx.db.delete(handle._id);
+    }
+    if (handle.type === "email" && emails !== undefined) {
+      await ctx.db.delete(handle._id);
+    }
+  }
+
+  // Insert new ones
+  if (phoneNumbers !== undefined) {
+    for (const phone of phoneNumbers) {
+      let formattedPhone = phone.value.replace(/[\s\-()]/g, "");
+      if (/^\d+$/.test(formattedPhone)) {
+        formattedPhone = `+${formattedPhone}`;
+      }
+      await ctx.db.insert("contactHandles", {
+        contactId,
+        type: "phone",
+        value: formattedPhone,
+        label: phone.label,
+      });
+    }
+  }
+
+  if (emails !== undefined) {
+    for (const email of emails) {
+      await ctx.db.insert("contactHandles", {
+        contactId,
+        type: "email",
+        value: email.value.toLowerCase().trim(),
+        label: email.label,
+      });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------
+
+export type ContactHandle = {
+  _id: string;
+  type: "phone" | "email" | "facebook" | "instagram" | "telegram";
+  value: string;
+  label?: string;
+};
+
+async function withHandles(ctx: any, contact: any) {
+  if (!contact) return null;
+  const handles = await ctx.db
+    .query("contactHandles")
+    .withIndex("by_contactId", (q: any) => q.eq("contactId", contact._id))
+    .collect();
+  return { ...contact, handles };
+}
 
 /**
  * List all contacts, sorted in three tiers:
@@ -72,7 +140,12 @@ export const list = query({
   handler: async (ctx) => {
     const contacts = await ctx.db.query("contacts").collect();
 
-    return contacts.sort((a, b) => {
+    // Attach handles
+    const enrichedContacts = await Promise.all(
+      contacts.map((c: any) => withHandles(ctx, c)),
+    );
+
+    return enrichedContacts.sort((a, b) => {
       const aTier = a.name?.trim() ? 0 : a.otherNames?.length ? 1 : 2;
       const bTier = b.name?.trim() ? 0 : b.otherNames?.length ? 1 : 2;
       if (aTier !== bTier) return aTier - bTier;
@@ -90,7 +163,8 @@ export const list = query({
 export const get = query({
   args: { id: v.id("contacts") },
   handler: async (ctx, args) => {
-    return ctx.db.get(args.id);
+    const contact = await ctx.db.get(args.id);
+    return withHandles(ctx, contact);
   },
 });
 
@@ -113,16 +187,21 @@ export const getIdentities = query({
 export const create = mutation({
   args: {
     ...contactFields,
+    phoneNumbers: v.optional(v.array(phoneNumberValidator)),
+    emails: v.optional(v.array(emailValidator)),
     source: v.optional(
       v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
     ),
   },
   handler: async (ctx, args) => {
-    const { source, ...fields } = args;
+    const { source, phoneNumbers, emails, ...fields } = args;
     const id = await ctx.db.insert("contacts", {
       ...fields,
       lastUpdateAt: Date.now(),
     });
+
+    await syncContactHandles(ctx, id, phoneNumbers, emails);
+
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "contact.create",
       source: source ?? "user",
@@ -140,15 +219,21 @@ export const update = mutation({
   args: {
     id: v.id("contacts"),
     ...contactFields,
+    phoneNumbers: v.optional(v.array(phoneNumberValidator)),
+    emails: v.optional(v.array(emailValidator)),
     source: v.optional(
       v.union(v.literal("user"), v.literal("agent"), v.literal("system")),
     ),
   },
   handler: async (ctx, args) => {
-    const { id, source, ...fields } = args;
+    const { id, source, phoneNumbers, emails, ...fields } = args;
     const existing = await ctx.db.get(id);
     if (!existing) throw new Error("Contact not found");
+
     await ctx.db.patch(id, { ...fields, lastUpdateAt: Date.now() });
+
+    await syncContactHandles(ctx, id, phoneNumbers, emails);
+
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "contact.update",
       source: source ?? "user",
@@ -178,6 +263,16 @@ export const remove = mutation({
     for (const identity of identities) {
       await ctx.db.delete(identity._id);
     }
+
+    // Cascade-delete handles
+    const handles = await ctx.db
+      .query("contactHandles")
+      .withIndex("by_contactId", (q) => q.eq("contactId", args.id))
+      .collect();
+    for (const h of handles) {
+      await ctx.db.delete(h._id);
+    }
+
     await ctx.db.delete(args.id);
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
       action: "contact.delete",
@@ -209,13 +304,25 @@ export const getContactProfileQuery = internalQuery({
       }
     }
 
+    const handles = await ctx.db
+      .query("contactHandles")
+      .withIndex("by_contactId", (q) => q.eq("contactId", contactId))
+      .collect();
+
+    const phoneNumbers = handles
+      .filter((h) => h.type === "phone")
+      .map((h) => ({ label: h.label, value: h.value }));
+    const emails = handles
+      .filter((h) => h.type === "email")
+      .map((h) => ({ label: h.label, value: h.value }));
+
     return {
       _id: contact._id,
       name: contact.name,
       nickname: contact.nickname,
       otherNames: contact.otherNames,
-      phoneNumbers: contact.phoneNumbers,
-      emails: contact.emails,
+      phoneNumbers,
+      emails,
       company: contact.company,
       jobTitle: contact.jobTitle,
       birthday: contact.birthday,

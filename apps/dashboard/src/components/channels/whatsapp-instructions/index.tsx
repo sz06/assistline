@@ -36,7 +36,8 @@ export function WhatsAppInstructions({
           Enter this code in WhatsApp
         </p>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Open WhatsApp on your phone → Settings → Linked Devices → Link a Device → Link with phone number instead.
+          Open WhatsApp on your phone → Settings → Linked Devices → Link a
+          Device → Link with phone number instead.
         </p>
       </div>
     </div>

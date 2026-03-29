@@ -156,7 +156,9 @@ export function ChannelFormPage() {
           }
           error={channel.error}
           connectedAt={channel.connectedAt}
-          onPair={(phoneNum?: string) => requestPairing({ id: channelId, phoneNumber: phoneNum })}
+          onPair={(phoneNum?: string) =>
+            requestPairing({ id: channelId, phoneNumber: phoneNum })
+          }
           onCancel={() => disconnectChannel({ id: channelId })}
           onDisconnect={() => disconnectChannel({ id: channelId })}
           onSubmitCookies={(cookies) =>

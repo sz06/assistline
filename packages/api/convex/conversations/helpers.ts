@@ -1,6 +1,7 @@
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { syncContactHandles } from "../contacts";
 
 /**
  * For a DM conversation, find the "other" participant (not the user) and
@@ -67,14 +68,24 @@ export async function resolveOtherParticipantContact(
     if (identity) {
       const contact = await ctx.db.get(identity.contactId);
       if (contact) {
+        const handles = await ctx.db
+          .query("contactHandles")
+          .withIndex("by_contactId", (q) =>
+            q.eq("contactId", identity.contactId),
+          )
+          .collect();
+
+        const phone = handles.find((h) => h.type === "phone")?.value ?? "";
+        const email = handles.find((h) => h.type === "email")?.value ?? "";
+
         return {
           name:
             contact.name?.trim() ||
             contact.otherNames?.[0] ||
             conv.name ||
             "Unknown",
-          phone: contact.phoneNumbers?.[0]?.value ?? "",
-          email: contact.emails?.[0]?.value ?? "",
+          phone,
+          email,
           contactId: identity.contactId,
           matrixId: senderMatrixId,
         };
@@ -84,7 +95,6 @@ export async function resolveOtherParticipantContact(
 
   return null;
 }
-
 
 /**
  * Resolve display details for the "other side" of a conversation.
@@ -235,6 +245,16 @@ export async function executeActionDispatch(
       }
       if (Object.keys(patch).length > 0) {
         await ctx.db.patch(contact._id, { ...patch, lastUpdateAt: Date.now() });
+
+        // Sync contact handles if patched
+        if (patch.emails || patch.phoneNumbers) {
+          await syncContactHandles(
+            ctx,
+            contact._id,
+            patch.phoneNumbers as any,
+            patch.emails as any,
+          );
+        }
       }
       await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
         action: "contact.update",

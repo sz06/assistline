@@ -1,10 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { internalAction, internalMutation } from "../_generated/server";
-import {
-  resolveSelfPuppetId,
-  sleep,
-} from "./utils";
+import { resolveSelfPuppetId, sleep } from "./utils";
 
 /** Set the WhatsApp pairing code in channelData. */
 export const internalSetPairingCode = internalMutation({
@@ -184,7 +181,7 @@ export const startWhatsAppPairing = internalAction({
 
           // Look for pairing code in the bridge bot's text response
           const text = event.content?.body || "";
-          
+
           // Mautrix-WhatsApp usually sends a message like:
           // "Your pairing code is 1234-5678" or similar.
           // We look for an 8 character alphanumeric code.

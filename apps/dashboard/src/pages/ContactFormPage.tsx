@@ -113,8 +113,26 @@ export function ContactFormPage() {
         nickname: contact.nickname ?? "",
         otherNames: contact.otherNames ?? [],
         roles: (contact.roles ?? []).map(String),
-        phoneNumbers: contact.phoneNumbers ?? [],
-        emails: contact.emails ?? [],
+        phoneNumbers:
+          contact.handles
+            ?.filter(
+              (h: { type: string; label?: string; value: string }) =>
+                h.type === "phone",
+            )
+            .map((h: { type: string; label?: string; value: string }) => ({
+              label: h.label ?? "",
+              value: h.value,
+            })) ?? [],
+        emails:
+          contact.handles
+            ?.filter(
+              (h: { type: string; label?: string; value: string }) =>
+                h.type === "email",
+            )
+            .map((h: { type: string; label?: string; value: string }) => ({
+              label: h.label ?? "",
+              value: h.value,
+            })) ?? [],
         company: contact.company ?? "",
         jobTitle: contact.jobTitle ?? "",
         birthday: contact.birthday ?? "",

@@ -53,22 +53,6 @@ export default defineSchema({
     otherNames: v.optional(v.array(v.string())),
     roles: v.optional(v.array(v.id("roles"))),
     avatarUrl: v.optional(v.string()),
-    phoneNumbers: v.optional(
-      v.array(
-        v.object({
-          label: v.optional(v.string()),
-          value: v.string(),
-        }),
-      ),
-    ),
-    emails: v.optional(
-      v.array(
-        v.object({
-          label: v.optional(v.string()),
-          value: v.string(),
-        }),
-      ),
-    ),
     company: v.optional(v.string()),
     jobTitle: v.optional(v.string()),
     birthday: v.optional(v.string()),
@@ -82,6 +66,21 @@ export default defineSchema({
     platform: v.optional(v.string()),
   })
     .index("by_matrixId", ["matrixId"])
+    .index("by_contactId", ["contactId"]),
+  contactHandles: defineTable({
+    contactId: v.id("contacts"),
+    type: v.union(
+      v.literal("phone"),
+      v.literal("email"),
+      v.literal("facebook"),
+      v.literal("instagram"),
+      v.literal("telegram"),
+    ),
+    value: v.string(), // Normalized (lowercase email, strict E.164 phone)
+    label: v.optional(v.string()), // e.g., "Work", "Personal"
+  })
+    .index("by_value", ["value"])
+    .index("by_type_and_value", ["type", "value"])
     .index("by_contactId", ["contactId"]),
   conversations: defineTable({
     matrixRoomId: v.string(), // Matrix room ID for this conversation
