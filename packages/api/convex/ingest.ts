@@ -14,6 +14,11 @@ import { internalAction, internalMutation } from "./_generated/server";
 // Conversation metadata sync (called by the listener after fetching room state)
 // ---------------------------------------------------------------------------
 
+function isMatrixId(str: string): boolean {
+  const trimmed = str.trim();
+  return trimmed.startsWith("@") || trimmed.startsWith("!");
+}
+
 export const handleConversationMeta = internalMutation({
   args: {
     matrixRoomId: v.string(),
@@ -32,14 +37,37 @@ export const handleConversationMeta = internalMutation({
       )
       .first();
 
-    if (!conversation) return null;
+    if (!conversation) {
+      // Only create a conversation if there's at least one real participant
+      // (i.e. this isn't just a bot admin DM room)
+      if (args.participants.length === 0) return null;
+
+      const rawName = args.name;
+      const cleanName = rawName && !isMatrixId(rawName) ? rawName : undefined;
+
+      await ctx.db.insert("conversations", {
+        matrixRoomId: args.matrixRoomId,
+        channelId: args.channelId,
+        memberCount: args.memberCount,
+        participants: args.participants,
+        topic: args.topic,
+        name: cleanName,
+        avatarUrl: args.avatarUrl,
+        unreadCount: 0,
+        updatedAt: Date.now(),
+      });
+      return null;
+    }
+
+    const rawName = args.name;
+    const cleanName = rawName && !isMatrixId(rawName) ? rawName : undefined;
 
     await ctx.db.patch(conversation._id, {
       channelId: args.channelId,
       memberCount: args.memberCount,
       participants: args.participants,
       topic: args.topic ?? conversation.topic,
-      name: args.name ?? conversation.name,
+      name: cleanName ?? conversation.name,
       avatarUrl: args.avatarUrl ?? conversation.avatarUrl,
     });
 
@@ -50,9 +78,13 @@ export const handleConversationMeta = internalMutation({
 // ---------------------------------------------------------------------------
 // Bridge bot prefixes — used to detect bridge disconnect notices
 // ---------------------------------------------------------------------------
-const BRIDGE_BOT_PREFIXES: Record<string, "whatsapp" | "telegram"> = {
+const BRIDGE_BOT_PREFIXES: Record<
+  string,
+  "whatsapp" | "telegram" | "facebook"
+> = {
   "@whatsappbot:": "whatsapp",
   "@telegrambot:": "telegram",
+  "@metabot:": "facebook",
 };
 
 // ---------------------------------------------------------------------------
@@ -124,7 +156,7 @@ export const handleMatrixEvent = internalAction({
     if (content.msgtype === "m.notice") {
       const body = ((content.body as string) ?? "").toLowerCase();
 
-      let bridgePlatform: "whatsapp" | "telegram" | undefined;
+      let bridgePlatform: "whatsapp" | "telegram" | "facebook" | undefined;
       for (const [prefix, platformType] of Object.entries(
         BRIDGE_BOT_PREFIXES,
       )) {
@@ -146,7 +178,7 @@ export const handleMatrixEvent = internalAction({
           console.log(
             `[ingest] ⚠ Bridge disconnect detected for ${bridgePlatform}: ${errorMsg}`,
           );
-          await ctx.runMutation(internal.channels.setBridgeDisconnected, {
+          await ctx.runMutation(internal.channels.core.setBridgeDisconnected, {
             id: args.channelId as Id<"channels">,
             error: errorMsg,
           });
@@ -227,7 +259,7 @@ export const handleMatrixEvent = internalAction({
       memberCount: args.memberCount,
       participants: args.participants,
       topic: args.topic,
-      roomName: args.roomName,
+      roomName: args.roomName && !isMatrixId(args.roomName) ? args.roomName : undefined,
       senderName: args.senderName,
       senderAvatarUrl: args.senderAvatarUrl,
     });

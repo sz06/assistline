@@ -36,7 +36,7 @@ const channelStatusDot: Record<string, string> = {
 };
 
 export function ConversationsPage() {
-  const channels = useQuery(api.channels.list);
+  const channels = useQuery(api.channels.core.list);
   const [selectedChannelId, setSelectedChannelId] =
     useState<Id<"channels"> | null>(null);
 
@@ -296,7 +296,7 @@ export function ConversationsPage() {
                       <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                         {conv.memberCount > 2
                           ? (conv.topic ?? "Group conversation")
-                          : conv.participantDetails.phone || conv.matrixRoomId}
+                          : conv.participantDetails.phone}
                       </p>
                     </div>
                   </button>

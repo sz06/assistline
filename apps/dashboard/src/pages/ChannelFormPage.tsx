@@ -3,18 +3,21 @@ import { api, type Id } from "@repo/api";
 import { Button, Input, Label, PageHeader } from "@repo/ui";
 import { useMutation, useQuery } from "convex/react";
 import { ArrowLeft, Loader2, QrCode, Unplug, X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
 import { z } from "zod";
+import {
+  CHANNEL_TYPE_OPTIONS,
+  CHANNEL_TYPES,
+  type ChannelStatus,
+  type ChannelType,
+  ConnectionSection,
+} from "../components/channels";
 
 // ---------------------------------------------------------------------------
 // Zod Schema
 // ---------------------------------------------------------------------------
-
-const CHANNEL_TYPES = ["whatsapp", "telegram"] as const;
-type ChannelType = (typeof CHANNEL_TYPES)[number];
-type ChannelStatus = "disconnected" | "pairing" | "connected" | "error";
 
 const channelFormSchema = z.object({
   type: z.enum(CHANNEL_TYPES),
@@ -22,11 +25,6 @@ const channelFormSchema = z.object({
 });
 
 type ChannelFormData = z.infer<typeof channelFormSchema>;
-
-const CHANNEL_TYPE_OPTIONS: { value: ChannelType; label: string }[] = [
-  { value: "whatsapp", label: "WhatsApp" },
-  { value: "telegram", label: "Telegram" },
-];
 
 // ---------------------------------------------------------------------------
 // Channel Form Page
@@ -40,14 +38,15 @@ export function ChannelFormPage() {
 
   // For Edit mode, fetch the channel data
   const channel = useQuery(
-    api.channels.get,
+    api.channels.core.get,
     isEditing && channelId ? { id: channelId } : "skip",
   );
 
-  const createChannel = useMutation(api.channels.create);
-  const updateChannel = useMutation(api.channels.update);
-  const requestPairing = useMutation(api.channels.requestPairing);
-  const disconnectChannel = useMutation(api.channels.disconnect);
+  const createChannel = useMutation(api.channels.core.create);
+  const updateChannel = useMutation(api.channels.core.update);
+  const requestPairing = useMutation(api.channels.core.requestPairing);
+  const disconnectChannel = useMutation(api.channels.core.disconnect);
+  const submitMetaCookies = useMutation(api.channels.meta.submitMetaCookies);
 
   const {
     register,
@@ -136,14 +135,33 @@ export function ChannelFormPage() {
       {/* ── Connection Status & Actions (Edit mode only) ── */}
       {isEditing && channel && channelId && (
         <ConnectionSection
+          channelId={channelId}
           status={channelStatus ?? "disconnected"}
-          qrCode={channel.qrCode}
-          phoneNumber={channel.phoneNumber}
+          channelType={channel.type as ChannelType}
+          pairingCode={
+            channel.channelData?.type === "whatsapp"
+              ? channel.channelData.pairingCode
+              : undefined
+          }
+          instructions={
+            channel.channelData?.type === "facebook" ||
+            channel.channelData?.type === "instagram"
+              ? channel.channelData.instructions
+              : undefined
+          }
+          phoneNumber={
+            channel.channelData?.type === "whatsapp"
+              ? channel.channelData.phoneNumber
+              : undefined
+          }
           error={channel.error}
           connectedAt={channel.connectedAt}
-          onPair={() => requestPairing({ id: channelId })}
+          onPair={(phoneNum?: string) => requestPairing({ id: channelId, phoneNumber: phoneNum })}
           onCancel={() => disconnectChannel({ id: channelId })}
           onDisconnect={() => disconnectChannel({ id: channelId })}
+          onSubmitCookies={(cookies) =>
+            submitMetaCookies({ id: channelId, cookies })
+          }
         />
       )}
 
@@ -210,162 +228,6 @@ export function ChannelFormPage() {
           </Button>
         </div>
       </form>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Connection Section (Edit mode)
-// ---------------------------------------------------------------------------
-
-function ConnectionSection({
-  status,
-  qrCode,
-  phoneNumber,
-  error,
-  connectedAt,
-  onPair,
-  onCancel,
-  onDisconnect,
-}: {
-  status: ChannelStatus;
-  qrCode?: string;
-  phoneNumber?: string;
-  error?: string;
-  connectedAt?: number;
-  onPair: () => void;
-  onCancel: () => void;
-  onDisconnect: () => void;
-}) {
-  const statusLabel = {
-    disconnected: {
-      text: "Disconnected",
-      color: "text-gray-500",
-      dot: "bg-gray-400",
-    },
-    pairing: {
-      text: "Pairing…",
-      color: "text-amber-600 dark:text-amber-400",
-      dot: "bg-amber-400 animate-pulse",
-    },
-    connected: {
-      text: "Connected",
-      color: "text-emerald-600 dark:text-emerald-400",
-      dot: "bg-emerald-400",
-    },
-    error: {
-      text: "Error",
-      color: "text-red-600 dark:text-red-400",
-      dot: "bg-red-400",
-    },
-  }[status];
-
-  return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6 mb-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
-            Connection Status
-          </h3>
-          <span
-            className={`inline-flex items-center gap-1.5 text-sm font-medium ${statusLabel.color}`}
-          >
-            <span className={`h-2 w-2 rounded-full ${statusLabel.dot}`} />
-            {statusLabel.text}
-          </span>
-          {phoneNumber && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Phone: {phoneNumber}
-            </p>
-          )}
-          {status === "error" && error && (
-            <p className="text-sm text-red-500 dark:text-red-400 mt-1">
-              {error}
-            </p>
-          )}
-          {status === "connected" && connectedAt && (
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-              Connected since {new Date(connectedAt).toLocaleDateString()} at{" "}
-              {new Date(connectedAt).toLocaleTimeString()}
-            </p>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {status === "disconnected" && (
-            <Button onClick={onPair} variant="outline" size="sm">
-              <QrCode className="h-4 w-4 mr-1.5" />
-              Connect
-            </Button>
-          )}
-          {status === "pairing" && (
-            <Button onClick={onCancel} variant="outline" size="sm">
-              <X className="h-4 w-4 mr-1.5" />
-              Cancel
-            </Button>
-          )}
-          {status === "error" && (
-            <Button onClick={onPair} variant="outline" size="sm">
-              <QrCode className="h-4 w-4 mr-1.5" />
-              Retry
-            </Button>
-          )}
-          {status === "connected" && (
-            <Button onClick={onDisconnect} variant="outline" size="sm">
-              <Unplug className="h-4 w-4 mr-1.5" />
-              Disconnect
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* QR Code (shown during pairing) */}
-      {status === "pairing" && (
-        <div className="mt-6 border-t border-gray-200 dark:border-gray-800 pt-6">
-          <QrCodeDisplay qrCode={qrCode} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// QR Code Display
-// ---------------------------------------------------------------------------
-
-function QrCodeDisplay({ qrCode }: { qrCode?: string }) {
-  if (!qrCode) {
-    return (
-      <div className="flex flex-col items-center justify-center py-8 gap-3">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Generating QR code…
-        </p>
-        <p className="text-xs text-gray-400 dark:text-gray-500">
-          This may take a few seconds
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col items-center gap-4">
-      <div className="bg-white p-4 rounded-xl shadow-inner">
-        <img
-          src={qrCode}
-          alt="WhatsApp QR Code"
-          className="w-64 h-64 image-rendering-pixelated"
-        />
-      </div>
-      <div className="text-center space-y-1">
-        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-          Scan with WhatsApp
-        </p>
-        <p className="text-xs text-gray-500 dark:text-gray-400 max-w-xs">
-          Open WhatsApp → Settings → Linked Devices → Link a Device → Scan this
-          code
-        </p>
-      </div>
     </div>
   );
 }

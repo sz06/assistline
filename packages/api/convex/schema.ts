@@ -1,6 +1,34 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+// ── Per-channel data schemas (discriminated union) ────────────────────────────
+// Each bridge type gets its own typed schema. Exported so mutations/actions
+// can reference the validators without duplicating definitions.
+
+export const whatsAppChannelData = v.object({
+  type: v.literal("whatsapp"),
+  phoneNumber: v.optional(v.string()), // Connected phone number
+  pairingCode: v.optional(v.string()), // Pairing code shown to user during connection
+});
+
+export const metaChannelData = v.object({
+  type: v.union(v.literal("facebook"), v.literal("instagram")),
+  loginId: v.optional(v.string()), // Provisioning API login_id
+  accessToken: v.optional(v.string()), // Matrix access token for cookie delivery
+  instructions: v.optional(v.string()), // Cookie entry prompt text shown to user during pairing
+});
+
+export const telegramChannelData = v.object({
+  type: v.literal("telegram"),
+  // Future Telegram-specific fields go here
+});
+
+export const channelDataValidator = v.union(
+  whatsAppChannelData,
+  metaChannelData,
+  telegramChannelData,
+);
+
 export default defineSchema({
   aiProviders: defineTable({
     provider: v.string(), // "openai", "anthropic", "ollama", etc.
@@ -164,7 +192,12 @@ export default defineSchema({
       searchField: "value",
     }),
   channels: defineTable({
-    type: v.union(v.literal("whatsapp"), v.literal("telegram")),
+    type: v.union(
+      v.literal("whatsapp"),
+      v.literal("telegram"),
+      v.literal("facebook"),
+      v.literal("instagram"),
+    ),
     label: v.string(), // User-friendly name, e.g. "My WhatsApp"
     status: v.union(
       v.literal("disconnected"),
@@ -172,11 +205,12 @@ export default defineSchema({
       v.literal("connected"),
       v.literal("error"),
     ),
-    qrCode: v.optional(v.string()), // QR code data string during pairing
-    phoneNumber: v.optional(v.string()), // Connected phone number
     error: v.optional(v.string()), // Error message if status is "error"
     connectedAt: v.optional(v.number()),
     updatedAt: v.number(),
+    selfPuppetId: v.optional(v.string()), // Matrix user ID of the user's own bridge puppet
+    // Platform-specific pairing/session data — discriminated by channelData.type
+    channelData: v.optional(channelDataValidator),
   }).index("by_type", ["type"]),
   roles: defineTable({
     name: v.string(),

@@ -56,8 +56,8 @@ const STATUS_CONFIG: Record<
 // ---------------------------------------------------------------------------
 
 export function ChannelsPage() {
-  const channels = useQuery(api.channels.list);
-  const removeChannel = useMutation(api.channels.remove);
+  const channels = useQuery(api.channels.core.list);
+  const removeChannel = useMutation(api.channels.core.remove);
   const navigate = useNavigate();
 
   const [deletingId, setDeletingId] = useState<Id<"channels"> | null>(null);

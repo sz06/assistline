@@ -1,26 +1,37 @@
-/// <reference types="node" />
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
-import { internalAction } from "./_generated/server";
+import { internal } from "../_generated/api";
+import { internalAction, internalMutation } from "../_generated/server";
+import {
+  resolveSelfPuppetId,
+  sleep,
+} from "./utils";
 
-// ---------------------------------------------------------------------------
-// WhatsApp Pairing Action
-//
-// Triggered when a channel enters "pairing" status. This action:
-//   1. Logs into Dendrite as the bot user
-//   2. Creates a DM room with @whatsappbot
-//   3. Sends "login qr"
-//   4. Polls for the QR code image and writes it to the channel
-//   5. Polls for connection confirmation
-// ---------------------------------------------------------------------------
+/** Set the WhatsApp pairing code in channelData. */
+export const internalSetPairingCode = internalMutation({
+  args: {
+    id: v.id("channels"),
+    pairingCode: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const ch = await ctx.db.get(args.id);
+    if (!ch) throw new Error("Channel not found");
+    const base = ch.channelData ?? { type: ch.type as "whatsapp" };
+    await ctx.db.patch(args.id, {
+      channelData:
+        base.type === "whatsapp"
+          ? { ...base, pairingCode: args.pairingCode }
+          : base, // WA-only field; no-op for other types
+      updatedAt: Date.now(),
+    });
+  },
+});
 
-const POLL_INTERVAL_MS = 2000;
-const QR_POLL_INTERVAL_MS = 5000; // Slower polling once QR is displayed (avoids UI flicker)
-const QR_TIMEOUT_POLLS = 30; // 60 seconds to get QR code
+const PAIRING_POLL_INTERVAL_MS = 3000;
+const PAIRING_TIMEOUT_POLLS = 20; // 60 seconds to get pairing code
 const CONNECTION_TIMEOUT_POLLS = 36; // 3 minutes to scan (at 5s interval)
 
 export const startWhatsAppPairing = internalAction({
-  args: { channelId: v.id("channels") },
+  args: { channelId: v.id("channels"), phoneNumber: v.string() },
   handler: async (ctx, args) => {
     const homeserver =
       process.env.MATRIX_HOMESERVER_URL ?? "http://localhost:8008";
@@ -97,10 +108,14 @@ export const startWhatsAppPairing = internalAction({
       // When re-pairing (e.g. after BAD_CREDENTIALS), the bridge
       // still holds the old session. Sending logout first clears it.
       // The bridge requires: !wa logout <loginID> (phone digits)
-      const channel = await ctx.runQuery(internal.channels.internalGet, {
+      const channel = await ctx.runQuery(internal.channels.core.internalGet, {
         id: args.channelId,
       });
-      const loginId = channel?.phoneNumber?.replace(/\D/g, "");
+      const waData =
+        channel?.channelData?.type === "whatsapp"
+          ? channel.channelData
+          : undefined;
+      const loginId = waData?.phoneNumber?.replace(/\D/g, "");
 
       if (loginId) {
         const logoutTxnId = `logout_${Date.now()}`;
@@ -124,7 +139,7 @@ export const startWhatsAppPairing = internalAction({
         }
       }
 
-      // ── Step 3b: Send "login qr" command ────────────────────────
+      // ── Step 3b: Send "login <phone>" command ────────────────────────
       const txnId = `pair_${Date.now()}`;
       const sendRes = await matrixFetch(
         `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txnId}`,
@@ -132,7 +147,7 @@ export const startWhatsAppPairing = internalAction({
           method: "PUT",
           body: JSON.stringify({
             msgtype: "m.text",
-            body: "!wa login qr",
+            body: `!wa login ${args.phoneNumber}`,
           }),
         },
       );
@@ -141,14 +156,14 @@ export const startWhatsAppPairing = internalAction({
         const err = await sendRes.text();
         throw new Error(`Failed to send login command: ${err}`);
       }
-      console.log("[pairing] ✓ Sent '!wa login qr' command");
+      console.log(`[pairing] ✓ Sent '!wa login ${args.phoneNumber}' command`);
 
-      // ── Step 4: Poll for QR code ───────────────────────────────
-      console.log("[pairing] Polling for QR code…");
-      let qrImageUrl: string | null = null;
+      // ── Step 4: Poll for Pairing Code ───────────────────────────────
+      console.log("[pairing] Polling for pairing code from bridge…");
+      let pairingCode: string | null = null;
 
-      for (let i = 0; i < QR_TIMEOUT_POLLS; i++) {
-        await sleep(POLL_INTERVAL_MS);
+      for (let i = 0; i < PAIRING_TIMEOUT_POLLS; i++) {
+        await sleep(PAIRING_POLL_INTERVAL_MS);
 
         const messagesRes = await matrixFetch(
           `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/messages?dir=b&limit=10`,
@@ -158,14 +173,8 @@ export const startWhatsAppPairing = internalAction({
 
         const messagesData = (await messagesRes.json()) as {
           chunk: Array<{
-            type: string;
             sender: string;
-            content: {
-              msgtype?: string;
-              body?: string;
-              url?: string;
-              info?: { mimetype?: string };
-            };
+            content: { body?: string };
           }>;
         };
 
@@ -173,40 +182,41 @@ export const startWhatsAppPairing = internalAction({
           // Skip our own messages
           if (event.sender === botUserId) continue;
 
-          // Look for QR code image from bridge bot
-          if (event.content?.msgtype === "m.image" && event.content?.url) {
-            // Convert mxc:// URL to HTTP URL
-            const mxcUrl = event.content.url;
-            const match = mxcUrl.match(/^mxc:\/\/([^/]+)\/(.+)$/);
-            if (match) {
-              qrImageUrl = `${publicHomeserver}/_matrix/media/v3/download/${match[1]}/${match[2]}`;
-              break;
-            }
+          // Look for pairing code in the bridge bot's text response
+          const text = event.content?.body || "";
+          
+          // Mautrix-WhatsApp usually sends a message like:
+          // "Your pairing code is 1234-5678" or similar.
+          // We look for an 8 character alphanumeric code.
+          const codeMatch = text.match(/([A-Z0-9]{4}-[A-Z0-9]{4})/i);
+          if (codeMatch && text.toLowerCase().includes("code")) {
+            pairingCode = codeMatch[1].toUpperCase();
+            break;
           }
         }
 
-        if (qrImageUrl) break;
+        if (pairingCode) break;
       }
 
-      if (!qrImageUrl) {
+      if (!pairingCode) {
         throw new Error(
-          "Timed out waiting for QR code from bridge bot. Make sure mautrix-whatsapp is running.",
+          "Timed out waiting for pairing code from bridge bot. Make sure the phone number is correct and Mautrix is running.",
         );
       }
 
-      console.log(`[pairing] ✓ Got QR code image`);
+      console.log(`[pairing] ✓ Got pairing code: ${pairingCode}`);
 
-      // Write QR code URL to the channel
-      await ctx.runMutation(internal.channels.internalSetQrCode, {
+      // Write Pairing Code to the channel
+      await ctx.runMutation(internal.channels.whatsapp.internalSetPairingCode, {
         id: args.channelId,
-        qrCode: qrImageUrl,
+        pairingCode,
       });
 
       // ── Step 5: Poll for connection confirmation ───────────────
-      console.log("[pairing] Waiting for user to scan QR code…");
+      console.log("[pairing] Waiting for user to enter code in WhatsApp app…");
 
       for (let i = 0; i < CONNECTION_TIMEOUT_POLLS; i++) {
-        await sleep(QR_POLL_INTERVAL_MS);
+        await sleep(5000); // 5s poll interval
 
         const messagesRes = await matrixFetch(
           `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/messages?dir=b&limit=10`,
@@ -233,34 +243,21 @@ export const startWhatsAppPairing = internalAction({
           ) {
             console.log("[pairing] ✓ WhatsApp connected!");
 
-            // Try to extract phone number from the message
+            // Try to extract phone number from the bridge success message
             const phoneMatch = event.content?.body?.match(/\+[\d\s-]+/);
+            const phoneNumber = phoneMatch?.[0]?.trim();
+            const selfPuppetId = await resolveSelfPuppetId({
+              platform: "whatsapp",
+              serverName,
+              userMxid: botUserId,
+            });
 
-            await ctx.runMutation(internal.channels.internalSetConnected, {
+            await ctx.runMutation(internal.channels.core.internalSetConnected, {
               id: args.channelId,
-              phoneNumber: phoneMatch?.[0]?.trim(),
+              channelData: { type: "whatsapp", phoneNumber },
+              selfPuppetId,
             });
             return;
-          }
-
-          // Check for new QR codes (they refresh every ~20s)
-          if (
-            event.content?.msgtype === "m.image" &&
-            (event.content as { url?: string }).url
-          ) {
-            const mxcUrl = (event.content as { url: string }).url;
-            const match = mxcUrl.match(/^mxc:\/\/([^/]+)\/(.+)$/);
-            if (match) {
-              const newQrUrl = `${publicHomeserver}/_matrix/media/v3/download/${match[1]}/${match[2]}`;
-              if (newQrUrl !== qrImageUrl) {
-                qrImageUrl = newQrUrl;
-                await ctx.runMutation(internal.channels.internalSetQrCode, {
-                  id: args.channelId,
-                  qrCode: newQrUrl,
-                });
-                console.log("[pairing] ↻ QR code refreshed");
-              }
-            }
           }
 
           // Check for errors/timeouts from bridge
@@ -273,8 +270,8 @@ export const startWhatsAppPairing = internalAction({
         }
       }
 
-      // If we get here, the user never scanned
-      throw new Error("Pairing timed out — QR code was not scanned");
+      // If we get here, the user never entered the pairing code
+      throw new Error("Pairing timed out — code was not entered");
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Unknown pairing error";
@@ -284,21 +281,24 @@ export const startWhatsAppPairing = internalAction({
       // its status with an error — restore it to connected instead. This prevents
       // a QR timeout on a re-pair attempt from breaking an otherwise working channel.
       const existingChannel = await ctx.runQuery(
-        internal.channels.internalGet,
-        {
-          id: args.channelId,
-        },
+        internal.channels.core.internalGet,
+        { id: args.channelId },
       );
-      if (existingChannel?.connectedAt && existingChannel?.phoneNumber) {
+      const existingWaData =
+        existingChannel?.channelData?.type === "whatsapp"
+          ? existingChannel.channelData
+          : undefined;
+      if (existingChannel?.connectedAt && existingWaData?.phoneNumber) {
         console.warn(
           `[pairing] Channel was previously connected — restoring to 'connected' instead of 'error'`,
         );
-        await ctx.runMutation(internal.channels.internalSetConnected, {
+        await ctx.runMutation(internal.channels.core.internalSetConnected, {
           id: args.channelId,
-          phoneNumber: existingChannel.phoneNumber,
+          channelData: existingWaData,
+          selfPuppetId: existingChannel.selfPuppetId,
         });
       } else {
-        await ctx.runMutation(internal.channels.internalSetError, {
+        await ctx.runMutation(internal.channels.core.internalSetError, {
           id: args.channelId,
           error: message,
         });
@@ -306,7 +306,3 @@ export const startWhatsAppPairing = internalAction({
     }
   },
 });
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}

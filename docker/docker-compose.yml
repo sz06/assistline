@@ -12,6 +12,7 @@ services:
       - ${ASSISTLINE_DATA:-./assistline-data}/dendrite:/var/dendrite
       - ./dendrite.yaml:/etc/dendrite/dendrite.yaml
       - ${ASSISTLINE_DATA:-./assistline-data}/mautrix-whatsapp/registration.yaml:/etc/dendrite/whatsapp-registration.yaml
+      - ${ASSISTLINE_DATA:-./assistline-data}/mautrix-meta/registration.yaml:/etc/dendrite/meta-registration.yaml
     environment:
       - SERVER_NAME=${DENDRITE_SERVER_NAME:-matrix.local}
     networks:
@@ -25,6 +26,19 @@ services:
     entrypoint: ["/bin/sh", "-c", "cd /data && /usr/bin/mautrix-whatsapp --ignore-unsupported-server"]
     volumes:
       - ${ASSISTLINE_DATA:-./assistline-data}/mautrix-whatsapp:/data
+    networks:
+      - assistline-net
+    depends_on:
+      - dendrite
+
+  # 3. Mautrix Meta Bridge (Facebook Messenger + Instagram DMs)
+  mautrix-meta:
+    image: dock.mau.dev/mautrix/meta:latest
+    container_name: mautrix-meta
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c", "cd /data && /usr/bin/mautrix-meta --ignore-unsupported-server"]
+    volumes:
+      - ${ASSISTLINE_DATA:-./assistline-data}/mautrix-meta:/data
     networks:
       - assistline-net
     depends_on:

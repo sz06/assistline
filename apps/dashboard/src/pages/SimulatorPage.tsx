@@ -30,7 +30,7 @@ export function SimulatorPage() {
     {},
     { initialNumItems: 100 },
   );
-  const channels = useQuery(api.channels.list);
+  const channels = useQuery(api.channels.core.list);
   const insertMessage = useMutation(api.messages.mutations.insertMessage);
 
   const [status, setStatus] = useState<

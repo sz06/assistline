@@ -1,11 +1,12 @@
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { internal } from "../_generated/api";
 import {
   internalMutation,
   internalQuery,
   mutation,
   query,
-} from "./_generated/server";
+} from "../_generated/server";
+import { channelDataValidator } from "../schema";
 
 // ---------------------------------------------------------------------------
 // Queries
@@ -21,7 +22,14 @@ export const list = query({
 
 /** Get the first channel matching a given type (e.g. "whatsapp"). */
 export const getByType = query({
-  args: { type: v.union(v.literal("whatsapp"), v.literal("telegram")) },
+  args: {
+    type: v.union(
+      v.literal("whatsapp"),
+      v.literal("telegram"),
+      v.literal("facebook"),
+      v.literal("instagram"),
+    ),
+  },
   handler: async (ctx, args) => {
     return ctx.db
       .query("channels")
@@ -45,7 +53,12 @@ export const get = query({
 /** Create a new channel and set it to "disconnected". */
 export const create = mutation({
   args: {
-    type: v.union(v.literal("whatsapp"), v.literal("telegram")),
+    type: v.union(
+      v.literal("whatsapp"),
+      v.literal("telegram"),
+      v.literal("facebook"),
+      v.literal("instagram"),
+    ),
     label: v.string(),
   },
   handler: async (ctx, args) => {
@@ -69,7 +82,10 @@ export const create = mutation({
 
 /** Request pairing — sets status to "pairing" and kicks off the pairing action. */
 export const requestPairing = mutation({
-  args: { id: v.id("channels") },
+  args: { 
+    id: v.id("channels"),
+    phoneNumber: v.optional(v.string())
+  },
   handler: async (ctx, args) => {
     const channel = await ctx.db.get(args.id);
     if (!channel) throw new Error("Channel not found");
@@ -79,18 +95,25 @@ export const requestPairing = mutation({
 
     await ctx.db.patch(args.id, {
       status: "pairing",
-      qrCode: undefined,
+      channelData: undefined,
       error: undefined,
       updatedAt: Date.now(),
     });
 
     // Schedule the pairing action
     if (channel.type === "whatsapp") {
+      if (!args.phoneNumber) {
+        throw new Error("Phone number is required to pair WhatsApp");
+      }
       await ctx.scheduler.runAfter(
         0,
-        internal.channelActions.startWhatsAppPairing,
-        { channelId: args.id },
+        internal.channels.whatsapp.startWhatsAppPairing,
+        { channelId: args.id, phoneNumber: args.phoneNumber },
       );
+    } else if (channel.type === "facebook" || channel.type === "instagram") {
+      await ctx.scheduler.runAfter(0, internal.channels.meta.startMetaPairing, {
+        channelId: args.id,
+      });
     }
 
     await ctx.scheduler.runAfter(0, internal.auditLogs.log, {
@@ -110,8 +133,7 @@ export const disconnect = mutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.id, {
       status: "disconnected",
-      qrCode: undefined,
-      phoneNumber: undefined,
+      channelData: undefined,
       connectedAt: undefined,
       error: undefined,
       updatedAt: Date.now(),
@@ -130,7 +152,14 @@ export const disconnect = mutation({
 export const update = mutation({
   args: {
     id: v.id("channels"),
-    type: v.optional(v.union(v.literal("whatsapp"), v.literal("telegram"))),
+    type: v.optional(
+      v.union(
+        v.literal("whatsapp"),
+        v.literal("telegram"),
+        v.literal("facebook"),
+        v.literal("instagram"),
+      ),
+    ),
     label: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -183,33 +212,34 @@ export const internalGet = internalQuery({
   },
 });
 
-/** Set QR code data during pairing. */
-export const internalSetQrCode = internalMutation({
+/** Mark channel as connected (clears pairing state, stores bridge-specific data). */
+export const internalSetConnected = internalMutation({
   args: {
     id: v.id("channels"),
-    qrCode: v.string(),
+    selfPuppetId: v.optional(v.string()),
+    channelData: v.optional(channelDataValidator),
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.id, {
-      qrCode: args.qrCode,
+      status: "connected",
+      channelData: args.channelData,
+      selfPuppetId: args.selfPuppetId,
+      connectedAt: Date.now(),
+      error: undefined,
       updatedAt: Date.now(),
     });
   },
 });
 
-/** Mark channel as connected. */
-export const internalSetConnected = internalMutation({
+/** Store the Matrix puppet ID for the authenticated user on this channel. */
+export const internalSetSelfPuppetId = internalMutation({
   args: {
     id: v.id("channels"),
-    phoneNumber: v.optional(v.string()),
+    selfPuppetId: v.string(),
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.id, {
-      status: "connected",
-      qrCode: undefined,
-      phoneNumber: args.phoneNumber,
-      connectedAt: Date.now(),
-      error: undefined,
+      selfPuppetId: args.selfPuppetId,
       updatedAt: Date.now(),
     });
   },
@@ -224,7 +254,7 @@ export const internalSetError = internalMutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.id, {
       status: "error",
-      qrCode: undefined,
+      channelData: undefined,
       error: args.error,
       updatedAt: Date.now(),
     });
@@ -240,7 +270,7 @@ export const setBridgeDisconnected = internalMutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.id, {
       status: "error",
-      qrCode: undefined,
+      channelData: undefined,
       error: args.error,
       updatedAt: Date.now(),
     });

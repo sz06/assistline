@@ -97,9 +97,13 @@ console.log("[listener] ✓ Admin auth configured");
 // ---------------------------------------------------------------------------
 
 /** Known bridge bot prefixes → platform type */
-const BRIDGE_BOT_PREFIXES: Record<string, "whatsapp" | "telegram"> = {
+const BRIDGE_BOT_PREFIXES: Record<
+  string,
+  "whatsapp" | "telegram" | "facebook" | "instagram"
+> = {
   "@whatsappbot:": "whatsapp",
   "@telegrambot:": "telegram",
+  "@metabot:": "facebook", // mautrix-meta bridge bot (handles both FB and IG)
 };
 
 /** In-memory cache: platform type → Convex channel ID */
@@ -114,9 +118,14 @@ const userPuppetIds = new Set<string>();
 
 /** Refresh the channel ID cache from Convex. */
 async function refreshChannelCache(): Promise<void> {
-  const platformTypes = ["whatsapp", "telegram"] as const;
+  const platformTypes = [
+    "whatsapp",
+    "telegram",
+    "facebook",
+    "instagram",
+  ] as const;
   for (const platformType of platformTypes) {
-    const channel = await convex.query(api.channels.getByType, {
+    const channel = await convex.query(api.channels.core.getByType, {
       type: platformType,
     });
     if (channel) {
@@ -125,15 +134,13 @@ async function refreshChannelCache(): Promise<void> {
         `[listener] ✓ Cached channel: ${platformType} → ${channel._id}`,
       );
 
-      // Build the self-puppet Matrix ID from the channel's connected phone
-      if (channel.phoneNumber && platformType === "whatsapp") {
-        const digits = channel.phoneNumber.replace(/^\+/, "");
-        const puppetId = `@whatsapp_${digits}:${serverName}`;
+      // ── Self-puppet (any platform) ─────────────────────────────────────
+      // selfPuppetId is set on the channel when it connects (in channelActions).
+      const puppetId = channel.selfPuppetId;
+      if (puppetId) {
         userPuppetIds.add(puppetId);
         console.log(`[listener] ✓ Self-puppet: ${puppetId}`);
 
-        // Persist to userProfile so Convex ingest can read it without
-        // requiring the listener to pass it as an argument.
         try {
           await convex.mutation(api.userProfile.addMatrixId, {
             matrixId: puppetId,
@@ -146,9 +153,9 @@ async function refreshChannelCache(): Promise<void> {
           );
         }
       }
-    }
-  }
-}
+    } // end if (channel)
+  } // end for platformType
+} // end refreshChannelCache
 
 /**
  * Detect the platform type for a room by examining its members for known
@@ -381,9 +388,12 @@ async function syncRoomMetadata(roomId: string): Promise<{
     participants: [] as string[],
   };
 
-  // Skip if already processed this session
+  // Skip if already processed this session — but re-fetch if participants was empty
+  // (happens for Meta rooms where ghost users join asynchronously after room creation)
   if (syncedRoomMeta.has(roomId)) {
-    return roomMetaCache.get(roomId) ?? defaultMeta;
+    const cached = roomMetaCache.get(roomId);
+    if (cached && cached.participants.length > 0) return cached;
+    // Fall through to re-fetch if participants were empty
   }
 
   try {
@@ -415,11 +425,24 @@ async function syncRoomMetadata(roomId: string): Promise<{
       (m) =>
         !m.state_key.startsWith("@whatsappbot:") &&
         !m.state_key.startsWith("@telegrambot:") &&
+        !m.state_key.startsWith("@metabot:") &&
+        !m.state_key.startsWith("@meta_") && // mautrix-meta ghost users
         m.state_key !== MATRIX_BOT_USER_ID &&
         !userPuppetIds.has(m.state_key),
     );
 
     const memberCount = realMembers.length;
+
+    // Skip rooms that contain only bridge bots / the listener itself — these are
+    // management rooms (pairing, status), not real conversations.
+    if (memberCount === 0) {
+      console.log(
+        `[listener] ⏭ Skipping bot-only room ${roomId} (no real participants)`,
+      );
+      syncedRoomMeta.add(roomId);
+      return defaultMeta; // participants: [] — caller must guard on this
+    }
+
     const isGroup = memberCount > 1;
 
     // Collect participant matrixIds
@@ -700,6 +723,11 @@ async function main(): Promise<void> {
           // On incremental syncs, only sync rooms with new events.
           if (events.length > 0 || isInitialSync) {
             const roomMeta = await syncRoomMetadata(roomId);
+
+            // Bot-only management rooms return empty participants — skip entirely
+            if (roomMeta.participants.length === 0) {
+              continue;
+            }
 
             for (const event of events) {
               await forwardTimelineEvent(roomId, event, roomMeta);

@@ -5,7 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.26.0] - 2026-03-29
+
+### Added
+
+- **mautrix/meta Bridge** (`docker`, `packages/api`, `apps/dashboard`): Integrated [mautrix/meta](https://github.com/mautrix/meta) as a second Matrix bridge alongside mautrix-whatsapp, enabling Facebook Messenger and Instagram DM support through the same single bridge process.
+  - New `mautrix-meta` Docker Compose service with `dock.mau.dev/mautrix/meta:latest`.
+  - Bridge registration file mounted into Dendrite (`/etc/dendrite/meta-registration.yaml`) and registered in `dendrite.yaml`.
+  - Pre-configured `config.yaml` in `docker/assistline-data/mautrix-meta/` with `homeserver`, `appservice` (port 29319), `permissions`, and SQLite database set up for assistline.
+  - `facebook` and `instagram` added as first-class channel types across the Convex schema, `channels.ts` mutations/queries, and `channelActions.ts`.
+  - `startMetaPairing` internal action that DMs `@metabot`, sends `!meta login facebook/instagram`, polls for the bridge's login link, surfaces it in the UI, and polls for the success confirmation.
+  - **ChannelsPage / ChannelFormPage** (`apps/dashboard`): "Facebook Messenger" and "Instagram DMs" are now selectable platform options when adding a channel. The connection panel shows a `LoginInstructionsDisplay` component (spinner → login link card → clickable "Open login page" link) instead of a QR code for Meta channels.
+  - **ChannelIcons** (`apps/dashboard`): Facebook (blue) and Instagram (pink) brand icons added to `channelIconMap` and `channelColorMap` via `react-icons/si`.
+- **Meta Bridge Provisioning API Login** (`packages/api`, `docker`): Replaced the fragile Matrix room-message cookie flow with a direct REST call to the mautrix-meta provisioning API (`/_matrix/provision/v3/login/start/messenger` and `.../step/{id}/fi.mau.meta.cookies/cookies`). The bridge now correctly receives parsed cookies and performs the full Messenger inbox backfill on first login.
+  - `startMetaPairing` now calls the provisioning `/v3/login/start/messenger` endpoint, stores the `login_id` (in `metaBotRoomId`), and surfaces the cookie prompt in the dashboard.
+  - `sendMetaCookiesAction` parses the user's raw cURL command (extracting `xs`, `c_user`, `datr`, `sb`, `fr`), validates required keys are present, and POSTs them as a top-level JSON object to the provisioning step endpoint.
+  - Added `parseCurlCookies` helper that handles `-b '...'`/`--cookie '...'` flags, URL-decoding of percent-encoded cookie values, and key filtering.
+  - `metaBotAccessToken` field added to the `channels` schema to persist the Matrix session token for same-session cookie delivery.
+  - Bridge `network.mode` set to `messenger` in `config.yaml`; `allow_messenger_com_on_fb` enabled. Login command updated to use `messenger` network arg.
+- **`selfPuppetId` on channels** (`packages/api`, `apps/listener`): Added `selfPuppetId?: string` to the `channels` schema. Set automatically on connect via a shared `resolveSelfPuppetId` helper in `channelActions` (derives from `phoneNumber` for WhatsApp; queries `/v3/whoami` for Meta). The listener now reads this field directly from the channel record — no bridge-specific resolution logic in the listener.
+- **`internalSetSelfPuppetId` mutation**: Standalone mutation to patch `selfPuppetId` on any channel.
+- **Facebook channel support in listener** (`apps/listener`): Added `@metabot:` → `"facebook"` to `BRIDGE_BOT_PREFIXES`; added `"facebook"` and `"instagram"` to `refreshChannelCache` platform list; filters `@metabot:` and `@meta_*` ghost users from `realMembers`.
+- **`handleConversationMeta` upsert** (`packages/api`): Now creates a new conversation row if none exists for the Matrix room (previously it was a no-op on missing rooms, preventing Messenger conversations from appearing).
+- **Room metadata cache fix** (`apps/listener`): `syncedRoomMeta` cache is now bypassed for rooms with empty participants, so Messenger portal rooms are re-fetched once bridge ghost users have fully joined.
+
+### Changed
+
+- **UI Privacy: Completely Hidden Matrix IDs** (`packages/api`, `apps/dashboard`): Matrix User IDs (`@user:domain`) and Room IDs (`!room:domain`) are now strictly forbidden from appearing in the user interface.
+  - `resolveOtherParticipantContact` and `resolveParticipantDetails` (`packages/api`) now include an `isMatrixId` helper to detect and filter out Matrix identifiers from display names.
+  - If a contact or conversation has no user-defined name or platform-provided display name, the system now falls back to **"Unknown"** instead of leaking the Matrix ID.
+  - `ConversationsPage` (`apps/dashboard`): Removed the Matrix Room ID fallback from the conversation list subtext. Subtext for DM conversations now only shows the linked phone number or remains empty.
+  - `participantDetails` now explicitly returns the `matrixId` as a separate field, allowing the UI to manage it separately from display identifiers.
+- **`channels` schema: discriminated union `channelData`** (`packages/api`): Replaced flat platform-specific fields (`qrCode`, `metaBotRoomId`, `metaBotAccessToken`, `phoneNumber`) with a single typed `channelData` field using a Convex discriminated union. Each bridge now has its own validated shape — `whatsAppChannelData`, `metaChannelData`, `telegramChannelData` — exported from `schema.ts` for reuse across mutations and actions. TypeScript narrows automatically via `channelData.type`.
+  - `whatsAppChannelData`: `{ type: "whatsapp", phoneNumber?, qrCode? }` — `phoneNumber` moved from top-level.
+  - `metaChannelData`: `{ type: "facebook"|"instagram", loginId?, accessToken?, instructions? }` — `instructions` replaces the semantically misleading `qrCode` field for cookie prompt text.
+  - `telegramChannelData`: `{ type: "telegram" }` — placeholder for future Telegram fields.
+  - `internalSetConnected` now accepts `channelData` instead of `phoneNumber`.
+  - `internalSetMetaBotRoomId` now accepts `instructions` and writes the full typed variant.
+  - Dashboard (`ChannelFormPage`): derives `qrCode`, `instructions`, and `phoneNumber` from typed `channelData` variants — no more cross-type field access.
+- **`migrations.ts`** (`packages/api`): Added `migrateConversationChannelIds` and `migrateWhatsAppPhoneNumber` one-off migrations as CLI-callable internal mutations.
+
+### Fixed
+
+- **Messenger Backfill**: On successful login the bridge now performs a full `RemoteEventChatResync` across the user's Messenger inbox, creating Matrix portal rooms for each thread which are picked up by the listener and surfaced in the Conversations view.
+- **Message direction (Messenger)**: Outgoing messages sent from Messenger now correctly appear as `"out"` — previously showed as `"in"` because the listener didn't know the user's Meta puppet ID (`@meta_598259993`).
+
 ## [2.22.7] - 2026-03-26
+
 
 ### Added
 

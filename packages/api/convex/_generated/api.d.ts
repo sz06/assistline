@@ -26,8 +26,10 @@ import type * as artifactSuggestions_mutations from "../artifactSuggestions/muta
 import type * as artifactSuggestions_queries from "../artifactSuggestions/queries.js";
 import type * as artifacts from "../artifacts.js";
 import type * as auditLogs from "../auditLogs.js";
-import type * as channelActions from "../channelActions.js";
-import type * as channels from "../channels.js";
+import type * as channels_core from "../channels/core.js";
+import type * as channels_meta from "../channels/meta.js";
+import type * as channels_utils from "../channels/utils.js";
+import type * as channels_whatsapp from "../channels/whatsapp.js";
 import type * as chatSessions from "../chatSessions.js";
 import type * as config from "../config.js";
 import type * as contactSuggestions_mutations from "../contactSuggestions/mutations.js";
@@ -74,8 +76,10 @@ declare const fullApi: ApiFromModules<{
   "artifactSuggestions/queries": typeof artifactSuggestions_queries;
   artifacts: typeof artifacts;
   auditLogs: typeof auditLogs;
-  channelActions: typeof channelActions;
-  channels: typeof channels;
+  "channels/core": typeof channels_core;
+  "channels/meta": typeof channels_meta;
+  "channels/utils": typeof channels_utils;
+  "channels/whatsapp": typeof channels_whatsapp;
   chatSessions: typeof chatSessions;
   config: typeof config;
   "contactSuggestions/mutations": typeof contactSuggestions_mutations;

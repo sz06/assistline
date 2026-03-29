@@ -28,6 +28,7 @@ export async function resolveOtherParticipantContact(
   phone: string;
   email: string;
   contactId: Id<"contacts"> | null;
+  matrixId: string | null;
 } | null> {
   // Load the user's known Matrix IDs for self-detection.
   const userProfile = await ctx.db.query("userProfile").first();
@@ -70,10 +71,12 @@ export async function resolveOtherParticipantContact(
           name:
             contact.name?.trim() ||
             contact.otherNames?.[0] ||
-            (conv.name ?? senderMatrixId),
+            conv.name ||
+            "Unknown",
           phone: contact.phoneNumbers?.[0]?.value ?? "",
           email: contact.emails?.[0]?.value ?? "",
           contactId: identity.contactId,
+          matrixId: senderMatrixId,
         };
       }
     }
@@ -81,6 +84,7 @@ export async function resolveOtherParticipantContact(
 
   return null;
 }
+
 
 /**
  * Resolve display details for the "other side" of a conversation.
@@ -106,11 +110,13 @@ export async function resolveParticipantDetails(
     phone: string;
     email: string;
     contactId: Id<"contacts"> | null;
+    matrixId: string | null;
   } = {
-    name: conv.name ?? "Unknown",
+    name: conv.name || "Unknown",
     phone: "",
     email: "",
     contactId: null,
+    matrixId: null,
   };
 
   const isGroup = (conv.memberCount ?? 0) > 2;
@@ -123,6 +129,7 @@ export async function resolveParticipantDetails(
       details.phone = otherContact.phone;
       details.email = otherContact.email;
       details.contactId = otherContact.contactId;
+      details.matrixId = otherContact.matrixId;
     }
   }
 

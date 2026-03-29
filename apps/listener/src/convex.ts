@@ -15,7 +15,9 @@ import { anyApi } from "convex/server";
 
 export const api = anyApi as unknown as {
   channels: {
-    getByType: typeof anyApi.channels.getByType;
+    core: {
+      getByType: typeof anyApi.channels.core.getByType;
+    };
   };
   config: {
     set: typeof anyApi.config.set;
