@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.26.1] - 2026-03-29
+
+### Added
+
+- **Suggestions Column on Contacts Page** (`packages/api`, `apps/dashboard`): The contacts table now includes a **Suggestions** column that shows an amber badge with a count of pending AI-generated contact suggestions for each contact. An optional date indicates when the earliest suggestion was created. The column is sortable by suggestion creation time (ascending/descending), with contacts that have no suggestions sorted last when ascending. Column visibility can be toggled via the existing column configurator. Backend: `contacts.list` now enriches each contact document with `suggestionCount` and `earliestSuggestionAt` by querying `contactSuggestions` by `contactId`.
+
 ## [2.26.0] - 2026-03-29
 
 ### Added

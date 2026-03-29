@@ -140,9 +140,28 @@ export const list = query({
   handler: async (ctx) => {
     const contacts = await ctx.db.query("contacts").collect();
 
-    // Attach handles
+    // Attach handles and suggestion metadata
     const enrichedContacts = await Promise.all(
-      contacts.map((c: any) => withHandles(ctx, c)),
+      contacts.map(async (c: any) => {
+        const withH = await withHandles(ctx, c);
+        const suggestions = await ctx.db
+          .query("contactSuggestions")
+          .withIndex("by_contactId", (q: any) => q.eq("contactId", c._id))
+          .collect();
+        const earliestSuggestionAt =
+          suggestions.length > 0
+            ? Math.min(...suggestions.map((s: any) => s._creationTime))
+            : undefined;
+        return {
+          ...withH,
+          suggestions: suggestions.map((s: any) => ({
+            _id: s._id as string,
+            field: s.field as string,
+            value: s.value as string,
+          })),
+          earliestSuggestionAt,
+        };
+      }),
     );
 
     return enrichedContacts.sort((a, b) => {

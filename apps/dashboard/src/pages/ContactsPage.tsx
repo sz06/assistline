@@ -1,8 +1,9 @@
 import { api, type Id } from "@repo/api";
 import { Button, Input, PageHeader } from "@repo/ui";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import {
   ArrowUpDown,
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -13,6 +14,7 @@ import {
   Plus,
   Search,
   Settings2,
+  Sparkles,
   Users,
   X,
 } from "lucide-react";
@@ -30,17 +32,28 @@ type ColumnKey =
   | "email"
   | "roles"
   | "created"
-  | "updated";
+  | "updated"
+  | "suggestions";
 
-type SortField = "name" | "company" | "created" | "updated";
+type SortField =
+  | "name"
+  | "company"
+  | "created"
+  | "updated"
+  | "suggestionCreated";
 type SortDir = "asc" | "desc";
-
 
 interface ContactHandle {
   _id: Id<"contactHandles">;
   type: "phone" | "email" | "facebook" | "instagram" | "telegram";
   value: string;
   label?: string;
+}
+
+interface ContactSuggestion {
+  _id: string;
+  field: string;
+  value: string;
 }
 
 interface Contact {
@@ -56,6 +69,8 @@ interface Contact {
   notes?: string;
   lastUpdateAt?: number;
   roles?: Id<"roles">[];
+  suggestions?: ContactSuggestion[];
+  earliestSuggestionAt?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,6 +114,12 @@ const COLUMN_DEFS: ColumnDef[] = [
     key: "updated",
     label: "Updated",
     sortField: "updated",
+    defaultVisible: true,
+  },
+  {
+    key: "suggestions",
+    label: "Suggestions",
+    sortField: "suggestionCreated",
     defaultVisible: true,
   },
 ];
@@ -312,6 +333,17 @@ export function ContactsPage() {
             (a.lastUpdateAt ?? a._creationTime) -
             (b.lastUpdateAt ?? b._creationTime);
           break;
+        case "suggestionCreated": {
+          // Contacts with no suggestions sort last ascending
+          const aSug =
+            a.earliestSuggestionAt ??
+            (sortDir === "asc" ? Infinity : -Infinity);
+          const bSug =
+            b.earliestSuggestionAt ??
+            (sortDir === "asc" ? Infinity : -Infinity);
+          cmp = aSug - bSug;
+          break;
+        }
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
@@ -445,6 +477,15 @@ export function ContactsPage() {
                         <SortableHeader
                           label="Updated"
                           field="updated"
+                          activeField={sortField}
+                          dir={sortDir}
+                          onSort={handleSort}
+                        />
+                      )}
+                      {isColVisible("suggestions") && (
+                        <SortableHeader
+                          label="Suggestions"
+                          field="suggestionCreated"
                           activeField={sortField}
                           dir={sortDir}
                           onSort={handleSort}
@@ -670,6 +711,13 @@ function ContactRow({
   visibleCols: Set<ColumnKey>;
   onEdit: () => void;
 }) {
+  const approveSuggestion = useMutation(
+    api.contactSuggestions.mutations.execute,
+  );
+  const dismissSuggestion = useMutation(
+    api.contactSuggestions.mutations.dismiss,
+  );
+
   const name = displayName(contact.name, contact.nickname, contact.otherNames);
   const initials = getInitials(
     contact.name,
@@ -690,24 +738,24 @@ function ContactRow({
       className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/60 cursor-pointer transition-colors group"
     >
       {/* Name + Avatar — always visible */}
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-3">
+      <td className="px-4 py-3 align-top">
+        <div className="flex items-start gap-3">
           <div
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-white font-semibold text-xs shadow-sm group-hover:scale-105 transition-transform`}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-white font-semibold text-xs shadow-sm group-hover:scale-105 transition-transform mt-0.5`}
           >
             {initials}
           </div>
-          <div className="min-w-0">
-            <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
+          <div>
+            <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">
               {name}
             </h3>
             {contact.nickname && (
-              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 aka {contact.nickname}
               </p>
             )}
             {contact.otherNames && contact.otherNames.length > 0 && (
-              <p className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5">
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                 {contact.otherNames.join(", ")}
               </p>
             )}
@@ -717,8 +765,8 @@ function ContactRow({
 
       {/* Company */}
       {visibleCols.has("company") && (
-        <td className="px-4 py-3">
-          <span className="text-sm text-gray-600 dark:text-gray-300 truncate block max-w-[180px]">
+        <td className="px-4 py-3 align-top">
+          <span className="text-sm text-gray-600 dark:text-gray-300">
             {contact.company || "—"}
           </span>
         </td>
@@ -726,10 +774,10 @@ function ContactRow({
 
       {/* Phone */}
       {visibleCols.has("phone") && (
-        <td className="px-4 py-3">
+        <td className="px-4 py-3 align-top">
           {primaryPhone ? (
             <span className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300">
-              <Phone className="h-3.5 w-3.5 text-gray-400" />
+              <Phone className="h-3.5 w-3.5 shrink-0 text-gray-400" />
               {primaryPhone}
             </span>
           ) : (
@@ -740,10 +788,10 @@ function ContactRow({
 
       {/* Email */}
       {visibleCols.has("email") && (
-        <td className="px-4 py-3">
+        <td className="px-4 py-3 align-top">
           {primaryEmail ? (
-            <span className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300 truncate max-w-[200px]">
-              <Mail className="h-3.5 w-3.5 text-gray-400" />
+            <span className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300">
+              <Mail className="h-3.5 w-3.5 shrink-0 text-gray-400" />
               {primaryEmail}
             </span>
           ) : (
@@ -754,7 +802,7 @@ function ContactRow({
 
       {/* Roles */}
       {visibleCols.has("roles") && (
-        <td className="px-4 py-3">
+        <td className="px-4 py-3 align-top">
           {roleNames.length > 0 ? (
             <div className="flex flex-wrap gap-1">
               {roleNames.map((rn) => (
@@ -774,7 +822,7 @@ function ContactRow({
 
       {/* Added date */}
       {visibleCols.has("created") && (
-        <td className="px-4 py-3">
+        <td className="px-4 py-3 align-top">
           <span className="text-sm text-gray-500 dark:text-gray-400">
             {formatDate(contact._creationTime)}
           </span>
@@ -783,10 +831,70 @@ function ContactRow({
 
       {/* Updated date */}
       {visibleCols.has("updated") && (
-        <td className="px-4 py-3">
+        <td className="px-4 py-3 align-top">
           <span className="text-sm text-gray-500 dark:text-gray-400">
             {contact.lastUpdateAt ? formatDate(contact.lastUpdateAt) : "—"}
           </span>
+        </td>
+      )}
+
+      {/* Contact Suggestions */}
+      {visibleCols.has("suggestions") && (
+        // biome-ignore lint/a11y/useKeyWithClickEvents: intentional propagation stop
+        <td
+          className="px-4 py-3 align-top"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {contact.suggestions && contact.suggestions.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {contact.suggestions.map((s) => (
+                <div
+                  key={s._id}
+                  className="flex flex-col gap-1.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="h-3 w-3 text-amber-500 shrink-0" />
+                    <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 capitalize">
+                      {s.field}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-700 dark:text-gray-200 leading-snug">
+                    {s.value}
+                  </p>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        approveSuggestion({
+                          suggestionId: s._id as Id<"contactSuggestions">,
+                        })
+                      }
+                      className="inline-flex items-center gap-1 rounded-md bg-emerald-100 dark:bg-emerald-900/40 hover:bg-emerald-200 dark:hover:bg-emerald-900/70 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 text-xs font-medium transition-colors"
+                      data-testid={`approve-suggestion-${s._id}`}
+                    >
+                      <Check className="h-3 w-3" />
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        dismissSuggestion({
+                          suggestionId: s._id as Id<"contactSuggestions">,
+                        })
+                      }
+                      className="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 px-2 py-0.5 text-xs font-medium transition-colors"
+                      data-testid={`dismiss-suggestion-${s._id}`}
+                    >
+                      <X className="h-3 w-3" />
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <span className="text-sm text-gray-400 dark:text-gray-600">—</span>
+          )}
         </td>
       )}
     </tr>
