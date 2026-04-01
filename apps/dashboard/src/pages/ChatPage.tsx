@@ -502,7 +502,8 @@ function MessageBubble({
   isStreaming,
 }: {
   role: string;
-  parts: Array<{ type: string; text?: string }>;
+  // biome-ignore lint/suspicious/noExplicitAny: msg.parts contains tool tracking
+  parts: Array<any>;
   isStreaming: boolean;
 }) {
   const isUser = role === "user";
@@ -510,6 +511,35 @@ function MessageBubble({
     .filter((p) => p.type === "text" && p.text)
     .map((p) => p.text)
     .join("");
+
+  // Extract artifact count from tool results
+  let artifactCount = 0;
+  if (!isUser) {
+    for (const p of parts) {
+      // Handle the 'tool-searchArtifacts' type from useUIMessages parts
+      if (p.type === "tool-searchArtifacts" && p.output) {
+        try {
+          const res = typeof p.output === "string" ? JSON.parse(p.output) : p.output;
+          if (typeof res.count === "number") {
+            artifactCount += res.count;
+          }
+        } catch (e) {
+          // safely ignore
+        }
+      }
+      // Fallback for standard AI SDK toolResult parts just in case
+      else if (p.type === "toolResult" && (p.toolName === "searchArtifacts" || p.name === "searchArtifacts") && p.result) {
+        try {
+          const res = typeof p.result === "string" ? JSON.parse(p.result) : p.result;
+          if (typeof res.count === "number") {
+            artifactCount += res.count;
+          }
+        } catch (e) {
+          // safely ignore
+        }
+      }
+    }
+  }
 
   if (!textContent && !isStreaming) return null;
 
@@ -526,28 +556,37 @@ function MessageBubble({
         {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
       </div>
 
-      {/* Message */}
-      <div
-        className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
-          isUser
-            ? "bg-blue-600 text-white rounded-br-md"
-            : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-md"
-        }`}
-      >
-        {textContent ? (
-          isUser ? (
-            <p className="whitespace-pre-wrap">{textContent}</p>
-          ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-2 prose-code:text-xs">
-              <Markdown remarkPlugins={[remarkGfm]}>{textContent}</Markdown>
+      {/* Message and Metadata */}
+      <div className="flex flex-col gap-1.5 max-w-[80%]">
+        <div
+          className={`rounded-2xl px-4 py-2.5 text-sm ${
+            isUser
+              ? "bg-blue-600 text-white rounded-br-md"
+              : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-bl-md"
+          }`}
+        >
+          {textContent ? (
+            isUser ? (
+              <p className="whitespace-pre-wrap">{textContent}</p>
+            ) : (
+              <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-2 prose-code:text-xs">
+                <Markdown remarkPlugins={[remarkGfm]}>{textContent}</Markdown>
+              </div>
+            )
+          ) : null}
+          {isStreaming && !textContent && (
+            <div className="flex items-center gap-1 py-1">
+              <span className="h-2 w-2 rounded-full bg-purple-400 animate-bounce [animation-delay:0ms]" />
+              <span className="h-2 w-2 rounded-full bg-purple-400 animate-bounce [animation-delay:150ms]" />
+              <span className="h-2 w-2 rounded-full bg-purple-400 animate-bounce [animation-delay:300ms]" />
             </div>
-          )
-        ) : null}
-        {isStreaming && !textContent && (
-          <div className="flex items-center gap-1 py-1">
-            <span className="h-2 w-2 rounded-full bg-purple-400 animate-bounce [animation-delay:0ms]" />
-            <span className="h-2 w-2 rounded-full bg-purple-400 animate-bounce [animation-delay:150ms]" />
-            <span className="h-2 w-2 rounded-full bg-purple-400 animate-bounce [animation-delay:300ms]" />
+          )}
+        </div>
+
+        {!isUser && artifactCount > 0 && (
+          <div className="flex items-center gap-1.5 self-start bg-gray-50 dark:bg-gray-800/60 px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-800 text-[10px] text-gray-500 dark:text-gray-400 font-medium tracking-wide">
+            <Sparkles className="h-3 w-3 text-purple-500" />
+            Used {artifactCount} artifact{artifactCount === 1 ? "" : "s"} for context
           </div>
         )}
       </div>

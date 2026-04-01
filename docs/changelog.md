@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.26.3] - 2026-04-01
+
+### Added
+
+- **AI Artifact Usage Counter** (`packages/api`, `apps/dashboard`): The `searchArtifacts` tool now explicitly returns a structured JSON string containing `count` and `results`. In the dashboard's `/chat` page, the `MessageBubble` component intercepts the tool's result to calculate how many custom artifacts were injected into the AI's context window. A subtle "Used X artifacts for context" badge is now natively rendered inside the AI's response bubble whenever facts are retrieved.
+
+### Changed
+
+- **Chatter Agent Token Streaming** (`packages/api`): Switched the Chatter agent from `generateText` (batch response) to `streamText` with `saveStreamDeltas: true`. Tokens now stream incrementally to the dashboard chat UI via Convex websockets, instead of the entire response appearing at once. The frontend's `useUIMessages` hook with `stream: true` was already wired for this — the backend was the bottleneck.
+- **Chatter Agent Prompt & Tool Description** (`packages/api`): Strengthened the `searchArtifacts` tool description and Chatter system prompt to explicitly flag it as a `CRITICAL` requirement that the agent MUST search stored artifacts before asking the user for missing context.
+- **Chatter Agent Tool Limits** (`packages/api`): Increased `maxSteps` from 2 to 3 to better support multi-step tool interactions within `streamText`.
+
+## [2.26.2] - 2026-04-01
+
+### Changed
+
+- **Chatter Agent Prompt** (`packages/api`): Strengthened the directive for the `searchArtifacts` tool to explicitly ensure the agent searches memory before answering context-specific questions about the user or their preferences.
+
+
 ## [2.26.1] - 2026-03-29
 
 ### Added

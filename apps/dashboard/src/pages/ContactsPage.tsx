@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Combine,
   Loader2,
   Mail,
   Phone,
@@ -376,6 +377,14 @@ export function ContactsPage() {
             description="Manage your contacts and their information."
           />
           <div className="flex gap-2 shrink-0 mt-1">
+            <Button
+              onClick={() => navigate("/contacts/merge")}
+              variant="outline"
+              data-testid="find-duplicates-btn"
+            >
+              <Combine className="h-4 w-4 mr-2" />
+              Find Duplicates
+            </Button>
             <Button
               onClick={() => navigate("/contacts/import")}
               variant="outline"

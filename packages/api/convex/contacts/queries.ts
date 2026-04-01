@@ -13,30 +13,45 @@ export async function withHandles(ctx: any, contact: any) {
 export const list = query({
   args: {},
   handler: async (ctx) => {
+    // Execute exactly 3 read queries to prevent N+1 hitting Convex 4096 read limits
     const contacts = await ctx.db.query("contacts").collect();
+    const allHandles = await ctx.db.query("contactHandles").collect();
+    const allSuggestions = await ctx.db.query("contactSuggestions").collect();
 
-    const enrichedContacts = await Promise.all(
-      contacts.map(async (c: any) => {
-        const withH = await withHandles(ctx, c);
-        const suggestions = await ctx.db
-          .query("contactSuggestions")
-          .withIndex("by_contactId", (q: any) => q.eq("contactId", c._id))
-          .collect();
-        const earliestSuggestionAt =
-          suggestions.length > 0
-            ? Math.min(...suggestions.map((s: any) => s._creationTime))
-            : undefined;
-        return {
-          ...withH,
-          suggestions: suggestions.map((s: any) => ({
-            _id: s._id as string,
-            field: s.field as string,
-            value: s.value as string,
-          })),
-          earliestSuggestionAt,
-        };
-      }),
-    );
+    // Group Handles
+    const handlesMap = new Map();
+    for (const h of allHandles) {
+      if (!handlesMap.has(h.contactId)) handlesMap.set(h.contactId, []);
+      handlesMap.get(h.contactId).push(h);
+    }
+
+    // Group Suggestions
+    const suggestionsMap = new Map();
+    for (const s of allSuggestions) {
+      if (!suggestionsMap.has(s.contactId)) suggestionsMap.set(s.contactId, []);
+      suggestionsMap.get(s.contactId).push(s);
+    }
+
+    const enrichedContacts = contacts.map((c: any) => {
+      const handles = handlesMap.get(c._id) || [];
+      const suggestions = suggestionsMap.get(c._id) || [];
+
+      const earliestSuggestionAt =
+        suggestions.length > 0
+          ? Math.min(...suggestions.map((s: any) => s._creationTime))
+          : undefined;
+
+      return {
+        ...c,
+        handles,
+        suggestions: suggestions.map((s: any) => ({
+          _id: s._id as string,
+          field: s.field as string,
+          value: s.value as string,
+        })),
+        earliestSuggestionAt,
+      };
+    });
 
     return enrichedContacts.sort((a, b) => {
       const aTier = a.name?.trim() ? 0 : a.otherNames?.length ? 1 : 2;

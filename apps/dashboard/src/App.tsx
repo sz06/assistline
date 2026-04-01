@@ -10,6 +10,7 @@ import { ConfigPage } from "./pages/ConfigPage";
 import { ContactFormPage } from "./pages/ContactFormPage";
 import { ContactsPage } from "./pages/ContactsPage";
 import { ConversationsPage } from "./pages/ConversationsPage";
+import { MergeContactsPage } from "./pages/MergeContactsPage";
 import { GoogleImportPage } from "./pages/import/GoogleImportPage";
 import { ImportIndexPage } from "./pages/import/ImportIndexPage";
 import { ProfilePage } from "./pages/ProfilePage";
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="conversations" element={<ConversationsPage />} />
         <Route path="contacts">
           <Route index element={<ContactsPage />} />
+          <Route path="merge" element={<MergeContactsPage />} />
           <Route path="import" element={<ImportIndexPage />} />
           <Route path="import/google" element={<GoogleImportPage />} />
           <Route path="add" element={<ContactFormPage />} />

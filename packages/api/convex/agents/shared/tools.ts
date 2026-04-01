@@ -59,7 +59,7 @@ export function createForwardFactsTool({
 export function createSearchArtifactsTool() {
   return createTool<{ query: string }, string, ToolCtx<DataModel>>({
     description:
-      'Search the user\'s stored artifacts for facts, preferences, addresses, relationships, etc. Use this whenever you need context about the user. Provide a clear search query, e.g. "home address" or "dietary preferences".',
+      'CRITICAL: Search the user\'s stored artifacts for facts, preferences, addresses, relationships, etc. You MUST call this tool FIRST to find missing context before asking the user for clarification. Provide a clear search query, e.g. "home address" or "dietary preferences".',
     inputSchema: z.object({
       query: z
         .string()
@@ -89,7 +89,7 @@ export function createSearchArtifactsTool() {
       const relevantResults = searchResults.filter((r) => r._score >= 0.5);
 
       if (relevantResults.length === 0) {
-        return "No relevant facts found for this query.";
+        return JSON.stringify({ count: 0, results: [] });
       }
 
       const docs = await ctx.runQuery(internal.artifacts.fetchByIds, {
@@ -97,10 +97,13 @@ export function createSearchArtifactsTool() {
       });
 
       if (docs.length === 0) {
-        return "No relevant facts found for this query.";
+        return JSON.stringify({ count: 0, results: [] });
       }
 
-      return docs.map((d) => `- ${d.value}`).join("\n");
+      return JSON.stringify({
+        count: docs.length,
+        results: docs.map((d) => d.value),
+      });
     },
   });
 }

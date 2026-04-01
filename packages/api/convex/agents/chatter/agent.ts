@@ -33,7 +33,7 @@ function createChatterAgent(
       searchArtifacts: createSearchArtifactsTool(),
       renameChatSession: createRenameChatSessionTool({ sessionId }),
     },
-    maxSteps: 2,
+    maxSteps: 3,
     usageHandler: async (ctx, { usage }) => {
       const inputTokens = usage.inputTokens ?? 0;
       const outputTokens = usage.outputTokens ?? 0;
@@ -115,7 +115,12 @@ export const chat = internalAction({
     // No explicit prompt text is needed because the user's message is already
     // appended to the thread prior to calling this handler.
     try {
-      await chatter.generateText(ctx, { threadId: args.threadId }, {});
+      await chatter.streamText(
+        ctx,
+        { threadId: args.threadId },
+        {},
+        { saveStreamDeltas: true },
+      );
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);

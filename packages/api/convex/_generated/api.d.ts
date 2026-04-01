@@ -34,6 +34,7 @@ import type * as chatSessions from "../chatSessions.js";
 import type * as config from "../config.js";
 import type * as contactSuggestions_mutations from "../contactSuggestions/mutations.js";
 import type * as contactSuggestions_queries from "../contactSuggestions/queries.js";
+import type * as contacts_deduplication from "../contacts/deduplication.js";
 import type * as contacts_import from "../contacts/import.js";
 import type * as contacts_internal from "../contacts/internal.js";
 import type * as contacts_mutations from "../contacts/mutations.js";
@@ -88,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   config: typeof config;
   "contactSuggestions/mutations": typeof contactSuggestions_mutations;
   "contactSuggestions/queries": typeof contactSuggestions_queries;
+  "contacts/deduplication": typeof contacts_deduplication;
   "contacts/import": typeof contacts_import;
   "contacts/internal": typeof contacts_internal;
   "contacts/mutations": typeof contacts_mutations;
