@@ -1,7 +1,7 @@
 import type { Id } from "@repo/api";
-import { useState } from "react";
 import { Button } from "@repo/ui";
 import { QrCode, Unplug, X } from "lucide-react";
+import { useState } from "react";
 import { FacebookInstructions } from "../facebook-instructions";
 import { InstagramInstructions } from "../instagram-instructions";
 import { TelegramInstructions } from "../telegram-instructions";

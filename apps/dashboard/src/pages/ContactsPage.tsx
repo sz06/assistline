@@ -15,6 +15,7 @@ import {
   Search,
   Settings2,
   Sparkles,
+  UploadCloud,
   Users,
   X,
 } from "lucide-react";
@@ -204,7 +205,7 @@ function formatDate(ts: number): string {
 // ---------------------------------------------------------------------------
 
 export function ContactsPage() {
-  const contacts = useQuery(api.contacts.list);
+  const contacts = useQuery(api.contacts.queries.list);
   const allRoles = useQuery(api.roles.list);
   const navigate = useNavigate();
 
@@ -374,14 +375,23 @@ export function ContactsPage() {
             title="Contacts"
             description="Manage your contacts and their information."
           />
-          <Button
-            onClick={() => navigate("/contacts/add")}
-            className="shrink-0 mt-1"
-            data-testid="add-contact-btn"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Contact
-          </Button>
+          <div className="flex gap-2 shrink-0 mt-1">
+            <Button
+              onClick={() => navigate("/contacts/import")}
+              variant="outline"
+              data-testid="import-contacts-btn"
+            >
+              <UploadCloud className="h-4 w-4 mr-2" />
+              Import
+            </Button>
+            <Button
+              onClick={() => navigate("/contacts/add")}
+              data-testid="add-contact-btn"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Contact
+            </Button>
+          </div>
         </div>
 
         {/* ── Toolbar: Search + Column Config ─────────────── */}

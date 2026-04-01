@@ -6,7 +6,7 @@
  * thread message — there is no separate PARTICIPANTS block.
  */
 
-import { CONTACT_FIELD_KEYS } from "../../contacts";
+import { CONTACT_FIELD_KEYS } from "../../contacts/shared";
 
 export function buildDispatcherSystemPrompt(
   currentTime: string,

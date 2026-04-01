@@ -1,8 +1,8 @@
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { syncContactHandles } from "../contacts/shared";
 import { extractSenderInfo } from "../utils/contacts";
-import { syncContactHandles } from "../contacts";
 
 // ---------------------------------------------------------------------------
 // Message type union — shared across insert paths
@@ -244,19 +244,19 @@ export async function findMessageByEventId(
 // ---------------------------------------------------------------------------
 
 /**
- * Automatic contact generation and enrichment function that runs behind the scenes 
+ * Automatic contact generation and enrichment function that runs behind the scenes
  * whenever a new inbound message is received.
  *
- * Intercepts the raw Matrix Sender ID of incoming messages (e.g. `@whatsapp_14165551234:matrix.local`) 
+ * Intercepts the raw Matrix Sender ID of incoming messages (e.g. `@whatsapp_14165551234:matrix.local`)
  * and performs the following tasks:
- * 
- * 1. Automatic Contact Creation: If this is the first time the person has messaged, 
- *    it creates a new `contacts` and `contactIdentities` record so they instantly 
+ *
+ * 1. Automatic Contact Creation: If this is the first time the person has messaged,
+ *    it creates a new `contacts` and `contactIdentities` record so they instantly
  *    appear in the dashboard.
  * 2. Handle Parsing (Phone/Email Extraction): Automatically parses the Matrix ID to logically
  *    extract their E.164 phone number, name, or metadata, inserting it into `contactHandles`.
- * 3. Opportunistic Updates ("Upsert"): If the contact exists but is missing an avatar, display 
- *    name, or phone number dynamically provided by the recent event, it opportunistically patches 
+ * 3. Opportunistic Updates ("Upsert"): If the contact exists but is missing an avatar, display
+ *    name, or phone number dynamically provided by the recent event, it opportunistically patches
  *    the contact record to add the missing information without overriding hand-entered data.
  */
 async function upsertSenderContact(

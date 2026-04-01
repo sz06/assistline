@@ -10,6 +10,8 @@ import { ConfigPage } from "./pages/ConfigPage";
 import { ContactFormPage } from "./pages/ContactFormPage";
 import { ContactsPage } from "./pages/ContactsPage";
 import { ConversationsPage } from "./pages/ConversationsPage";
+import { GoogleImportPage } from "./pages/import/GoogleImportPage";
+import { ImportIndexPage } from "./pages/import/ImportIndexPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { ProviderFormPage } from "./pages/ProviderFormPage";
 import { ProvidersPage } from "./pages/ProvidersPage";
@@ -25,6 +27,8 @@ export default function App() {
         <Route path="conversations" element={<ConversationsPage />} />
         <Route path="contacts">
           <Route index element={<ContactsPage />} />
+          <Route path="import" element={<ImportIndexPage />} />
+          <Route path="import/google" element={<GoogleImportPage />} />
           <Route path="add" element={<ContactFormPage />} />
           <Route path=":id/update" element={<ContactFormPage />} />
         </Route>

@@ -3,7 +3,7 @@
  * No Convex runtime dependency — all inputs are passed as arguments.
  */
 
-import type { ProfileShape } from "../../contacts";
+import type { ProfileShape } from "../../contacts/shared";
 
 // Re-export so existing consumers don't break
 export type { ProfileShape };

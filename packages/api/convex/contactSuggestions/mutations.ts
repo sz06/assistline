@@ -155,7 +155,7 @@ export const execute = mutation({
       parsedValue = await resolveRoleNamesToIds(ctx, parsedValue as string[]);
     }
 
-    await ctx.runMutation(api.contacts.update, {
+    await ctx.runMutation(api.contacts.mutations.update, {
       id: suggestion.contactId,
       [field]: parsedValue,
     });

@@ -4,10 +4,12 @@
  * Matches patterns like: "+1 415 555 2671", "14155552671", "+14155552671", "(415) 555-2671"
  */
 export function isPhoneNumberLike(value: string): boolean {
-  // Strip common phone formatting chars, then check if what's left is all digits
-  const stripped = value.replace(/[\s\-()+ ]/g, "");
-  // Must be at least 7 digits and all numeric
-  return stripped.length >= 7 && /^\d+$/.test(stripped);
+  // If the display name contains letters, it's almost certainly a pure name string
+  if (/[A-Za-z]/.test(value)) return false;
+  
+  // Strip common phone formatting chars and any weird unicode spacing/hyphens, then check digit length
+  const stripped = value.replace(/[^\d]/g, "");
+  return stripped.length >= 7;
 }
 
 /**

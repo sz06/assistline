@@ -1,7 +1,7 @@
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { syncContactHandles } from "../contacts";
+import { syncContactHandles } from "../contacts/shared";
 
 /**
  * For a DM conversation, find the "other" participant (not the user) and

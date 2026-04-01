@@ -50,18 +50,18 @@ export function ContactFormPage() {
 
   // For Edit mode, fetch the contact data and identities
   const contact = useQuery(
-    api.contacts.get,
+    api.contacts.queries.get,
     isEditing && contactId ? { id: contactId } : "skip",
   );
 
   const identities = useQuery(
-    api.contacts.getIdentities,
+    api.contacts.queries.getIdentities,
     isEditing && contactId ? { contactId } : "skip",
   );
 
   const allRoles = useQuery(api.roles.list);
-  const createContact = useMutation(api.contacts.create);
-  const updateContact = useMutation(api.contacts.update);
+  const createContact = useMutation(api.contacts.mutations.create);
+  const updateContact = useMutation(api.contacts.mutations.update);
 
   const {
     register,

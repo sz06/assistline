@@ -4,7 +4,7 @@ import { createTool, type ToolCtx } from "@convex-dev/agent";
 import { z } from "zod";
 import { internal } from "../../_generated/api";
 import type { DataModel, Id } from "../../_generated/dataModel";
-import { CONTACT_FIELD_KEYS } from "../../contacts";
+import { CONTACT_FIELD_KEYS } from "../../contacts/shared";
 
 // ── Shared Tools (re-exported) ───────────────────────────────────────────────
 export {
