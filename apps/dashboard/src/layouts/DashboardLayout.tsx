@@ -1,5 +1,6 @@
 import { api } from "@repo/api";
 import { useMutation, useQuery } from "convex/react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   BookOpen,
   Bot,
@@ -194,9 +195,9 @@ export function DashboardLayout() {
   };
 
   return (
-    <div className="flex h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">
+    <div className="flex h-screen w-full font-sans transition-colors duration-300">
       {/* Desktop Sidebar */}
-      <div className="hidden md:flex w-56 shrink-0">
+      <div className="hidden md:flex w-56 shrink-0 z-10">
         <Sidebar {...sidebarProps} />
       </div>
 
@@ -206,7 +207,7 @@ export function DashboardLayout() {
       </Sidedrawer>
 
       <main className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between gap-3 border-b border-gray-200 dark:border-gray-800 px-4 md:px-6 h-14 md:h-16 shrink-0">
+        <div className="flex items-center justify-between gap-3 px-4 md:px-6 h-14 md:h-16 shrink-0 glass-header">
           {/* Left: hamburger (mobile only) */}
           <button
             type="button"
@@ -247,8 +248,19 @@ export function DashboardLayout() {
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-hidden">
-          <Outlet />
+        <div className="flex-1 overflow-hidden relative">
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+              className="absolute inset-0"
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </div>
       </main>
     </div>

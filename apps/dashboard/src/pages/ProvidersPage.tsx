@@ -1,5 +1,5 @@
 import { api, type Id } from "@repo/api";
-import { Button, PageHeader } from "@repo/ui";
+import { Button, PageHeader, cn } from "@repo/ui";
 import { useMutation, useQuery } from "convex/react";
 import {
   Bot,
@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { StaggerList } from "../components/ui/StaggerList";
 
 // ---------------------------------------------------------------------------
 // Provider metadata — display information for known providers
@@ -159,7 +160,7 @@ export function ProvidersPage() {
                   No language model providers configured.
                 </p>
               ) : (
-                <div className="space-y-4">
+                <StaggerList className="space-y-4">
                   {languageProviders.map((p) => (
                     <ProviderCard
                       key={p._id}
@@ -169,7 +170,7 @@ export function ProvidersPage() {
                       onDelete={() => setDeletingId(p._id)}
                     />
                   ))}
-                </div>
+                </StaggerList>
               )}
             </div>
 
@@ -191,7 +192,7 @@ export function ProvidersPage() {
                   to enable semantic search on artifacts.
                 </p>
               ) : (
-                <div className="space-y-4">
+                <StaggerList className="space-y-4">
                   {embeddingProviders.map((p) => (
                     <ProviderCard
                       key={p._id}
@@ -201,7 +202,7 @@ export function ProvidersPage() {
                       onDelete={() => setDeletingId(p._id)}
                     />
                   ))}
-                </div>
+                </StaggerList>
               )}
             </div>
           </>
@@ -258,11 +259,12 @@ function ProviderCard({
   return (
     <div
       data-testid={`provider-card-${provider.provider}`}
-      className={`bg-white dark:bg-gray-900 border rounded-xl shadow-sm overflow-hidden transition-all ${
+      className={cn(
+        "glass-panel rounded-xl overflow-hidden hover-card transition-all",
         provider.isDefault
-          ? "border-blue-300 dark:border-blue-700 ring-1 ring-blue-200 dark:ring-blue-800"
-          : "border-gray-200 dark:border-gray-800"
-      }`}
+          ? "border-blue-400/50 dark:border-blue-500/50 ring-1 ring-blue-400/30 dark:ring-blue-500/30 shadow-[0_0_15px_-3px_rgba(59,130,246,0.3)]"
+          : ""
+      )}
     >
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-5 py-4">
@@ -357,7 +359,7 @@ function ProviderCard({
       </div>
 
       {/* ── Details Footer ──────────────────────────────────────── */}
-      <div className="border-t border-gray-100 dark:border-gray-800/50 px-5 py-3 bg-gray-50/50 dark:bg-gray-900/50 flex items-center gap-4 flex-wrap text-xs text-gray-400 dark:text-gray-500">
+      <div className="border-t border-gray-200/50 dark:border-white/5 px-5 py-3 bg-black/5 dark:bg-white-[0.02] flex items-center gap-4 flex-wrap text-xs text-gray-500 dark:text-gray-400">
         {/* Health status */}
         <span
           className={`inline-flex items-center gap-1.5 font-medium ${
@@ -465,9 +467,9 @@ function DeleteConfirmDialog({
 
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div className="text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-800 mx-auto mb-4">
-        <Cpu className="h-7 w-7 text-gray-400" />
+    <div className="text-center py-10">
+      <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-500/20 mx-auto mb-6 shadow-[0_0_40px_-10px_rgba(59,130,246,0.4)]">
+        <Cpu className="h-10 w-10 text-blue-500 dark:text-blue-400" />
       </div>
       <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">
         No providers configured

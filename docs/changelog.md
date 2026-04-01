@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.26.4] - 2026-04-01
+
+### Added
+
+- **Framer Motion Micro-Animations** (`apps/dashboard`): Introduced `framer-motion` to power global page transitions and list entry animations. Created reusable `PageTransition` and `StaggerList` components to easily wrap and animate page contents and dynamically rendered lists across the application.
+- **Glassmorphic UI System** (`apps/dashboard`): Established a cohesive, CSS-first design language leveraging Tailwind v4 `@utility` classes (`glass-panel`, `glass-header`, `glass-sidebar`, `hover-card`). This brings profound depth, blur effects, and premium translucent layering to both light and dark modes across the dashboard layout, navigation sidebars, and card elements.
+
+### Changed
+
+- **Polished Component Aesthetics** (`apps/dashboard`): Refined empty states across all list pages (Contacts, Channels, Providers) by removing flat gray boxes in favor of larger, accent-colored icons centered over soft glowing gradient backgrounds. Upgraded inline Avatars with premium interactive styling featuring ring offsets and hover shadows.
+
 ## [2.26.3] - 2026-04-01
 
 ### Added

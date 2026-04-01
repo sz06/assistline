@@ -1,5 +1,5 @@
 import { api, type Id } from "@repo/api";
-import { Button, PageHeader } from "@repo/ui";
+import { Button, PageHeader, cn } from "@repo/ui";
 import { useMutation, useQuery } from "convex/react";
 import {
   AlertCircle,
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { StaggerList } from "../components/ui/StaggerList";
 import {
   channelColorMap,
   channelIconMap,
@@ -87,7 +88,7 @@ export function ChannelsPage() {
         </div>
 
         {/* ── Channel List ──────────────────────────────────────── */}
-        <div className="mt-8 space-y-4">
+        <div className="mt-8">
           {channels === undefined ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
@@ -95,14 +96,16 @@ export function ChannelsPage() {
           ) : channels.length === 0 ? (
             <EmptyState onAdd={() => navigate("/channels/add")} />
           ) : (
-            channels.map((channel) => (
-              <ChannelCard
-                key={channel._id}
-                channel={channel}
-                onClick={() => navigate(`/channels/${channel._id}/update`)}
-                onDelete={() => setDeletingId(channel._id)}
-              />
-            ))
+            <StaggerList className="space-y-4">
+              {channels.map((channel) => (
+                <ChannelCard
+                  key={channel._id}
+                  channel={channel}
+                  onClick={() => navigate(`/channels/${channel._id}/update`)}
+                  onDelete={() => setDeletingId(channel._id)}
+                />
+              ))}
+            </StaggerList>
           )}
         </div>
 
@@ -146,7 +149,9 @@ function ChannelCard({
   return (
     <div
       data-testid={`channel-card-${channel._id}`}
-      className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm overflow-hidden"
+      className={cn(
+        "glass-panel rounded-xl overflow-hidden hover-card flex flex-col transition-all"
+      )}
     >
       <div className="flex items-center justify-between px-5 py-4">
         <button
@@ -208,8 +213,8 @@ function ChannelCard({
 
       {/* Connected Info */}
       {channel.status === "connected" && channel.connectedAt && (
-        <div className="border-t border-gray-100 dark:border-gray-800/50 px-5 py-3 bg-gray-50/50 dark:bg-gray-900/50">
-          <p className="text-xs text-gray-400 dark:text-gray-500">
+        <div className="border-t border-gray-200/50 dark:border-white/5 px-5 py-3 bg-black/5 dark:bg-white-[0.02]">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
             Connected {new Date(channel.connectedAt).toLocaleDateString()} at{" "}
             {new Date(channel.connectedAt).toLocaleTimeString()}
           </p>
@@ -275,8 +280,8 @@ function DeleteConfirmDialog({
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 dark:bg-gray-800 mb-5">
-        <MessageSquare className="h-8 w-8 text-gray-400" />
+      <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-500/20 mx-auto mb-6 shadow-[0_0_40px_-10px_rgba(59,130,246,0.4)]">
+        <MessageSquare className="h-10 w-10 text-blue-500 dark:text-blue-400" />
       </div>
       <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">
         No channels connected

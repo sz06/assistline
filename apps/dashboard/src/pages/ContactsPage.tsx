@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -512,7 +513,18 @@ export function ContactsPage() {
                       )}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  <motion.tbody 
+                    className="divide-y divide-gray-100 dark:divide-gray-800"
+                    initial="hidden"
+                    animate="show"
+                    variants={{
+                      hidden: { opacity: 0 },
+                      show: {
+                        opacity: 1,
+                        transition: { staggerChildren: 0.03 }
+                      }
+                    }}
+                  >
                     {paged.map((contact) => (
                       <ContactRow
                         key={contact._id}
@@ -524,7 +536,7 @@ export function ContactsPage() {
                         }
                       />
                     ))}
-                  </tbody>
+                  </motion.tbody>
                 </table>
               </div>
 
@@ -751,7 +763,11 @@ function ContactRow({
     .filter(Boolean);
 
   return (
-    <tr
+    <motion.tr
+      variants={{
+        hidden: { opacity: 0, y: 10 },
+        show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+      }}
       onClick={onEdit}
       data-testid={`contact-row-${contact._id}`}
       className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/60 cursor-pointer transition-colors group"
@@ -760,7 +776,7 @@ function ContactRow({
       <td className="px-4 py-3 align-top">
         <div className="flex items-start gap-3">
           <div
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-white font-semibold text-xs shadow-sm group-hover:scale-105 transition-transform mt-0.5`}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-white font-semibold text-xs shadow-md ring-2 ring-white dark:ring-gray-900 group-hover:scale-110 group-hover:shadow-[0_0_15px_-3px_rgba(255,255,255,0.5)] transition-all duration-300 mt-0.5`}
           >
             {initials}
           </div>
@@ -916,7 +932,7 @@ function ContactRow({
           )}
         </td>
       )}
-    </tr>
+    </motion.tr>
   );
 }
 
@@ -926,9 +942,9 @@ function ContactRow({
 
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div className="text-center py-16">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 mx-auto mb-4">
-        <Users className="h-8 w-8 text-blue-500 dark:text-blue-400" />
+    <div className="text-center py-20">
+      <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-500/20 mx-auto mb-6 shadow-[0_0_40px_-10px_rgba(59,130,246,0.4)]">
+        <Users className="h-10 w-10 text-blue-500 dark:text-blue-400" />
       </div>
       <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300">
         No contacts yet

@@ -55,12 +55,12 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "flex h-screen w-full flex-col border-r border-gray-200/60 bg-white/60 backdrop-blur-xl dark:border-gray-800/60 dark:bg-gray-950/60",
+        "flex h-screen w-full flex-col glass-sidebar",
         className,
       )}
     >
       {header && (
-        <div className="flex h-16 items-center border-b border-gray-200 px-4 dark:border-gray-700 shrink-0">
+        <div className="flex h-16 items-center border-b border-gray-200/50 px-4 dark:border-white/5 shrink-0">
           {header}
         </div>
       )}
@@ -146,10 +146,10 @@ function SidebarNavGroup({
                 type="button"
                 onClick={() => onNavigate(link.href)}
                 className={cn(
-                  "relative flex w-full items-center gap-3 px-4 py-2 text-sm font-medium transition-all duration-200 active:scale-[0.98] outline-none",
+                  "relative flex w-full items-center gap-3 px-4 py-2 text-sm transition-all duration-200 active:scale-[0.98] outline-none",
                   isActive
-                    ? "bg-blue-600/10 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400"
-                    : "text-gray-600 hover:bg-gray-100/80 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800/50 dark:hover:text-gray-100",
+                    ? "nav-item-active"
+                    : "nav-item-inactive",
                 )}
               >
                 {isActive && (
