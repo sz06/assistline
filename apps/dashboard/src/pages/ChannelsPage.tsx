@@ -150,7 +150,7 @@ function ChannelCard({
     <div
       data-testid={`channel-card-${channel._id}`}
       className={cn(
-        "glass-panel rounded-xl overflow-hidden hover-card flex flex-col transition-all"
+        "glass-panel rounded-xl overflow-hidden hover-card flex flex-col transition-all",
       )}
     >
       <div className="flex items-center justify-between px-5 py-4">

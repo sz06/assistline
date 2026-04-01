@@ -6,7 +6,7 @@
 export function isPhoneNumberLike(value: string): boolean {
   // If the display name contains letters, it's almost certainly a pure name string
   if (/[A-Za-z]/.test(value)) return false;
-  
+
   // Strip common phone formatting chars and any weird unicode spacing/hyphens, then check digit length
   const stripped = value.replace(/[^\d]/g, "");
   return stripped.length >= 7;

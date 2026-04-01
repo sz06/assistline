@@ -66,19 +66,25 @@ export function GoogleCSVImporter({
               // Parse emails (up to 3)
               for (let i = 1; i <= 3; i++) {
                 const emailValStr = row[`E-mail ${i} - Value`];
-                const emailLabelStr = row[`E-mail ${i} - Label`] || row[`E-mail ${i} - Type`];
-                
+                const emailLabelStr =
+                  row[`E-mail ${i} - Label`] || row[`E-mail ${i} - Type`];
+
                 if (emailValStr) {
                   const parts = emailValStr.split(" ::: ");
-                  const labelParts = emailLabelStr ? emailLabelStr.split(" ::: ") : [];
-                  
+                  const labelParts = emailLabelStr
+                    ? emailLabelStr.split(" ::: ")
+                    : [];
+
                   parts.forEach((val, idx) => {
                     const cleanVal = val.trim();
                     if (cleanVal) {
                       handles.push({
                         type: "email",
                         value: cleanVal,
-                        label: labelParts[idx]?.trim() || labelParts[0]?.trim() || "Email",
+                        label:
+                          labelParts[idx]?.trim() ||
+                          labelParts[0]?.trim() ||
+                          "Email",
                       });
                     }
                   });
@@ -88,19 +94,25 @@ export function GoogleCSVImporter({
               // Parse phones (up to 5)
               for (let i = 1; i <= 5; i++) {
                 const phoneValStr = row[`Phone ${i} - Value`];
-                const phoneLabelStr = row[`Phone ${i} - Label`] || row[`Phone ${i} - Type`];
-                
+                const phoneLabelStr =
+                  row[`Phone ${i} - Label`] || row[`Phone ${i} - Type`];
+
                 if (phoneValStr) {
                   const parts = phoneValStr.split(" ::: ");
-                  const labelParts = phoneLabelStr ? phoneLabelStr.split(" ::: ") : [];
-                  
+                  const labelParts = phoneLabelStr
+                    ? phoneLabelStr.split(" ::: ")
+                    : [];
+
                   parts.forEach((val, idx) => {
                     const cleanVal = val.trim();
                     if (cleanVal) {
                       handles.push({
                         type: "phone",
                         value: cleanVal,
-                        label: labelParts[idx]?.trim() || labelParts[0]?.trim() || "Mobile",
+                        label:
+                          labelParts[idx]?.trim() ||
+                          labelParts[0]?.trim() ||
+                          "Mobile",
                       });
                     }
                   });

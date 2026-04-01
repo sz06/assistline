@@ -25,11 +25,28 @@ const mockGroup: MergeCandidateSet = {
         jobTitle: "Software Engineer",
       },
       handles: [
-        { _id: "h-1" as Id<"contactHandles">, value: "john.doe@example.com", type: "email", _creationTime: Date.now(), contactId: "c-1" as Id<"contacts"> },
-        { _id: "h-2" as Id<"contactHandles">, value: "+1234567890", type: "phone", _creationTime: Date.now(), contactId: "c-1" as Id<"contacts"> },
+        {
+          _id: "h-1" as Id<"contactHandles">,
+          value: "john.doe@example.com",
+          type: "email",
+          _creationTime: Date.now(),
+          contactId: "c-1" as Id<"contacts">,
+        },
+        {
+          _id: "h-2" as Id<"contactHandles">,
+          value: "+1234567890",
+          type: "phone",
+          _creationTime: Date.now(),
+          contactId: "c-1" as Id<"contacts">,
+        },
       ],
       identities: [
-        { _id: "i-1" as Id<"contactIdentities">, matrixId: "@john:matrix.org", _creationTime: Date.now(), contactId: "c-1" as Id<"contacts"> },
+        {
+          _id: "i-1" as Id<"contactIdentities">,
+          matrixId: "@john:matrix.org",
+          _creationTime: Date.now(),
+          contactId: "c-1" as Id<"contacts">,
+        },
       ],
     },
     {
@@ -41,7 +58,13 @@ const mockGroup: MergeCandidateSet = {
         jobTitle: "Developer",
       },
       handles: [
-        { _id: "h-3" as Id<"contactHandles">, value: "john.doe@example.com", type: "email", _creationTime: Date.now(), contactId: "c-2" as Id<"contacts"> },
+        {
+          _id: "h-3" as Id<"contactHandles">,
+          value: "john.doe@example.com",
+          type: "email",
+          _creationTime: Date.now(),
+          contactId: "c-2" as Id<"contacts">,
+        },
       ],
       identities: [],
     },
@@ -53,20 +76,57 @@ const mockGroup: MergeCandidateSet = {
         avatarUrl: "https://i.pravatar.cc/150?u=john",
       },
       handles: [
-        { _id: "h-4" as Id<"contactHandles">, value: "+1234567890", type: "phone", _creationTime: Date.now(), contactId: "c-3" as Id<"contacts"> },
+        {
+          _id: "h-4" as Id<"contactHandles">,
+          value: "+1234567890",
+          type: "phone",
+          _creationTime: Date.now(),
+          contactId: "c-3" as Id<"contacts">,
+        },
       ],
       identities: [
-        { _id: "i-2" as Id<"contactIdentities">, matrixId: "@johnny123:whatsapp.net", _creationTime: Date.now(), contactId: "c-3" as Id<"contacts"> },
+        {
+          _id: "i-2" as Id<"contactIdentities">,
+          matrixId: "@johnny123:whatsapp.net",
+          _creationTime: Date.now(),
+          contactId: "c-3" as Id<"contacts">,
+        },
       ],
     },
   ],
+  similarContacts: [],
 };
 
 export const Default: Story = {
   args: {
     group: mockGroup,
-    onMerge: async (primaryId: string) => {
-      console.log("Merge initiated with primary ID:", primaryId);
+    similarContacts: [
+      {
+        contact: {
+          _id: "c-4" as Id<"contacts">,
+          _creationTime: Date.now() - 86400000,
+          name: "John Doe",
+          otherNames: ["JD", "Johnny"],
+          avatarUrl: "https://i.pravatar.cc/150?u=johndoe",
+        },
+        handles: [],
+        identities: [
+          {
+            _id: "i-3" as Id<"contactIdentities">,
+            matrixId: "@whatsapp_123abc456def:matrix.org",
+            _creationTime: Date.now(),
+            contactId: "c-4" as Id<"contacts">,
+          },
+        ],
+      },
+    ],
+    onMerge: async (primaryId: string, additionalMergeIds: string[]) => {
+      console.log(
+        "Merge initiated with primary ID:",
+        primaryId,
+        "and extra IDs:",
+        additionalMergeIds,
+      );
       return new Promise((resolve) => setTimeout(resolve, 1500));
     },
   },

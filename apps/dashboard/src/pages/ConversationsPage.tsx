@@ -13,6 +13,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { InlineSuggestionCard } from "../components/artifacts/inline-suggestion-card";
 import { channelColorMap, channelIconMap } from "../components/ChannelIcons";
@@ -348,6 +349,7 @@ function ChatPanel({
 }) {
   const data = useQuery(api.conversations.queries.getWithMessages, { id });
   const roles = useQuery(api.roles.list);
+  const userProfile = useQuery(api.userProfile.get);
   const sendMessage = useMutation(api.messages.mutations.sendMessage);
   const updateAISettings = useMutation(
     api.conversations.mutations.updateAISettings,
@@ -430,9 +432,18 @@ function ChatPanel({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
-            <h2 className="font-semibold text-sm text-gray-900 dark:text-gray-100">
-              {data.participantDetails.name}
-            </h2>
+            {data.participantDetails.contactId ? (
+              <Link
+                to={`/contacts/${data.participantDetails.contactId}/update`}
+                className="font-semibold text-sm text-gray-900 dark:text-gray-100 hover:underline"
+              >
+                {data.participantDetails.name}
+              </Link>
+            ) : (
+              <h2 className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                {data.participantDetails.name}
+              </h2>
+            )}
           </div>
           <div className="text-[11px] text-gray-500">
             {data.memberCount > 2
@@ -485,9 +496,13 @@ function ChatPanel({
       <div className="flex-1 overflow-y-auto px-6 py-4 bg-gray-50 dark:bg-gray-900/30">
         <div className="space-y-3">
           {data.messages.map((msg) => {
-            const isUser = msg.direction === "in";
+            const isSelfMatrixId =
+              userProfile?.matrixIds?.includes(msg.sender) ?? false;
+            const isIncoming = msg.direction === "in" && !isSelfMatrixId;
             const isGroup = (data.memberCount ?? 0) > 2;
-            const senderLabel = isUser ? (msg.senderName ?? msg.sender) : "You";
+            const senderLabel = isIncoming
+              ? (msg.senderName ?? msg.sender)
+              : "You";
             const isRedacted = msg.isRedacted === true;
             const isEdited = msg.editedAt != null;
             const messageType = msg.type ?? "text";
@@ -498,35 +513,44 @@ function ChatPanel({
 
             // Show badge only on latest inbound message per sender contact
             const showSuggestionsBadge =
-              isUser &&
+              isIncoming &&
               !!msg.senderContactId &&
               lastMsgIdPerContact.get(msg.senderContactId) === msg._id;
 
             return (
               <div key={msg._id}>
                 <div
-                  className={`flex ${isUser ? "justify-start" : "justify-end"}`}
+                  className={`flex ${isIncoming ? "justify-start" : "justify-end"}`}
                 >
                   {/* Sender initial avatar — groups only, incoming only */}
-                  {isUser && isGroup && (
+                  {isIncoming && isGroup && (
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-teal-500 to-cyan-600 text-white text-[10px] font-bold mr-2 mt-0.5 shadow-sm">
                       {(msg.senderName ?? "?").charAt(0).toUpperCase()}
                     </div>
                   )}
                   <div
-                    className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${isUser ? "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-tl-sm text-gray-900 dark:text-gray-100" : "bg-blue-600 text-white rounded-tr-sm"}`}
+                    className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${isIncoming ? "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-tl-sm text-gray-900 dark:text-gray-100" : "bg-blue-600 text-white rounded-tr-sm"}`}
                   >
                     {/* Sender name label */}
-                    <p
-                      className={`text-[11px] font-semibold mb-1 ${isUser ? "text-teal-600 dark:text-teal-400" : "text-white/80"}`}
-                    >
-                      {senderLabel}
-                    </p>
+                    {msg.senderContactId && isIncoming ? (
+                      <Link
+                        to={`/contacts/${msg.senderContactId}/update`}
+                        className={`block text-[11px] font-semibold mb-1 hover:underline ${isIncoming ? "text-teal-600 dark:text-teal-400" : "text-white/80"}`}
+                      >
+                        {senderLabel}
+                      </Link>
+                    ) : (
+                      <p
+                        className={`text-[11px] font-semibold mb-1 ${isIncoming ? "text-teal-600 dark:text-teal-400" : "text-white/80"}`}
+                      >
+                        {senderLabel}
+                      </p>
+                    )}
 
                     {/* Deleted marker */}
                     {isRedacted && (
                       <div
-                        className={`mb-1.5 flex items-center gap-1 text-[11px] font-medium opacity-80 ${isUser ? "text-red-500" : "text-red-200"}`}
+                        className={`mb-1.5 flex items-center gap-1 text-[11px] font-medium opacity-80 ${isIncoming ? "text-red-500" : "text-red-200"}`}
                       >
                         <Trash2 className="h-3 w-3" />
                         <span>Deleted message</span>
@@ -538,7 +562,7 @@ function ChatPanel({
                       {/* Attachment type indicator for media */}
                       {hasAttachment && (
                         <div
-                          className={`text-xs font-medium mb-1 flex items-center gap-1 ${isUser ? "text-gray-500" : "text-white/70"}`}
+                          className={`text-xs font-medium mb-1 flex items-center gap-1 ${isIncoming ? "text-gray-500" : "text-white/70"}`}
                         >
                           {messageType === "image" && "📷 Image"}
                           {messageType === "video" && "🎬 Video"}
@@ -562,10 +586,10 @@ function ChatPanel({
                       msg.editHistory &&
                       msg.editHistory.length > 0 && (
                         <div
-                          className={`mt-2 border-t ${isUser ? "border-gray-200 dark:border-gray-700" : "border-white/20"} pt-1.5`}
+                          className={`mt-2 border-t ${isIncoming ? "border-gray-200 dark:border-gray-700" : "border-white/20"} pt-1.5`}
                         >
                           <p
-                            className={`text-[10px] font-medium mb-1 ${isUser ? "text-gray-400 dark:text-gray-500" : "text-white/50"}`}
+                            className={`text-[10px] font-medium mb-1 ${isIncoming ? "text-gray-400 dark:text-gray-500" : "text-white/50"}`}
                           >
                             Previous{" "}
                             {msg.editHistory.length === 1
@@ -578,12 +602,12 @@ function ChatPanel({
                               className={`${idx > 0 ? "mt-1.5" : ""}`}
                             >
                               <p
-                                className={`whitespace-pre-wrap text-xs line-through ${isUser ? "text-gray-400 dark:text-gray-500" : "text-white/40"}`}
+                                className={`whitespace-pre-wrap text-xs line-through ${isIncoming ? "text-gray-400 dark:text-gray-500" : "text-white/40"}`}
                               >
                                 {entry.text}
                               </p>
                               <p
-                                className={`text-[9px] ${isUser ? "text-gray-300 dark:text-gray-600" : "text-white/30"}`}
+                                className={`text-[9px] ${isIncoming ? "text-gray-300 dark:text-gray-600" : "text-white/30"}`}
                               >
                                 {new Date(entry.editedAt).toLocaleString()}
                               </p>
@@ -593,7 +617,7 @@ function ChatPanel({
                       )}
 
                     <p
-                      className={`text-[10px] mt-1.5 ${isUser ? "text-gray-400" : "text-white/70"}`}
+                      className={`text-[10px] mt-1.5 ${isIncoming ? "text-gray-400" : "text-white/70"}`}
                     >
                       {new Date(msg.timestamp).toLocaleString()}
                       {isEdited && (
@@ -615,7 +639,7 @@ function ChatPanel({
                 {/* Reactions row */}
                 {msg.reactions && msg.reactions.length > 0 && (
                   <div
-                    className={`flex gap-1 mt-1 ${isUser ? "justify-start" : "justify-end"} ${isUser && isGroup ? "ml-9" : ""}`}
+                    className={`flex gap-1 mt-1 ${isIncoming ? "justify-start" : "justify-end"} ${isIncoming && isGroup ? "ml-9" : ""}`}
                   >
                     {msg.reactions.map((r) => (
                       <span

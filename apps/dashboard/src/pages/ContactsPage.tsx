@@ -513,7 +513,7 @@ export function ContactsPage() {
                       )}
                     </tr>
                   </thead>
-                  <motion.tbody 
+                  <motion.tbody
                     className="divide-y divide-gray-100 dark:divide-gray-800"
                     initial="hidden"
                     animate="show"
@@ -521,8 +521,8 @@ export function ContactsPage() {
                       hidden: { opacity: 0 },
                       show: {
                         opacity: 1,
-                        transition: { staggerChildren: 0.03 }
-                      }
+                        transition: { staggerChildren: 0.03 },
+                      },
                     }}
                   >
                     {paged.map((contact) => (
@@ -766,7 +766,11 @@ function ContactRow({
     <motion.tr
       variants={{
         hidden: { opacity: 0, y: 10 },
-        show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+        show: {
+          opacity: 1,
+          y: 0,
+          transition: { type: "spring", stiffness: 300, damping: 24 },
+        },
       }}
       onClick={onEdit}
       data-testid={`contact-row-${contact._id}`}

@@ -54,10 +54,7 @@ export function Sidebar({
 
   return (
     <aside
-      className={cn(
-        "flex h-screen w-full flex-col glass-sidebar",
-        className,
-      )}
+      className={cn("flex h-screen w-full flex-col glass-sidebar", className)}
     >
       {header && (
         <div className="flex h-16 items-center border-b border-gray-200/50 px-4 dark:border-white/5 shrink-0">
@@ -147,9 +144,7 @@ function SidebarNavGroup({
                 onClick={() => onNavigate(link.href)}
                 className={cn(
                   "relative flex w-full items-center gap-3 px-4 py-2 text-sm transition-all duration-200 active:scale-[0.98] outline-none",
-                  isActive
-                    ? "nav-item-active"
-                    : "nav-item-inactive",
+                  isActive ? "nav-item-active" : "nav-item-inactive",
                 )}
               >
                 {isActive && (

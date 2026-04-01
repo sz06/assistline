@@ -167,7 +167,13 @@ function resolveChannelId(
   for (const member of members) {
     for (const [prefix, platformType] of Object.entries(BRIDGE_BOT_PREFIXES)) {
       if (member.state_key.startsWith(prefix)) {
-        return channelIdByType.get(platformType);
+        const id = channelIdByType.get(platformType);
+        if (id) return id;
+
+        // Mautrix-Meta handles both FB and IG using the same bot prefix.
+        if (platformType === "facebook") {
+          return channelIdByType.get("instagram");
+        }
       }
     }
   }
@@ -330,7 +336,7 @@ async function reLogin(): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 /** Auto-join a room the bot was invited to. */
-async function joinRoom(roomId: string): Promise<void> {
+async function joinRoom(roomId: string, retryDelayMs = 2000): Promise<void> {
   const res = await matrixFetch(
     `/_matrix/client/v3/join/${encodeURIComponent(roomId)}`,
     { method: "POST", body: "{}" },
@@ -339,6 +345,19 @@ async function joinRoom(roomId: string): Promise<void> {
     console.log(`[listener] ✓ Joined room ${roomId}`);
   } else {
     const body = await res.text();
+    if (res.status === 429) {
+      try {
+        const data = JSON.parse(body);
+        const waitTime = data.retry_after_ms ?? retryDelayMs;
+        console.warn(
+          `[listener] Rate limited joining ${roomId}, waiting ${waitTime}ms...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, waitTime));
+        return joinRoom(roomId, retryDelayMs * 2);
+      } catch {
+        // Fallback
+      }
+    }
     console.error(`[listener] ✗ Failed to join ${roomId}: ${body}`);
   }
 }

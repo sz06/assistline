@@ -176,9 +176,12 @@ export const processMessage = internalAction({
     const profiles = await Promise.all(
       uniqueContactIds.map(async (contactId) => ({
         contactId,
-        profile: (await ctx.runQuery(internal.contacts.internal.getContactProfileQuery, {
-          contactId,
-        })) as ProfileShape | null,
+        profile: (await ctx.runQuery(
+          internal.contacts.internal.getContactProfileQuery,
+          {
+            contactId,
+          },
+        )) as ProfileShape | null,
       })),
     );
 

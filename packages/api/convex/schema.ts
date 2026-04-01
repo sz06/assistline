@@ -59,7 +59,7 @@ export default defineSchema({
     notes: v.optional(v.string()),
     addresses: v.optional(v.array(v.string())),
     lastUpdateAt: v.optional(v.number()), // Timestamp of last modification
-  }),
+  }).index("by_name", ["name"]),
   contactIdentities: defineTable({
     contactId: v.id("contacts"),
     matrixId: v.string(),

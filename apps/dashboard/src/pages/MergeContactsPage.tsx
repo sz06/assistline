@@ -61,7 +61,8 @@ export function MergeContactsPage() {
           <div className="bg-blue-50 dark:bg-blue-900/10 text-blue-800 dark:text-blue-300 px-4 py-3 rounded-lg text-sm mb-6 flex items-center justify-between border border-blue-100 dark:border-blue-900/30">
             <span>
               Action Required: <strong>{totalSets}</strong> potential duplicate
-              sets require your review. Overlapping identities will be safely migrated to your selected Primary Profile.
+              sets require your review. Overlapping identities will be safely
+              migrated to your selected Primary Profile.
             </span>
           </div>
 
@@ -75,16 +76,19 @@ export function MergeContactsPage() {
               const uniqueKey = group.contacts
                 .map((c) => c.contact._id)
                 .sort()
-                .join('-');
-              
+                .join("-");
+
               return (
                 <DuplicateGroupCard
                   key={uniqueKey}
                   group={group}
-                  onMerge={async (primaryId) => {
+                  onMerge={async (primaryId, additionalMergeIds) => {
                     const duplicateIds = group.contacts
                       .map((c) => c.contact._id)
-                      .filter((id) => id !== primaryId);
+                      .filter((id) => id !== primaryId)
+                      .concat(
+                        additionalMergeIds.filter((id) => id !== primaryId),
+                      );
 
                     await executeMerge({
                       primaryContactId: primaryId,

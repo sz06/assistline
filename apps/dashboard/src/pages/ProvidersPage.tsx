@@ -263,7 +263,7 @@ function ProviderCard({
         "glass-panel rounded-xl overflow-hidden hover-card transition-all",
         provider.isDefault
           ? "border-blue-400/50 dark:border-blue-500/50 ring-1 ring-blue-400/30 dark:ring-blue-500/30 shadow-[0_0_15px_-3px_rgba(59,130,246,0.3)]"
-          : ""
+          : "",
       )}
     >
       {/* ── Header ──────────────────────────────────────────────── */}

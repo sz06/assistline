@@ -519,18 +519,8 @@ function MessageBubble({
       // Handle the 'tool-searchArtifacts' type from useUIMessages parts
       if (p.type === "tool-searchArtifacts" && p.output) {
         try {
-          const res = typeof p.output === "string" ? JSON.parse(p.output) : p.output;
-          if (typeof res.count === "number") {
-            artifactCount += res.count;
-          }
-        } catch (e) {
-          // safely ignore
-        }
-      }
-      // Fallback for standard AI SDK toolResult parts just in case
-      else if (p.type === "toolResult" && (p.toolName === "searchArtifacts" || p.name === "searchArtifacts") && p.result) {
-        try {
-          const res = typeof p.result === "string" ? JSON.parse(p.result) : p.result;
+          const res =
+            typeof p.output === "string" ? JSON.parse(p.output) : p.output;
           if (typeof res.count === "number") {
             artifactCount += res.count;
           }
@@ -586,7 +576,8 @@ function MessageBubble({
         {!isUser && artifactCount > 0 && (
           <div className="flex items-center gap-1.5 self-start bg-gray-50 dark:bg-gray-800/60 px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-800 text-[10px] text-gray-500 dark:text-gray-400 font-medium tracking-wide">
             <Sparkles className="h-3 w-3 text-purple-500" />
-            Used {artifactCount} artifact{artifactCount === 1 ? "" : "s"} for context
+            Used {artifactCount} artifact{artifactCount === 1 ? "" : "s"} for
+            context
           </div>
         )}
       </div>

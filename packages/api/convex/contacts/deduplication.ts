@@ -58,9 +58,44 @@ export const getMergeCandidates = query({
             }
           }
         }
-        
+
         if (component.length > 1) {
           components.push(component);
+        }
+      }
+    }
+
+    // 4.5. Find isolated name-based components
+    const allContacts = await ctx.db.query("contacts").collect();
+    const nameBuckets = new Map<string, Array<Id<"contacts">>>();
+
+    for (const c of allContacts) {
+      const namesToBucket = [];
+      if (c.name) namesToBucket.push(c.name);
+      if (c.otherNames) namesToBucket.push(...c.otherNames);
+
+      for (const rawName of namesToBucket) {
+        if (!rawName) continue;
+        const normalized = rawName.trim().toLowerCase();
+        if (!normalized) continue;
+
+        if (!nameBuckets.has(normalized)) nameBuckets.set(normalized, []);
+        const bucket = nameBuckets.get(normalized)!;
+        if (!bucket.includes(c._id)) {
+          bucket.push(c._id);
+        }
+      }
+    }
+
+    for (const bucket of nameBuckets.values()) {
+      if (bucket.length > 1) {
+        // If none of these contacts share ANY handles (are not in adj graph)
+        // Then this is a completely isolated name match and should surface.
+        const isInHandleComponent = bucket.some((id) => adj.has(id));
+        if (!isInHandleComponent) {
+          // We push only the FIRST contact as a solitary anchor component.
+          // The rest will automatically be swept up by the similarContacts lookup.
+          components.push([bucket[0]]);
         }
       }
     }
@@ -83,19 +118,22 @@ export const getMergeCandidates = query({
     const results = [];
     for (const componentIds of paginatedComponents) {
       const contacts = [];
+      const handledContactIds = new Set<string>();
+
       for (const id of componentIds) {
+        handledContactIds.add(id);
         const c = await ctx.db.get(id);
         if (c) {
           const handles = await ctx.db
             .query("contactHandles")
             .withIndex("by_contactId", (q) => q.eq("contactId", id))
             .collect();
-          
+
           const identities = await ctx.db
             .query("contactIdentities")
             .withIndex("by_contactId", (q) => q.eq("contactId", id))
             .collect();
-            
+
           contacts.push({
             contact: c,
             handles,
@@ -103,12 +141,50 @@ export const getMergeCandidates = query({
           });
         }
       }
-      
-      // Only return sets where we successfully fetched 2+ valid contacts
-      if (contacts.length > 1) {
+
+      // Find similar contacts by precise name/otherName matches
+      const similarContacts = [];
+      const distinctNames = new Set(
+        contacts
+          .flatMap((c) => {
+            const names = [];
+            if (c.contact.name) names.push(c.contact.name);
+            if (c.contact.otherNames) names.push(...c.contact.otherNames);
+            return names;
+          })
+          .filter(Boolean) as string[],
+      );
+
+      for (const name of distinctNames) {
+        const normalizedName = name.trim().toLowerCase();
+        const matchIds = nameBuckets.get(normalizedName) || [];
+
+        for (const matchId of matchIds) {
+          if (!handledContactIds.has(matchId)) {
+            handledContactIds.add(matchId);
+            const match = await ctx.db.get(matchId);
+            if (!match) continue;
+
+            const handles = await ctx.db
+              .query("contactHandles")
+              .withIndex("by_contactId", (q) => q.eq("contactId", match._id))
+              .collect();
+            const identities = await ctx.db
+              .query("contactIdentities")
+              .withIndex("by_contactId", (q) => q.eq("contactId", match._id))
+              .collect();
+            similarContacts.push({ contact: match, handles, identities });
+          }
+        }
+      }
+
+      // Only return sets where we successfully fetched 2+ valid contacts OR have similar name matches
+      if (contacts.length > 1 || similarContacts.length > 0) {
         // Sort contacts by _creationTime asc (oldest first)
-        contacts.sort((a, b) => a.contact._creationTime - b.contact._creationTime);
-        results.push({ contacts });
+        contacts.sort(
+          (a, b) => a.contact._creationTime - b.contact._creationTime,
+        );
+        results.push({ contacts, similarContacts });
       }
     }
 
@@ -217,7 +293,7 @@ export const executeMerge = mutation({
         for (const n of dup.otherNames) combined.add(n);
         patch.otherNames = Array.from(combined);
       }
-      
+
       if (dup.name && dup.name !== primary.name && dup.name !== patch.name) {
         const combined = new Set(patch.otherNames ?? primary.otherNames ?? []);
         combined.add(dup.name);

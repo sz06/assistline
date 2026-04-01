@@ -84,14 +84,16 @@ export const startMetaPairing = internalAction({
     });
     if (!channel) throw new Error("Channel not found");
 
+    const network = channel.type === "instagram" ? "instagram" : "messenger";
+
     console.log(
-      `[meta-pairing] Starting Meta pairing via provisioning API for ${args.channelId}`,
+      `[meta-pairing] Starting Meta pairing via provisioning API for ${args.channelId} (${network})`,
     );
 
     try {
       // Start login process via provisioning API
       const startRes = await fetch(
-        `${META_PROVISION_URL}/_matrix/provision/v3/login/start/messenger?user_id=${encodeURIComponent(userMxid)}`,
+        `${META_PROVISION_URL}/_matrix/provision/v3/login/start/${network}?user_id=${encodeURIComponent(userMxid)}`,
         {
           method: "POST",
           headers: {
@@ -229,7 +231,7 @@ export const sendMetaCookiesAction = internalAction({
     if (missing.length > 0) {
       await ctx.runMutation(internal.channels.core.internalSetError, {
         id: args.channelId,
-        error: `Could not extract required cookies: ${missing.join(", ")}. Make sure you copied the full cURL from messenger.com.`,
+        error: `Could not extract required cookies: ${missing.join(", ")}. Make sure you copied the full cURL from ${network === "instagram" ? "instagram.com" : "messenger.com"}.`,
       });
       return;
     }

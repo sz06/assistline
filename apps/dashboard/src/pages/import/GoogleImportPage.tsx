@@ -134,7 +134,9 @@ export function GoogleImportPage() {
               {isImporting && (
                 <div className="flex flex-col gap-3 h-full w-full items-center justify-center text-gray-500 absolute inset-0 bg-white/50 dark:bg-gray-900/80 z-20 backdrop-blur-sm">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  <p className="font-medium animate-pulse">Importing contacts...</p>
+                  <p className="font-medium animate-pulse">
+                    Importing contacts...
+                  </p>
                 </div>
               )}
 
