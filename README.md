@@ -5,15 +5,17 @@ A self-hosted, AI-powered messaging assistant that bridges WhatsApp (and soon Te
 ## Architecture
 
 ```text
-WhatsApp ←→ Mautrix Bridge ←→ Dendrite (Matrix) ←→ Listener → Convex ←→ Dashboard
-                                                                 ↕
-                                                            AI Agents
+WhatsApp  ←→ Mautrix WhatsApp ─┐
+Messenger ←→ Mautrix Meta ─────┤←→ Dendrite (Matrix) ←→ Listener → Convex ←→ Dashboard
+Instagram ←→ Mautrix Meta ─────┘                                     ↕
+                                                                AI Agents
 ```
 
 | Component | Description |
 |---|---|
 | **Dendrite** | Self-hosted Matrix homeserver — the event backbone |
 | **Mautrix WhatsApp** | WhatsApp ↔ Matrix bridge |
+| **Mautrix Meta** | Facebook Messenger + Instagram ↔ Matrix bridge |
 | **Convex** | Self-hosted real-time backend (database, functions, agents) |
 | **Listener** | Node.js service that syncs Matrix events → Convex |
 | **Dashboard** | Vite + React SPA for managing conversations, contacts, and AI |
@@ -56,8 +58,8 @@ git clone <repository-url>
 cd assistline
 pnpm install
 
-# 2. Generate environment files and secrets
-pnpm setup:envs
+# 2. Generate all configs and secrets (one command)
+pnpm setup
 
 # 3. Start all services (Dendrite, Convex, bridges, init)
 docker compose -f docker/docker-compose.yml up -d
@@ -66,7 +68,13 @@ docker compose -f docker/docker-compose.yml up -d
 pnpm dev
 ```
 
-That's it. The `assistline-init` container automatically:
+That's it. `pnpm setup` generates:
+- All environment files with random secrets
+- `docker/dendrite.yaml` from a tracked template
+- Mautrix bridge configs + registration files (WhatsApp, Messenger, Instagram)
+- Provisioning secrets injected into bridge configs and Convex
+
+The `assistline-init` container then automatically:
 - Creates the Matrix bot user on Dendrite
 - Deploys all Convex functions and schema
 - Seeds default config entries and roles
@@ -75,11 +83,27 @@ Once running:
 - **Dashboard:** http://localhost:5174
 - **Convex Inspector:** http://localhost:6791 (run `pnpm convex:key` for the admin key)
 
-### Connecting WhatsApp
+### Setting Up AI
 
-1. Open the Dashboard → **Channels** → **Add Channel** → **WhatsApp**
-2. Click **Connect** — a QR code will appear
-3. Scan the QR code with WhatsApp on your phone
+1. Open the Dashboard → **AI Providers** → **Add Provider**
+2. Select your provider (OpenAI, Anthropic, Google, Groq, Ollama, etc.)
+3. Enter your API key and select a model
+4. Set it as the default provider
+
+The AI provider is used for reply suggestions, the knowledge base, and the chat assistant.
+
+### Connecting Channels
+
+#### WhatsApp
+1. Dashboard → **Channels** → **Add Channel** → **WhatsApp**
+2. Enter your phone number and click **Connect**
+3. Enter the pairing code in WhatsApp on your phone
+4. Messages will start flowing into the dashboard
+
+#### Facebook Messenger / Instagram
+1. Dashboard → **Channels** → **Add Channel** → **Messenger** or **Instagram**
+2. Click **Connect** — follow the cookie instructions
+3. Paste your browser cookies from messenger.com / instagram.com
 4. Messages will start flowing into the dashboard
 
 ## Development Workflows
@@ -114,10 +138,12 @@ This installs any new dependencies and deploys all changes (Convex functions + l
 
 ## Environment Variables
 
-Run `pnpm setup:envs` to auto-generate all secrets. The script:
-1. Copies `.env.example` → `.env.local` with random passwords
-2. Updates `docker/dendrite.yaml` with the shared secret
+Run `pnpm setup` to auto-generate all secrets. The script:
+1. Creates `.env.local` from `.env.example` with random passwords and secrets
+2. Creates `docker/dendrite.yaml` from a tracked template
 3. Creates `docker/.env` for Docker Compose
+4. Creates mautrix bridge configs + registration files
+5. Creates `apps/dashboard/.env.local`
 
 | Variable | Purpose |
 |---|---|
@@ -126,6 +152,8 @@ Run `pnpm setup:envs` to auto-generate all secrets. The script:
 | `MATRIX_BOT_USERNAME` | Bot user for the listener (default: `listener-bot`) |
 | `MATRIX_BOT_PASSWORD` | Bot password (auto-generated) |
 | `VITE_CONVEX_URL` | Convex backend URL for the dashboard |
+| `WHATSAPP_PROVISION_SECRET` | WhatsApp bridge provisioning API secret |
+| `META_PROVISION_SECRET` | Meta bridge provisioning API secret |
 | `TS_AUTHKEY` | Optional Tailscale auth key for remote access |
 | `ASSISTLINE_DATA` | Root data directory (default: `./assistline-data`) |
 
@@ -138,6 +166,7 @@ assistline-data/
 ├── convex/              # Convex SQLite DB + credentials (most critical)
 ├── dendrite/            # Matrix homeserver state
 ├── mautrix-whatsapp/    # WhatsApp bridge config + session
+├── mautrix-meta/        # Meta bridge config + session (Messenger/Instagram)
 ├── listener/            # Sync token
 └── tailscale/           # VPN state
 ```
@@ -155,7 +184,7 @@ ASSISTLINE_DATA="/mnt/nas/assistline"
 - **Backend:** [Convex](https://convex.dev/) (self-hosted) · [Convex Agent Component](https://www.npmjs.com/package/@convex-dev/agent)
 - **Frontend:** [Vite](https://vite.dev/) · [React](https://react.dev/) · [Tailwind CSS v4](https://tailwindcss.com/)
 - **UI:** [shadcn/ui](https://ui.shadcn.com/) · [Base UI](https://base-ui.com/)
-- **Messaging:** [Dendrite](https://matrix-org.github.io/dendrite/) · [Mautrix WhatsApp](https://docs.mau.fi/bridges/go/whatsapp/)
+- **Messaging:** [Dendrite](https://matrix-org.github.io/dendrite/) · [Mautrix WhatsApp](https://docs.mau.fi/bridges/go/whatsapp/) · [Mautrix Meta](https://docs.mau.fi/bridges/go/meta/)
 - **AI:** [Vercel AI SDK](https://sdk.vercel.ai/) · OpenAI · Anthropic · Google AI
 - **Testing:** [Playwright](https://playwright.dev/) · [Vitest](https://vitest.dev/)
 - **Toolchain:** [Biome](https://biomejs.dev/)

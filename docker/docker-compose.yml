@@ -44,23 +44,33 @@ services:
     depends_on:
       - dendrite
 
-  # 3. Convex Self-Hosted Backend
+  # 4. Convex Self-Hosted Backend
   convex:
     image: ghcr.io/get-convex/convex-backend:latest
     container_name: convex-backend
     restart: unless-stopped
     ports:
-      - "3410:3210"   # Host 3410 → Container 3210 (avoids conflict with local convex dev)
-      - "3411:3211"
+      - "3210:3210"
+      - "3211:3211"
     volumes:
       - ${ASSISTLINE_DATA:-./assistline-data}/convex:/convex/data
     environment:
       - CONVEX_CLOUD_ORIGIN=http://127.0.0.1:3210
       - CONVEX_SITE_ORIGIN=http://127.0.0.1:3211
+      # ── Matrix / Bridge vars for Convex actions ──
+      - DENDRITE_SERVER_NAME=${DENDRITE_SERVER_NAME:-matrix.local}
+      - MATRIX_BOT_USERNAME=${MATRIX_BOT_USERNAME:-listener-bot}
+      - MATRIX_BOT_PASSWORD=${MATRIX_BOT_PASSWORD}
+      - MATRIX_HOMESERVER_URL=http://dendrite:8008
+      - MATRIX_PUBLIC_URL=http://localhost:8008
+      - META_PROVISION_URL=http://mautrix-meta:29319
+      - WHATSAPP_PROVISION_URL=http://mautrix-whatsapp:29318
+      - META_PROVISION_SECRET=${META_PROVISION_SECRET}
+      - WHATSAPP_PROVISION_SECRET=${WHATSAPP_PROVISION_SECRET}
     networks:
       - assistline-net
 
-  # 4. AssistLine Init (runs once — sets up Matrix bot + deploys Convex functions)
+  # 5. AssistLine Init (runs once — sets up Matrix bot + deploys Convex functions)
   assistline-init:
     build:
       context: ..
@@ -85,7 +95,7 @@ services:
       - dendrite
       - convex
 
-  # 5. Convex Dashboard (web UI to inspect data, functions, logs)
+  # 6. Convex Dashboard (web UI to inspect data, functions, logs)
   convex-dashboard:
     image: ghcr.io/get-convex/convex-dashboard:latest
     container_name: convex-dashboard
@@ -99,7 +109,7 @@ services:
     depends_on:
       - convex
 
-  # 8. Tailscale Sidecar Proxy for the Vite Dashboard
+  # 7. Tailscale Sidecar Proxy for the Vite Dashboard
   tailscale:
     image: tailscale/tailscale:latest
     container_name: tailscale-sidecar
@@ -118,7 +128,7 @@ services:
     networks:
       - assistline-net
 
-  # 9. Dashboard App (Vite React)
+  # 8. Dashboard App (Vite React)
   dashboard:
     build:
       context: ..
@@ -132,7 +142,7 @@ services:
     depends_on:
       - tailscale
 
-  # 10. Matrix Listener (syncs Dendrite events → Convex)
+  # 9. Matrix Listener (syncs Dendrite events → Convex)
   matrix-listener:
     build:
       context: ..

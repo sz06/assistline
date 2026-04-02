@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.28.0] - 2026-04-02
+
+### Added
+
+- **Zero-Config Self-Hosting** (`scripts`, `docker`): Consolidated all self-hosting configuration into a single `pnpm setup` command. New users can now go from `git clone` → `pnpm setup` → `docker compose up` with zero manual config editing.
+  - **Bridge Config Generation** (`scripts/setup.mjs`): The setup script now auto-generates mautrix-whatsapp and mautrix-meta `config.yaml` and `registration.yaml` files with correct homeserver addresses, matching AS/HS tokens, and pre-generated provisioning secrets.
+  - **Dendrite Template** (`docker/dendrite.yaml.template`): The Dendrite config is now tracked in git as a template. The setup script substitutes the shared secret placeholder to produce the runtime `dendrite.yaml`.
+  - **Dashboard Env** (`scripts/setup.mjs`): `apps/dashboard/.env.local` is now auto-generated with the correct `VITE_CONVEX_URL`.
+  - **Provisioning Secrets** (`scripts/setup.mjs`): `WHATSAPP_PROVISION_SECRET` and `META_PROVISION_SECRET` are pre-generated and injected into both the bridge configs and `.env.local`, eliminating the need to extract them from running bridges.
+
+### Changed
+
+- **Convex Container Env Vars** (`docker/docker-compose.yml`): The Convex backend container now receives all 9 Matrix/bridge environment variables (`DENDRITE_SERVER_NAME`, `MATRIX_BOT_USERNAME`, `MATRIX_BOT_PASSWORD`, `MATRIX_HOMESERVER_URL`, `MATRIX_PUBLIC_URL`, `META_PROVISION_URL`, `WHATSAPP_PROVISION_URL`, `META_PROVISION_SECRET`, `WHATSAPP_PROVISION_SECRET`) that Convex actions read via `process.env`. Previously these were completely missing, causing all channel pairing actions to fail in Docker deployments.
+- **Port Standardization** (`docker/docker-compose.yml`, `package.json`): Switched Convex host port from `3410` to `3210` (matching the Convex default). Updated `convex:push` script accordingly.
+- **Setup Script Rewrite** (`scripts/setup.mjs`): Complete rewrite from sed-based patching to a comprehensive generator that produces all required files from `.env.example`. Renamed from `pnpm setup:envs` → `pnpm setup`.
+- **README Overhaul** (`README.md`): Rewritten Quick Start, added Setting Up AI section, expanded Connecting Channels to cover WhatsApp/Messenger/Instagram, updated env vars table with provisioning secrets, added Mautrix Meta to architecture diagram and tech stack.
+- **`.env.example`**: Now includes `WHATSAPP_PROVISION_SECRET` and `META_PROVISION_SECRET` with `GENERATE_ME` placeholders.
+- **`.gitignore`**: Added `/assistline-data` to prevent stray root-level runtime data from being committed.
 
 ## [2.27.0] - 2026-04-01
 

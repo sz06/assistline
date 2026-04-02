@@ -48,8 +48,10 @@ test-results/
 playwright-report/
 
 /docs/reference/*
-# Docker local data
+
+# Docker local data (runtime-generated, not tracked)
 docker/assistline-data
 docker/dendrite.yaml
 docker/.env
+/assistline-data
 
