@@ -349,7 +349,6 @@ function ChatPanel({
 }) {
   const data = useQuery(api.conversations.queries.getWithMessages, { id });
   const roles = useQuery(api.roles.list);
-  const userProfile = useQuery(api.userProfile.get);
   const sendMessage = useMutation(api.messages.mutations.sendMessage);
   const updateAISettings = useMutation(
     api.conversations.mutations.updateAISettings,
@@ -496,9 +495,7 @@ function ChatPanel({
       <div className="flex-1 overflow-y-auto px-6 py-4 bg-gray-50 dark:bg-gray-900/30">
         <div className="space-y-3">
           {data.messages.map((msg) => {
-            const isSelfMatrixId =
-              userProfile?.matrixIds?.includes(msg.sender) ?? false;
-            const isIncoming = msg.direction === "in" && !isSelfMatrixId;
+            const isIncoming = !msg.isOwnMessage;
             const isGroup = (data.memberCount ?? 0) > 2;
             const senderLabel = isIncoming
               ? (msg.senderName ?? msg.sender)

@@ -41,6 +41,22 @@ export const seedData = mutation({
       }
     }
 
-    return `Seeding complete. Added ${initializedKeys} new config entries, ${initializedRoles} new roles.`;
+    // Ensure a self-contact exists (the user's own identity record)
+    let selfCreated = false;
+    const existingSelf = await ctx.db
+      .query("contacts")
+      .withIndex("by_isSelf", (q) => q.eq("isSelf", true))
+      .first();
+
+    if (!existingSelf) {
+      await ctx.db.insert("contacts", {
+        name: "Me",
+        isSelf: true,
+        lastUpdateAt: Date.now(),
+      });
+      selfCreated = true;
+    }
+
+    return `Seeding complete. Added ${initializedKeys} config entries, ${initializedRoles} roles.${selfCreated ? " Created self-contact." : ""}`;
   },
 });

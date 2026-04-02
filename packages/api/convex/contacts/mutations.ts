@@ -42,6 +42,7 @@ export const update = mutation({
   args: {
     id: v.id("contacts"),
     ...contactFields,
+    isSelf: v.optional(v.boolean()),
     phoneNumbers: v.optional(v.array(phoneNumberValidator)),
     emails: v.optional(v.array(emailValidator)),
     source: v.optional(
@@ -49,11 +50,16 @@ export const update = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const { id, source, phoneNumbers, emails, ...fields } = args;
+    const { id, source, phoneNumbers, emails, isSelf, ...fields } = args;
     const existing = await ctx.db.get(id);
     if (!existing) throw new Error("Contact not found");
 
-    await ctx.db.patch(id, { ...fields, lastUpdateAt: Date.now() });
+    const patch: Record<string, unknown> = {
+      ...fields,
+      lastUpdateAt: Date.now(),
+    };
+    if (isSelf !== undefined) patch.isSelf = isSelf;
+    await ctx.db.patch(id, patch);
 
     await syncContactHandles(ctx, id, phoneNumbers, emails);
 

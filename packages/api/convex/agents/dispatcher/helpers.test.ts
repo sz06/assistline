@@ -11,26 +11,26 @@ import {
 
 describe("formatThreadMessage", () => {
   it("should format an outgoing message as [user]", () => {
-    expect(formatThreadMessage("out", "user", "Hi there")).toBe(
-      "[out] [user]: Hi there",
+    expect(formatThreadMessage("user", "Hi there")).toBe(
+      "[user]: Hi there",
     );
   });
 
   it("should format an inbound message with contactId", () => {
-    expect(formatThreadMessage("in", "k17abc", "Hello")).toBe(
-      "[in] [contact:k17abc]: Hello",
+    expect(formatThreadMessage("k17abc", "Hello")).toBe(
+      "[contact:k17abc]: Hello",
     );
   });
 
   it("should show (media) for empty text", () => {
-    expect(formatThreadMessage("out", "user", "")).toBe(
-      "[out] [user]: (media)",
+    expect(formatThreadMessage("user", "")).toBe(
+      "[user]: (media)",
     );
   });
 
   it("should show (media) for whitespace-only text", () => {
-    expect(formatThreadMessage("in", "k17abc", "   ")).toBe(
-      "[in] [contact:k17abc]: (media)",
+    expect(formatThreadMessage("k17abc", "   ")).toBe(
+      "[contact:k17abc]: (media)",
     );
   });
 });
@@ -120,19 +120,19 @@ describe("buildParticipantsBlock", () => {
 describe("buildConversationSnapshot", () => {
   it("should return just conversation block for no profiles", () => {
     const result = buildConversationSnapshot(
-      [{ direction: "out", senderContactId: "user", text: "Hi" }],
+      [{ senderContactId: "user", text: "Hi" }],
       [],
     );
     expect(result).toContain("## CONVERSATION");
     expect(result).not.toContain("## PARTICIPANTS");
-    expect(result).toContain("[out] [user]: Hi");
+    expect(result).toContain("[user]: Hi");
   });
 
   it("should combine participants block with conversation", () => {
     const result = buildConversationSnapshot(
       [
-        { direction: "in", senderContactId: "k17abc", text: "Hello" },
-        { direction: "out", senderContactId: "user", text: "Hi" },
+        { senderContactId: "k17abc", text: "Hello" },
+        { senderContactId: "user", text: "Hi" },
       ],
       [{ contactId: "k17abc", profile: { name: "Alice" } }],
     );
@@ -142,8 +142,8 @@ describe("buildConversationSnapshot", () => {
     expect(participantsIdx).toBeGreaterThanOrEqual(0);
     expect(conversationIdx).toBeGreaterThan(participantsIdx);
     expect(result).toContain("[contact:k17abc] — name: Alice");
-    expect(result).toContain("[in] [contact:k17abc]: Hello");
-    expect(result).toContain("[out] [user]: Hi");
+    expect(result).toContain("[contact:k17abc]: Hello");
+    expect(result).toContain("[user]: Hi");
   });
 });
 

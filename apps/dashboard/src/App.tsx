@@ -13,7 +13,6 @@ import { ConversationsPage } from "./pages/ConversationsPage";
 import { MergeContactsPage } from "./pages/MergeContactsPage";
 import { GoogleImportPage } from "./pages/import/GoogleImportPage";
 import { ImportIndexPage } from "./pages/import/ImportIndexPage";
-import { ProfilePage } from "./pages/ProfilePage";
 import { ProviderFormPage } from "./pages/ProviderFormPage";
 import { ProvidersPage } from "./pages/ProvidersPage";
 import { RolesPage } from "./pages/RolesPage";
@@ -54,7 +53,6 @@ export default function App() {
         <Route path="audit-logs" element={<AuditLogsPage />} />
         <Route path="simulator" element={<SimulatorPage />} />
         <Route path="chat" element={<ChatPage />} />
-        <Route path="profile" element={<ProfilePage />} />
         <Route path="wiki">
           <Route index element={<WikiPage />} />
           <Route path=":slug" element={<WikiPage />} />

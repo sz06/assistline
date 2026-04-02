@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.27.0] - 2026-04-01
+
+### Added
+
+- **Self-Contact Identity** (`packages/api`): Introduced `isSelf` flag on the `contacts` table with a `by_isSelf` index. The user's own contact record can now be identified by toggling `isSelf: true` via the contact edit page. All self-detection logic (message direction override, conversation participant resolution, dispatcher agent) now uses `contactIdentities` linked to the self-contact instead of the old `userProfile` singleton table.
+- **`self.ts` Module** (`packages/api`): New centralized module for self-contact operations: `get`, `getInternal`, `isSelfSender`, `getSelfMatrixIds` (queries), and `addSelfIdentity` (mutation). Replaces all `userProfile` queries/mutations across the codebase.
+- **Self-Contact Toggle** (`apps/dashboard`): The contact edit page (`ContactFormPage`) now shows an "Is Self" toggle switch when editing an existing contact, allowing the user to designate their own contact record.
+
+### Changed
+
+- **Outbound Message Sender** (`packages/api`): `insertOutboundMessage` now resolves the sender to the channel's `selfPuppetId` instead of hardcoding `"system"`. Messages sent from the dashboard or by the AI agent now have a real Matrix puppet ID as the sender.
+- **Self-Detection Logic** (`packages/api`): `ingest.ts`, `conversations/helpers.ts`, `conversations/mutations.ts`, and the dispatcher agent all now derive self-detection from the self-contact's `contactIdentities` instead of `userProfile.matrixIds`.
+- **Listener Self-Identity** (`apps/listener`): The listener now calls `self.addSelfIdentity` instead of `userProfile.addMatrixId` when registering channel puppet IDs.
+- **Dispatcher Message Format** (`packages/api`): Removed `[in]`/`[out]` direction prefixes from the dispatcher agent's conversation snapshots. Messages now use sender identity directly: `[contact:<id>]: text` and `[user]: text`. The system prompt's response guidelines now check who sent the last message instead of checking direction. This is more natural for the LLM and eliminates redundant information.
+- **Simplified `resolveOtherParticipantContact`** (`packages/api`): No longer scans recent messages to find the other party in a DM. Instead iterates `conv.participants` directly and skips the self-contact via `isSelf`. Eliminates a redundant message query per conversation list render.
+- **Removed dead `messageDirection` parameter** (`packages/api`): The `processMessage` dispatcher action accepted `messageDirection` but never used it. Removed from the arg schema and both call sites (`insertInboundMessage` and `triggerAgentOnEnable`).
+- **Direction field removed from messages** (`packages/api`): The `direction` field (`"in"` / `"out"`) has been fully removed from the `messages` table schema. All 3794 existing rows migrated. Inbound/outbound is now derived from sender identity via the self-contact system (`isSelf`). The ingest pipeline, message helpers, mutation args, and listener no longer compute or pass direction. The frontend (`ConversationsPage`) now uses `msg.isOwnMessage` (computed server-side by `buildConversationWithMessages`) instead of `msg.direction`.
+
+### Removed
+
+- **`userProfile` Table** (`packages/api`): The singleton `userProfile` table and its backing `userProfile.ts` module have been completely removed. Self-detection is now handled by the `isSelf` flag on the `contacts` table.
+- **Profile Page** (`apps/dashboard`): The `/profile` route and `ProfilePage.tsx` have been removed. User identity is now managed via the self-contact's edit page.
+- **`direction` field** (`packages/api`): Removed from the `messages` table schema, all write paths (ingest, mutations, helpers), all read paths (queries, frontend), and the listener. Data migration completed for all existing rows.
+
 ## [2.26.4] - 2026-04-01
 
 ### Added

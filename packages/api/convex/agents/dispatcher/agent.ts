@@ -87,7 +87,6 @@ export const processMessage = internalAction({
     conversationId: v.id("conversations"),
     senderContactId: v.string(), // Convex contact ID or "user" for outgoing
     messageText: v.string(),
-    messageDirection: v.string(),
   },
   handler: async (ctx, args) => {
     // 1. Load the default language model provider
@@ -158,23 +157,29 @@ export const processMessage = internalAction({
       return;
     }
 
-    // 6. Resolve contactIds for all unique inbound senders (batch query)
-    const uniqueInboundSenders = [
-      ...new Set(
-        messages.filter((m) => m.direction === "in").map((m) => m.sender),
-      ),
-    ];
+    // 6. Resolve the self-contact ID for filtering
+    const selfContact = await ctx.runQuery(internal.self.getInternal);
+    const selfContactId = selfContact?._id;
+
+    // Resolve contactIds for all unique senders (batch query)
+    const allSenders = [...new Set(messages.map((m) => m.sender))];
     const senderToContactId = (await ctx.runQuery(
       internal.contacts.internal.resolveContactIds,
-      { matrixIds: uniqueInboundSenders },
+      { matrixIds: allSenders },
     )) as Record<string, string>;
 
-    // 7a. Resolve contact profiles for the PARTICIPANTS block (unique contacts only)
-    const uniqueContactIds = [
-      ...new Set(Object.values(senderToContactId)),
+    // Filter out self-contact from unique inbound senders
+    const uniqueInboundContactIds = [
+      ...new Set(
+        Object.entries(senderToContactId)
+          .filter(([_, contactId]) => contactId !== String(selfContactId))
+          .map(([_, contactId]) => contactId),
+      ),
     ] as Id<"contacts">[];
+
+    // 7a. Resolve contact profiles for the PARTICIPANTS block (unique contacts only)
     const profiles = await Promise.all(
-      uniqueContactIds.map(async (contactId) => ({
+      uniqueInboundContactIds.map(async (contactId) => ({
         contactId,
         profile: (await ctx.runQuery(
           internal.contacts.internal.getContactProfileQuery,
@@ -188,18 +193,18 @@ export const processMessage = internalAction({
     // 7b. Fetch pending contact suggestions for each participant
     const pendingSuggestionsMap = (await ctx.runQuery(
       internal.contactSuggestions.queries.listByContactIds,
-      { contactIds: uniqueContactIds },
+      { contactIds: uniqueInboundContactIds },
     )) as Record<string, Array<{ _id: string; field: string; value: string }>>;
 
     // 7c. Build compact per-message lines (contactId only, no repeated profile data)
-    const enrichedMessages = messages.map((m) => ({
-      direction: m.direction,
-      senderContactId:
-        m.direction === "in"
-          ? (senderToContactId[m.sender] ?? "unknown")
-          : "user",
-      text: m.text,
-    }));
+    const enrichedMessages = messages.map((m) => {
+      const resolvedContactId = senderToContactId[m.sender];
+      const isSelf = resolvedContactId === String(selfContactId);
+      return {
+        senderContactId: isSelf ? "user" : (resolvedContactId ?? "unknown"),
+        text: m.text,
+      };
+    });
 
     // 7d. Merge pending suggestions into profiles for the snapshot
     const profilesWithSuggestions = profiles.map((p) => ({
@@ -304,13 +309,15 @@ export const processMessage = internalAction({
       );
 
       // 14. Update conversation status after successful run
-      const lastDirection = messages[messages.length - 1].direction;
+      const lastMessage = messages[messages.length - 1];
+      const lastResolvedContactId = senderToContactId[lastMessage.sender];
+      const lastIsSelf = lastResolvedContactId === String(selfContactId);
       await ctx.runMutation(
         internal.conversations.mutations.patchConversation,
         {
           conversationId: args.conversationId,
           patch: {
-            status: lastDirection === "in" ? "needs_reply" : "idle",
+            status: lastIsSelf ? "idle" : "needs_reply",
           },
         },
       );

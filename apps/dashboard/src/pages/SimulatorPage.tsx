@@ -65,7 +65,7 @@ export function SimulatorPage() {
         eventId: `sim_${Date.now().toString()}`,
         sender: data.sender,
         text: data.message,
-        direction: "in",
+        isSelf: false,
         timestamp: Date.now(),
         channelId: data.channelId as Id<"channels">,
         memberCount: 1,

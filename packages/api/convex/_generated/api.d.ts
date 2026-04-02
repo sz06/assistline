@@ -51,7 +51,7 @@ import type * as messages_helpers from "../messages/helpers.js";
 import type * as messages_mutations from "../messages/mutations.js";
 import type * as messages_queries from "../messages/queries.js";
 import type * as roles from "../roles.js";
-import type * as userProfile from "../userProfile.js";
+import type * as self from "../self.js";
 import type * as utils_contacts from "../utils/contacts.js";
 import type * as utils_matrix from "../utils/matrix.js";
 import type * as utils_vector from "../utils/vector.js";
@@ -106,7 +106,7 @@ declare const fullApi: ApiFromModules<{
   "messages/mutations": typeof messages_mutations;
   "messages/queries": typeof messages_queries;
   roles: typeof roles;
-  userProfile: typeof userProfile;
+  self: typeof self;
   "utils/contacts": typeof utils_contacts;
   "utils/matrix": typeof utils_matrix;
   "utils/vector": typeof utils_vector;

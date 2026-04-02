@@ -32,7 +32,7 @@ export interface InboundMessageArgs {
   eventId: string;
   sender: string;
   text: string;
-  direction: "in" | "out";
+  isSelf: boolean; // true if the sender is the user's own contact
   timestamp: number;
   type?: string;
   replyToEventId?: string;
@@ -107,7 +107,6 @@ export async function insertInboundMessage(
     eventId: args.eventId,
     sender: args.sender,
     text: args.text,
-    direction: args.direction,
     timestamp: args.timestamp,
     type: (args.type as MessageType | undefined) ?? "text",
     replyToEventId: args.replyToEventId,
@@ -122,7 +121,7 @@ export async function insertInboundMessage(
     lastMessageId: messageId,
     updatedAt: args.timestamp,
   };
-  if (args.direction === "in") {
+  if (!args.isSelf) {
     const current = conversation?.unreadCount ?? 0;
     convPatch.unreadCount = current + 1;
   }
@@ -136,7 +135,6 @@ export async function insertInboundMessage(
     details: JSON.stringify({
       conversationId,
       sender: args.sender,
-      direction: args.direction,
     }),
     timestamp: args.timestamp,
   });
@@ -147,21 +145,26 @@ export async function insertInboundMessage(
   // remaining duplicates.
   const convRecord = conversation ?? (await ctx.db.get(conversationId));
   if (convRecord?.aiEnabled) {
-    const senderIdentity = await ctx.db
-      .query("contactIdentities")
-      .withIndex("by_matrixId", (q) => q.eq("matrixId", args.sender))
-      .first();
+    let senderContactId = "unknown";
+    if (args.isSelf) {
+      senderContactId = "user";
+    } else {
+      const senderIdentity = await ctx.db
+        .query("contactIdentities")
+        .withIndex("by_matrixId", (q) => q.eq("matrixId", args.sender))
+        .first();
+      if (senderIdentity) {
+        senderContactId = String(senderIdentity.contactId);
+      }
+    }
 
     await ctx.scheduler.runAfter(
       500,
       internal.agents.dispatcher.agent.processMessage,
       {
         conversationId,
-        senderContactId: senderIdentity
-          ? String(senderIdentity.contactId)
-          : "unknown",
+        senderContactId,
         messageText: args.text ?? "",
-        messageDirection: args.direction,
       },
     );
   }
@@ -187,13 +190,22 @@ export async function insertOutboundMessage(
     auditDetails?: Record<string, unknown>;
   },
 ): Promise<Id<"messages">> {
+  // Resolve the sender to the real self-puppet Matrix ID for this channel.
+  const conv = await ctx.db.get(args.conversationId);
+  let sender = "system"; // fallback if channel has no puppet ID
+  if (conv) {
+    const channel = await ctx.db.get(conv.channelId);
+    if (channel?.selfPuppetId) {
+      sender = channel.selfPuppetId;
+    }
+  }
+
   // Insert with a temporary placeholder eventId — replaced on Matrix delivery
   const messageId = await ctx.db.insert("messages", {
     conversationId: args.conversationId,
     eventId: `outbound_${Date.now().toString()}`,
-    sender: "system",
+    sender,
     text: args.content,
-    direction: "out",
     timestamp: Date.now(),
   });
 

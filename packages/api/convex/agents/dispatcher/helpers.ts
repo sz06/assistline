@@ -12,7 +12,6 @@ export type { ProfileShape };
 
 export interface ConversationMessage {
   sender: string;
-  direction: string;
   text: string;
   timestamp: number;
 }
@@ -36,19 +35,18 @@ export interface ContactProfile {
  * Compact format — profile details live in the PARTICIPANTS block, not here.
  *
  * @example
- * formatThreadMessage("in", "k17abc", "Hello") // "[in] [contact:k17abc]: Hello"
- * formatThreadMessage("out", "user", "Hi")      // "[out] [user]: Hi"
+ * formatThreadMessage("k17abc", "Hello") // "[contact:k17abc]: Hello"
+ * formatThreadMessage("user", "Hi")      // "[user]: Hi"
  */
 export function formatThreadMessage(
-  direction: string,
   senderContactId: string,
   text: string,
 ): string {
   const displayText = text.trim() || "(media)";
-  if (direction === "out") {
-    return `[out] [user]: ${displayText}`;
+  if (senderContactId === "user") {
+    return `[user]: ${displayText}`;
   }
-  return `[in] [contact:${senderContactId}]: ${displayText}`;
+  return `[contact:${senderContactId}]: ${displayText}`;
 }
 
 /**
@@ -100,21 +98,20 @@ export function buildParticipantsBlock(profiles: ContactProfile[]): string {
  *   ...
  *
  *   ## CONVERSATION
- *   [in] [contact:id]: message text
- *   [out] [user]: message text
+ *   [contact:id]: message text
+ *   [user]: message text
  *   ...
  */
 export function buildConversationSnapshot(
   messages: Array<{
-    direction: string;
-    senderContactId: string; // resolved Convex contact ID, or "unknown"
+    senderContactId: string; // resolved Convex contact ID, "user", or "unknown"
     text: string;
   }>,
   profiles: ContactProfile[],
 ): string {
   const participantsBlock = buildParticipantsBlock(profiles);
   const conversationLines = messages.map((m) =>
-    formatThreadMessage(m.direction, m.senderContactId, m.text),
+    formatThreadMessage(m.senderContactId, m.text),
   );
   const conversationBlock = `## CONVERSATION\n\n${conversationLines.join("\n")}`;
 

@@ -58,8 +58,11 @@ export default defineSchema({
     birthday: v.optional(v.string()),
     notes: v.optional(v.string()),
     addresses: v.optional(v.array(v.string())),
+    isSelf: v.optional(v.boolean()), // True for the user's own contact record
     lastUpdateAt: v.optional(v.number()), // Timestamp of last modification
-  }).index("by_name", ["name"]),
+  })
+    .index("by_isSelf", ["isSelf"])
+    .index("by_name", ["name"]),
   contactIdentities: defineTable({
     contactId: v.id("contacts"),
     matrixId: v.string(),
@@ -123,7 +126,6 @@ export default defineSchema({
     eventId: v.string(), // Matrix event ID to prevent dupes
     sender: v.string(), // Matrix ID of sender
     text: v.string(),
-    direction: v.union(v.literal("in"), v.literal("out")),
     timestamp: v.number(),
 
     // Message type (text, image, video, audio, file, sticker, location, reaction, notice)
@@ -226,19 +228,7 @@ export default defineSchema({
     .index("by_timestamp", ["timestamp"])
     .index("by_entity", ["entity", "timestamp"])
     .index("by_action", ["action", "timestamp"]),
-  /**
-   * Singleton user profile — exactly one row.
-   * Stores the authenticated user's display name, avatar, and known Matrix
-   * puppet IDs across all connected channels. Used for self-detection
-   * (filtering out the user's own messages in inbound streams).
-   */
-  userProfile: defineTable({
-    name: v.optional(v.string()),
-    avatarUrl: v.optional(v.string()),
-    // Matrix IDs belonging to the user, e.g.:
-    // ["@whatsapp_14155551234:matrix.local", "@telegram_123:matrix.local"]
-    matrixIds: v.optional(v.array(v.string())),
-  }),
+
   chatSessions: defineTable({
     title: v.optional(v.string()), // User-set or auto-generated title
     threadId: v.string(), // @convex-dev/agent thread ID

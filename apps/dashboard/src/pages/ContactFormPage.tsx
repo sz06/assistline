@@ -234,6 +234,45 @@ export function ContactFormPage() {
         </div>
       )}
 
+      {/* ── Self-Contact Toggle ── */}
+      {isEditing && contact && (
+        <div className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                Self Contact
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Mark this as your own contact. Messages from this contact's
+                Matrix IDs will be treated as outgoing.
+              </p>
+            </div>
+            <button
+              type="button"
+              data-testid="toggle-is-self"
+              onClick={async () => {
+                if (!contactId) return;
+                await updateContact({
+                  id: contactId,
+                  isSelf: !contact.isSelf,
+                });
+              }}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${
+                contact.isSelf
+                  ? "bg-blue-600"
+                  : "bg-gray-200 dark:bg-gray-700"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  contact.isSelf ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      )}
+
       <form
         onSubmit={handleSubmit(onValid)}
         className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm p-6 space-y-6"

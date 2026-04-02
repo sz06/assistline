@@ -7,14 +7,11 @@ import { syncContactHandles } from "../contacts/shared";
  * For a DM conversation, find the "other" participant (not the user) and
  * return their contact details.
  *
- * Strategy: query inbound messages for this conversation to get the other
- * sender's Matrix ID. One inbound message is enough — in a DM there is only
- * ever one other person. Falls back to conv.participants for new conversations
- * that have no messages yet.
+ * Iterates conv.participants directly and skips the one belonging to the
+ * self-contact (isSelf: true). No message scanning needed.
  *
- * Self-detection uses the userProfile.matrixIds list (explicit IDs stored
- * by the user or auto-populated when channels connect) instead of fragile
- * phone-number parsing from Matrix IDs.
+ * Accepts an optional pre-loaded selfContactId to avoid duplicate lookups
+ * when the caller already has it.
  */
 export async function resolveOtherParticipantContact(
   ctx: QueryCtx,
@@ -24,6 +21,7 @@ export async function resolveOtherParticipantContact(
     channelId: Id<"channels">;
     name?: string;
   },
+  selfContactId?: Id<"contacts"> | null,
 ): Promise<{
   name: string;
   phone: string;
@@ -31,38 +29,31 @@ export async function resolveOtherParticipantContact(
   contactId: Id<"contacts"> | null;
   matrixId: string | null;
 } | null> {
-  // Load the user's known Matrix IDs for self-detection.
-  const userProfile = await ctx.db.query("userProfile").first();
-  const selfIds = new Set(userProfile?.matrixIds ?? []);
-
-  // One inbound message is enough — in a DM there's only ever one other sender.
-  // conv.participants is the fallback if no messages exist yet.
-  const inboundMessages = await ctx.db
-    .query("messages")
-    .withIndex("by_conversationId_timestamp", (q) =>
-      q.eq("conversationId", conv._id),
-    )
-    .filter((q) => q.eq(q.field("direction"), "in"))
-    .order("desc")
-    .take(1);
-
-  // Collect candidate Matrix IDs
-  const seenSenders = new Set<string>();
-  for (const msg of inboundMessages) {
-    seenSenders.add(msg.sender);
-  }
-  // Fallback: conv.participants for conversations with no messages yet
-  for (const p of conv.participants) {
-    seenSenders.add(p);
+  // Load self-contact's Matrix IDs to filter them out.
+  let resolvedSelfId = selfContactId;
+  if (resolvedSelfId === undefined) {
+    const selfContact = await ctx.db
+      .query("contacts")
+      .withIndex("by_isSelf", (q) => q.eq("isSelf", true))
+      .first();
+    resolvedSelfId = selfContact?._id ?? null;
   }
 
-  for (const senderMatrixId of seenSenders) {
-    // Skip the user's own Matrix IDs (puppet accounts)
-    if (selfIds.has(senderMatrixId)) continue;
+  const selfIdentities = resolvedSelfId
+    ? await ctx.db
+        .query("contactIdentities")
+        .withIndex("by_contactId", (q) => q.eq("contactId", resolvedSelfId!))
+        .collect()
+    : [];
+  const selfIds = new Set(selfIdentities.map((i) => i.matrixId));
+
+  // Iterate participants, skip self, return the first non-self contact.
+  for (const matrixId of conv.participants) {
+    if (selfIds.has(matrixId)) continue;
 
     const identity = await ctx.db
       .query("contactIdentities")
-      .withIndex("by_matrixId", (q) => q.eq("matrixId", senderMatrixId))
+      .withIndex("by_matrixId", (q) => q.eq("matrixId", matrixId))
       .first();
 
     if (identity) {
@@ -75,19 +66,18 @@ export async function resolveOtherParticipantContact(
           )
           .collect();
 
-        const phone = handles.find((h) => h.type === "phone")?.value ?? "";
-        const email = handles.find((h) => h.type === "email")?.value ?? "";
-
         return {
           name:
             contact.name?.trim() ||
             contact.otherNames?.[0] ||
             conv.name ||
             "Unknown",
-          phone,
-          email,
+          phone:
+            handles.find((h) => h.type === "phone")?.value ?? "",
+          email:
+            handles.find((h) => h.type === "email")?.value ?? "",
           contactId: identity.contactId,
-          matrixId: senderMatrixId,
+          matrixId,
         };
       }
     }
@@ -99,6 +89,8 @@ export async function resolveOtherParticipantContact(
 /**
  * Resolve display details for the "other side" of a conversation.
  * For groups: uses the room name. For DMs: resolves the contact.
+ *
+ * Accepts an optional pre-loaded selfContactId to avoid duplicate lookups.
  */
 export async function resolveParticipantDetails(
   ctx: QueryCtx,
@@ -109,6 +101,7 @@ export async function resolveParticipantDetails(
     name?: string;
     memberCount: number;
   },
+  selfContactId?: Id<"contacts"> | null,
 ): Promise<{
   name: string;
   phone: string;
@@ -133,7 +126,7 @@ export async function resolveParticipantDetails(
   if (isGroup && conv.name) {
     details.name = conv.name;
   } else {
-    const otherContact = await resolveOtherParticipantContact(ctx, conv);
+    const otherContact = await resolveOtherParticipantContact(ctx, conv, selfContactId);
     if (otherContact) {
       details.name = otherContact.name;
       details.phone = otherContact.phone;
@@ -169,7 +162,14 @@ export async function buildConversationWithMessages(
 
   const messages = messagesDesc.reverse();
 
-  const participantDetails = await resolveParticipantDetails(ctx, conv);
+  // Load self-contact ONCE — shared by resolveParticipantDetails + isOwnMessage
+  const selfContact = await ctx.db
+    .query("contacts")
+    .withIndex("by_isSelf", (q) => q.eq("isSelf", true))
+    .first();
+  const selfContactId = selfContact?._id ?? null;
+
+  const participantDetails = await resolveParticipantDetails(ctx, conv, selfContactId);
 
   // Resolve sender display names + contactIds — cache per sender
   const senderNameCache = new Map<string, string>();
@@ -199,7 +199,9 @@ export async function buildConversationWithMessages(
         senderContactIdCache.set(msg.sender, senderContactId);
         senderName = senderNameCache.get(msg.sender);
       }
-      return { ...msg, senderName, senderContactId };
+      const isOwnMessage =
+        selfContactId !== null && senderContactId === selfContactId;
+      return { ...msg, senderName, senderContactId, isOwnMessage };
     }),
   );
 

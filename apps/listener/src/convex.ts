@@ -27,7 +27,7 @@ export const api = anyApi as unknown as {
     handleEphemeralEvent: typeof anyApi.ingest.handleEphemeralEvent;
     handleConversationMeta: typeof anyApi.ingest.handleConversationMeta;
   };
-  userProfile: {
-    addMatrixId: typeof anyApi.userProfile.addMatrixId;
+  self: {
+    addSelfIdentity: typeof anyApi.self.addSelfIdentity;
   };
 };

@@ -54,7 +54,6 @@ export const getConversationHistoryQuery = internalQuery({
       .map((m) => ({
         _id: m._id,
         sender: m.sender,
-        direction: m.direction,
         text: m.text ?? "",
         timestamp: m.timestamp,
         isRedacted: m.isRedacted,

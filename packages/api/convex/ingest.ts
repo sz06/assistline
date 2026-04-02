@@ -110,12 +110,14 @@ export const handleMatrixEvent = internalAction({
     roomName: v.optional(v.string()),
     senderName: v.optional(v.string()),
     senderAvatarUrl: v.optional(v.string()),
-
-    // Direction (listener determines this based on bot/puppet IDs)
-    direction: v.union(v.literal("in"), v.literal("out")),
   },
   handler: async (ctx, args) => {
     const content = JSON.parse(args.content) as Record<string, unknown>;
+
+    // Load self-contact's Matrix IDs to determine if sender is self
+    const selfMatrixIds = await ctx.runQuery(internal.self.getSelfMatrixIds);
+    const selfIds = new Set(selfMatrixIds);
+    const isSelf = selfIds.has(args.sender);
 
     // ── Reactions ──
     if (args.type === "m.reaction") {
@@ -247,7 +249,7 @@ export const handleMatrixEvent = internalAction({
       eventId: args.eventId,
       sender: args.sender,
       text: body,
-      direction: args.direction,
+      isSelf,
       timestamp: args.originServerTs,
       type: messageType,
       replyToEventId,
@@ -269,7 +271,7 @@ export const handleMatrixEvent = internalAction({
     const typeLabel =
       messageType !== "text" ? ` [${messageType.toUpperCase()}]` : "";
     console.log(
-      `[ingest] ${args.direction === "in" ? "⬇" : "⬆"} ${args.sender} → ${args.matrixRoomId}${isGroup ? " [GROUP]" : ""}${typeLabel} | eventId=${args.eventId}`,
+      `[ingest] ${isSelf ? "⬆" : "⬇"} ${args.sender} → ${args.matrixRoomId}${isGroup ? " [GROUP]" : ""}${typeLabel} | eventId=${args.eventId}`,
     );
   },
 });
@@ -290,9 +292,18 @@ export const handleEphemeralEvent = internalMutation({
   handler: async (ctx, args) => {
     const content = JSON.parse(args.content) as Record<string, unknown>;
 
-    // Load the user's known Matrix puppet IDs from the profile singleton.
-    const userProfile = await ctx.db.query("userProfile").first();
-    const selfIds = new Set(userProfile?.matrixIds ?? []);
+    // Load the self-contact's known Matrix puppet IDs via direct DB reads.
+    const selfContact = await ctx.db
+      .query("contacts")
+      .withIndex("by_isSelf", (q) => q.eq("isSelf", true))
+      .first();
+    const selfIdentities = selfContact
+      ? await ctx.db
+          .query("contactIdentities")
+          .withIndex("by_contactId", (q) => q.eq("contactId", selfContact._id))
+          .collect()
+      : [];
+    const selfIds = new Set(selfIdentities.map((i) => i.matrixId));
 
     if (args.type === "m.receipt") {
       for (const [eventId, readers] of Object.entries(

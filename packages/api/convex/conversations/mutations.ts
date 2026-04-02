@@ -60,13 +60,12 @@ export const updateAISettings = mutation({
 
 /**
  * Helper: schedule processMessage immediately when AI is first enabled.
- * Fetches the most recent message to determine direction and sender.
+ * Fetches the most recent message to determine sender identity.
  */
 async function triggerAgentOnEnable(
   ctx: MutationCtx,
   conversationId: Id<"conversations">,
 ) {
-  // Fetch the most recent message in the conversation
   const lastMessage = await ctx.db
     .query("messages")
     .withIndex("by_conversationId_timestamp", (q) =>
@@ -75,16 +74,26 @@ async function triggerAgentOnEnable(
     .order("desc")
     .first();
 
-  if (!lastMessage) return; // No messages yet — agent will trigger on first message
+  if (!lastMessage) return;
 
-  // Resolve sender contactId
-  let senderContactId = "user";
-  if (lastMessage.direction === "in") {
-    const identity = await ctx.db
+  // Resolve sender contactId — check if it's the self-contact
+  const selfContact = await ctx.db
+    .query("contacts")
+    .withIndex("by_isSelf", (q) => q.eq("isSelf", true))
+    .first();
+
+  let senderContactId = "unknown";
+  if (selfContact) {
+    const senderIdentity = await ctx.db
       .query("contactIdentities")
       .withIndex("by_matrixId", (q) => q.eq("matrixId", lastMessage.sender))
       .first();
-    senderContactId = identity ? String(identity.contactId) : "unknown";
+    if (senderIdentity) {
+      senderContactId =
+        senderIdentity.contactId === selfContact._id
+          ? "user"
+          : String(senderIdentity.contactId);
+    }
   }
 
   await ctx.scheduler.runAfter(
@@ -94,7 +103,6 @@ async function triggerAgentOnEnable(
       conversationId,
       senderContactId,
       messageText: lastMessage.text ?? "",
-      messageDirection: lastMessage.direction,
     },
   );
 }

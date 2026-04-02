@@ -142,12 +142,12 @@ async function refreshChannelCache(): Promise<void> {
         console.log(`[listener] ✓ Self-puppet: ${puppetId}`);
 
         try {
-          await convex.mutation(api.userProfile.addMatrixId, {
+          await convex.mutation(api.self.addSelfIdentity, {
             matrixId: puppetId,
           });
         } catch (err) {
           console.warn(
-            `[listener] ⚠ Could not persist self-puppet to userProfile: ${
+            `[listener] ⚠ Could not persist self-puppet identity: ${
               err instanceof Error ? err.message : err
             }`,
           );
@@ -612,11 +612,6 @@ async function forwardTimelineEvent(
     >;
   },
 ): Promise<void> {
-  const direction: "in" | "out" =
-    event.sender === MATRIX_BOT_USER_ID || userPuppetIds.has(event.sender)
-      ? "out"
-      : "in";
-
   const senderProfile = roomMeta?.membersProfile?.[event.sender];
 
   try {
@@ -635,7 +630,6 @@ async function forwardTimelineEvent(
       roomName: roomMeta?.roomName,
       senderName: senderProfile?.displayName,
       senderAvatarUrl: senderProfile?.avatarUrl,
-      direction,
     });
   } catch (err) {
     console.error(
