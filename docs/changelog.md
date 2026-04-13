@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [Unreleased]
+
+### Fixed
+- **Dispatcher Context Truncation** (`packages/api`): Fixed an issue where the Dispatcher agent was not suggesting updates for `company`, `jobTitle`, `birthday`, `emails`, `phoneNumbers`, and `addresses` due to these fields being omitted from the `PARTICIPANTS` snapshot block in `helpers.ts`.
+- **Dispatcher Custom Fields Prompt** (`packages/api`): Explicitly whitelisted `emails` and `phoneNumbers` in the Dispatcher's `createContactSuggestion` system prompt instruction.
+
+### Changed
+- **Removed profile route** (`apps/dashboard`): Removed the unused `/profile` route from the navigation settings.
+- **Chatter Agent proactive context retrieval** (`packages/api/convex/agents/chatter/prompt.ts`): Updated the system prompt to explicitly enforce that the agent must ALWAYS try calling `searchArtifacts` for almost every user query, even if it seems general (e.g., "Why should I buy a new phone?"), to ensure highly personalized and context-aware responses without requiring explicit user prompting.
+
 ## [2.28.0] - 2026-04-02
 
 ### Added
@@ -576,6 +586,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Contacts Page** (`apps/dashboard`): Removed delete capability from the contacts UI — contacts can only be created and edited.
 - **AI Providers Card** (`apps/dashboard`): Enhanced provider card with a two-section layout. The header now shows the selected model as a distinct monospace chip, a Cloud/Local type pill, and the provider description tagline. A new details footer displays a green/amber health status indicator, a masked API key preview (last 4 chars), and the "Added on" creation date.
+
+
 
 ## [2.3.0] - 2026-03-18
 

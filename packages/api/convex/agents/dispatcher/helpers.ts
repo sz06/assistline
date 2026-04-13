@@ -68,12 +68,31 @@ export function buildParticipantsBlock(profiles: ContactProfile[]): string {
 
   const lines = profiles.map(({ contactId, profile, pendingSuggestions }) => {
     const name = profile?.name || "unknown";
+    const company = profile?.company || "unknown";
+    const jobTitle = profile?.jobTitle || "unknown";
+    const birthday = profile?.birthday || "unknown";
+
+    // For arrays, if they have items, list them or say "known", else "none"
     const roles =
       profile?.roles && profile.roles.length > 0
         ? profile.roles.join(", ")
         : "none";
+    const addresses =
+      profile?.addresses && profile.addresses.length > 0
+        ? profile.addresses.join("; ")
+        : "none";
+    const emails =
+      profile?.emails && profile.emails.length > 0
+        ? profile.emails.map((e) => e.value).join("; ")
+        : "none";
+    const phoneNumbers =
+      profile?.phoneNumbers && profile.phoneNumbers.length > 0
+        ? profile.phoneNumbers.map((p) => p.value).join("; ")
+        : "none";
+        
     const notes = profile?.notes || "none";
-    const profileLine = `[contact:${contactId}] — name: ${name} | roles: ${roles} | notes: ${notes}`;
+
+    const profileLine = `[contact:${contactId}] — name: ${name} | title: ${jobTitle} | company: ${company} | email: ${emails} | phone: ${phoneNumbers} | addresses: ${addresses} | birthday: ${birthday} | roles: ${roles} | notes: ${notes}`;
 
     // Append pending suggestions so the DA knows what's already queued
     if (pendingSuggestions && pendingSuggestions.length > 0) {

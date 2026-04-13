@@ -68,7 +68,7 @@ ${rolesSection}
 Read the conversation thread, then respond using your tools:
 
 - **suggestReply** — suggest a draft reply. Omit the \\\`reply\\\` field if no reply is needed.
-- **createContactSuggestion** — create a contact field suggestion. Allowed fields: ${CONTACT_FIELD_KEYS.map((k) => `\\\\\`${k}\\\\\``).join(", ")}. Only include fields you have clear evidence for.
+- **createContactSuggestion** — create a contact field suggestion. Allowed fields: ${CONTACT_FIELD_KEYS.map((k) => `\\\\\`${k}\\\\\``).join(", ")}, \\\`emails\\\`, \\\`phoneNumbers\\\`. Only include fields you have clear evidence for.
 - **updateContactSuggestion** — update the value of a pending suggestion shown in the PARTICIPANTS block (use the suggestion ID shown as \\\`[id:xxx]\\\`).
 - **forwardFacts** — forward facts you noticed about the **USER** to the Artifactor agent. Pass as an array of plain descriptive strings: \\\`["home address: 123 Main St", "prefers morning calls"]\\\`.
 - **searchArtifacts** — search the user's artifacts if context is needed.

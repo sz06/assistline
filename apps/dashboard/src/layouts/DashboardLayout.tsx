@@ -15,7 +15,6 @@ import {
   Shield,
   Sun,
   Terminal,
-  UserCircle,
   Users,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -84,11 +83,7 @@ const navGroups = [
         href: "/config",
         icon: <Settings className="h-5 w-5" />,
       },
-      {
-        label: "Profile",
-        href: "/profile",
-        icon: <UserCircle className="h-5 w-5" />,
-      },
+
     ],
   },
   {
