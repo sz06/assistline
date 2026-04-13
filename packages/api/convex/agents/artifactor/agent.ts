@@ -7,7 +7,7 @@ import { internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import type { ActionCtx } from "../../_generated/server";
 import { internalAction } from "../../_generated/server";
-import { resolveLanguageModel } from "../../ai/engine";
+import { resolveLanguageModel } from "../../llm/engine";
 import { buildArtifactorSystemPrompt } from "./prompt";
 
 // ---------------------------------------------------------------------------
@@ -18,7 +18,7 @@ async function embedText(
   ctx: ActionCtx,
   text: string,
 ): Promise<number[] | null> {
-  return await ctx.runAction(internal.ai.embeddings.embedText, { text });
+  return await ctx.runAction(internal.llm.embeddings.embedText, { text });
 }
 
 async function fetchRoles(ctx: ActionCtx) {

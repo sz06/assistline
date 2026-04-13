@@ -68,7 +68,7 @@ export function createSearchArtifactsTool() {
         ),
     }),
     execute: async (ctx, { query }): Promise<string> => {
-      const embedding = await ctx.runAction(internal.ai.embeddings.embedText, {
+      const embedding = await ctx.runAction(internal.llm.embeddings.embedText, {
         text: query,
       });
 

@@ -4,4 +4,4 @@ import { defineApp } from "convex/server";
 const app = defineApp();
 app.use(agent);
 
-export default app;
+export default app as any;

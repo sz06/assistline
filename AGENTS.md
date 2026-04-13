@@ -39,7 +39,7 @@ This document defines the core standards and automated workflows that any AI age
 * **Conventional Commits:** All commit messages must follow the [Conventional Commits](https://www.conventionalcommits.org/) specification (e.g., `feat: add user login`, `fix: resolve crash on startup`).
 
 ## 7. Convex Backend (Self-Hosted in Docker)
-* **Runtime:** The Convex backend runs inside a Docker container named `convex-backend` on `http://127.0.0.1:3410`.
+* **Runtime:** The Convex backend runs inside a Docker container named `convex-backend` on `http://127.0.0.1:3210`.
 * **Deploying Functions:** After modifying any Convex functions (mutations, queries, actions) in `packages/api/convex/`, you **must** deploy them by running from the **repo root**:
   ```bash
   pnpm convex:push

@@ -234,8 +234,8 @@ function useProviderModels(
   baseUrl: string,
   type: string,
 ) {
-  const listLanguageModels = useAction(api.ai.models.listLanguageModels);
-  const listEmbeddingModels = useAction(api.ai.models.listEmbeddingModels);
+  const listLanguageModels = useAction(api.llm.models.listLanguageModels);
+  const listEmbeddingModels = useAction(api.llm.models.listEmbeddingModels);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

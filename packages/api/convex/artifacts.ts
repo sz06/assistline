@@ -200,7 +200,7 @@ async function performVectorSearch(
   query: string,
   limit: number,
 ) {
-  const embedding = await ctx.runAction(internal.ai.embeddings.embedText, {
+  const embedding = await ctx.runAction(internal.llm.embeddings.embedText, {
     text: query,
   });
   if (!embedding) return [];
@@ -367,7 +367,7 @@ export const generateMissingEmbeddings = action({
 
     let artifactsCount = 0;
     for (const artifact of missingArtifacts) {
-      const embedding = await ctx.runAction(internal.ai.embeddings.embedText, {
+      const embedding = await ctx.runAction(internal.llm.embeddings.embedText, {
         text: artifact.value,
       });
       if (embedding) {
@@ -386,7 +386,7 @@ export const generateMissingEmbeddings = action({
 
     let suggestionsCount = 0;
     for (const suggestion of missingSuggestions) {
-      const embedding = await ctx.runAction(internal.ai.embeddings.embedText, {
+      const embedding = await ctx.runAction(internal.llm.embeddings.embedText, {
         text: suggestion.value,
       });
       if (embedding) {
@@ -411,7 +411,7 @@ export const revectorizeArtifact = internalAction({
     text: v.string(),
   },
   handler: async (ctx, args) => {
-    const embedding = await ctx.runAction(internal.ai.embeddings.embedText, {
+    const embedding = await ctx.runAction(internal.llm.embeddings.embedText, {
       text: args.text,
     });
     if (embedding) {
@@ -523,7 +523,7 @@ export const mergeArtifacts = action({
     }
     const mergedRoles = Array.from(allRoles) as Id<"roles">[];
 
-    const embedding = await ctx.runAction(internal.ai.embeddings.embedText, {
+    const embedding = await ctx.runAction(internal.llm.embeddings.embedText, {
       text: args.mergedValue,
     });
 

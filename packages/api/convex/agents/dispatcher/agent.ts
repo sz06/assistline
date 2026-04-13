@@ -6,7 +6,7 @@ import { v } from "convex/values";
 import { components, internal } from "../../_generated/api";
 import type { Id } from "../../_generated/dataModel";
 import { internalAction } from "../../_generated/server";
-import { resolveLanguageModel } from "../../ai/engine";
+import { resolveLanguageModel } from "../../llm/engine";
 import type { ProfileShape } from "./helpers";
 import { buildConversationSnapshot, hashString } from "./helpers";
 
